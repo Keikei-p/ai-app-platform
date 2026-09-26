@@ -4,8 +4,17 @@ import shutil
 from pathlib import Path
 
 APP_NAME = "AI App Platform"
-VERSION = "0.5.0"
 APP_DIR = Path(__file__).resolve().parents[2]
+
+
+def _version() -> str:
+    try:
+        return (APP_DIR / "VERSION").read_text(encoding="utf-8").strip() or "0.0.0"
+    except Exception:
+        return "0.0.0"
+
+
+VERSION = _version()
 
 
 def _state_dir() -> Path:
