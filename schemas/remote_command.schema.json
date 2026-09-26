@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RemoteCommand",
+  "type": "object",
+  "required": ["command_id", "issued_at", "expires_at", "action", "payload"],
+  "properties": {
+    "command_id": {"type": "string", "minLength": 8, "maxLength": 128},
+    "issued_at": {"type": "integer"},
+    "expires_at": {"type": "integer"},
+    "action": {"type": "string", "enum": ["status", "project_list", "project_create", "run_pipeline", "run_tests", "backup", "vault_save", "build_preview", "maintenance_scan", "create_snapshot"]},
+    "project_slug": {"type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+    "payload": {"type": "object", "maxProperties": 64}
+  },
+  "additionalProperties": false
+}

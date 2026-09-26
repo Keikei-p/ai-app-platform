@@ -1,0 +1,762 @@
+from __future__ import annotations
+import json
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+import webbrowser
+from ..core.ai_core import AICore
+from ..core.config import APP_NAME, VERSION, WORKSPACE_DIR, LOG_DIR
+from ..core.database import init_db, list_projects
+from ..core.environment import diagnose
+from ..core.project_manager import ProjectManager
+from ..core.maintenance import MaintenanceInspector
+from ..core.backup import BackupManager
+from ..core.readiness import ReadinessChecker
+from ..core.code_vault import CodeVault
+from ..core.update_engine import UpdateEngine, LocalPackageProvider
+from ..core.remote_server import RemoteServerController
+from ..core.chat_partner import ChatPartner
+from ..core.learning_mode import LearningCoach
+from ..core.preview_runtime import PreviewRuntime
+from .remote_window import RemoteWindow
+
+class MainWindow(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        init_db()
+        self.title(f"{APP_NAME} v{VERSION}")
+        self.geometry("1140x780")
+        self.minsize(920, 660)
+        self.core = AICore()
+        self.pm = ProjectManager()
+        self.maintenance = MaintenanceInspector()
+        self.backup = BackupManager()
+        self.readiness = ReadinessChecker()
+        self.vault = CodeVault()
+        self.updater = UpdateEngine()
+        self.pending_update = None
+        self.remote_controller = RemoteServerController()
+        self.chat_partner = ChatPartner()
+        self.learning_coach = LearningCoach()
+        self.learning_mode = tk.BooleanVar(value=False)
+        self.preview_runtime = PreviewRuntime()
+        self.remote_window = None
+        self.current_slug: str | None = None
+        self._build()
+        self.refresh_projects()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.after(350, self._startup_readiness)
+
+    def _build(self):
+        top = ttk.Frame(self, padding=(16, 14)); top.pack(fill="x")
+        ttk.Label(top, text=APP_NAME, font=("Segoe UI", 20, "bold")).pack(side="left")
+        ttk.Label(top, text=f"v{VERSION} / AI Partner", foreground="#667085").pack(side="left", padx=12)
+        ttk.Button(top, text="更新", command=self.check_update).pack(side="right")
+        ttk.Button(top, text="バックアップ", command=self.make_backup).pack(side="right", padx=(8,0))
+        ttk.Button(top, text="リモート", command=self.open_remote).pack(side="right", padx=(8,0))
+
+        body = ttk.Panedwindow(self, orient="horizontal"); body.pack(fill="both", expand=True, padx=16, pady=(0,16))
+        left = ttk.Frame(body, padding=12)
+        center = ttk.Frame(body, padding=(14, 8))
+        status = ttk.Frame(body, padding=12)
+        body.add(left, weight=1); body.add(center, weight=4); body.add(status, weight=2)
+
+        ttk.Label(left, text="アプリ", font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        ttk.Label(left, text="選んで会話を続ける", foreground="#667085").pack(anchor="w", pady=(2,8))
+        self.projects = tk.Listbox(left, height=18, activestyle="none"); self.projects.pack(fill="both", expand=True)
+        self.projects.bind("<<ListboxSelect>>", self.on_project_select)
+        ttk.Button(left, text="＋ 新しいアプリ", command=self.new_project).pack(fill="x", pady=(10,0))
+        ttk.Button(left, text="名前変更", command=self.rename_project).pack(fill="x", pady=(6,0))
+        ttk.Separator(left).pack(fill="x", pady=12)
+        ttk.Checkbutton(left, text="学習モード", variable=self.learning_mode).pack(anchor="w")
+        ttk.Label(left, text="ONで『なぜそうしたか』も説明", foreground="#667085", wraplength=180).pack(anchor="w", pady=(2,10))
+        ttk.Button(left, text="保存履歴", command=self.vault_history).pack(fill="x", pady=(4,0))
+        ttk.Button(left, text="前の状態に戻す", command=self.vault_restore_picker).pack(fill="x", pady=(6,0))
+
+        ttk.Label(center, text="AI パートナー", font=("Segoe UI", 16, "bold")).pack(anchor="w")
+        self.project_label = ttk.Label(center, text="作りたいアプリをそのまま話してください", foreground="#667085")
+        self.project_label.pack(anchor="w", pady=(2,8))
+        self.chat_history = tk.Text(center, wrap="word", state="disabled", padx=12, pady=12, relief="flat", background="#F8FAFC")
+        self.chat_history.pack(fill="both", expand=True)
+        self._enable_readonly_copy(self.chat_history)
+        self.chat_history.tag_configure("user", foreground="#101828", spacing1=8, lmargin1=80)
+        self.chat_history.tag_configure("assistant", foreground="#344054", spacing1=8, lmargin2=12)
+
+        composer = ttk.Frame(center); composer.pack(fill="x", pady=(10,0))
+        self.instruction = tk.Text(composer, height=4, wrap="word", undo=True, autoseparators=True, maxundo=-1)
+        self.instruction.pack(side="left", fill="both", expand=True)
+        self._enable_text_editing(self.instruction)
+        buttons = ttk.Frame(composer); buttons.pack(side="left", fill="y", padx=(8,0))
+        ttk.Button(buttons, text="送信", command=self.run_ai).pack(fill="x")
+        ttk.Button(buttons, text="アプリを見る", command=self.preview).pack(fill="x", pady=(6,0))
+        ttk.Button(buttons, text="保存", command=self.vault_save).pack(fill="x", pady=(6,0))
+
+        ttk.Label(status, text="進捗・品質", font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        ttk.Label(status, text="難しいログはここだけに表示", foreground="#667085").pack(anchor="w", pady=(2,8))
+        self.output = tk.Text(status, height=24, wrap="word", state="disabled", relief="flat", background="#FFFFFF")
+        self.output.pack(fill="both", expand=True)
+        self._enable_readonly_copy(self.output)
+        ttk.Button(status, text="公開前チェック", command=self.show_release_risk).pack(fill="x", pady=(8,0))
+        ttk.Button(status, text="環境診断", command=self.show_diagnostics).pack(fill="x", pady=(6,0))
+        ttk.Button(status, text="準備状況", command=self.show_readiness).pack(fill="x", pady=(6,0))
+
+
+    def _enable_text_editing(self, widget):
+        """Windows-friendly text editing with explicit correction and clipboard fallbacks."""
+        try:
+            widget.configure(takefocus=True)
+        except tk.TclError:
+            pass
+
+        def is_text():
+            return isinstance(widget, tk.Text)
+
+        def has_selection():
+            try:
+                if is_text():
+                    return bool(widget.tag_ranges("sel"))
+                return bool(widget.selection_present())
+            except tk.TclError:
+                return False
+
+        def selection_bounds():
+            try:
+                if is_text():
+                    ranges = widget.tag_ranges("sel")
+                    return (ranges[0], ranges[1]) if ranges else None
+                if widget.selection_present():
+                    return ("sel.first", "sel.last")
+            except tk.TclError:
+                pass
+            return None
+
+        def selected_text():
+            bounds = selection_bounds()
+            if not bounds:
+                return ""
+            try:
+                return widget.get(bounds[0], bounds[1])
+            except tk.TclError:
+                return ""
+
+        def delete_selection():
+            bounds = selection_bounds()
+            if not bounds:
+                return False
+            try:
+                widget.delete(bounds[0], bounds[1])
+                return True
+            except tk.TclError:
+                return False
+
+        def backspace(_event=None):
+            try:
+                if delete_selection():
+                    return "break"
+                if is_text():
+                    if widget.compare("insert", ">", "1.0"):
+                        widget.delete("insert-1c", "insert")
+                else:
+                    pos = int(widget.index("insert"))
+                    if pos > 0:
+                        widget.delete(pos - 1, pos)
+            except (tk.TclError, ValueError):
+                pass
+            return "break"
+
+        def delete_forward(_event=None):
+            try:
+                if delete_selection():
+                    return "break"
+                if is_text():
+                    if widget.compare("insert", "<", "end-1c"):
+                        widget.delete("insert", "insert+1c")
+                else:
+                    pos = int(widget.index("insert"))
+                    if pos < len(widget.get()):
+                        widget.delete(pos, pos + 1)
+            except (tk.TclError, ValueError):
+                pass
+            return "break"
+
+        def copy(_event=None):
+            text = selected_text()
+            if text:
+                try:
+                    self.clipboard_clear()
+                    self.clipboard_append(text)
+                    self.update_idletasks()
+                except tk.TclError:
+                    pass
+            return "break"
+
+        def cut(_event=None):
+            if selected_text():
+                copy()
+                delete_selection()
+            return "break"
+
+        def paste(_event=None):
+            try:
+                text = self.clipboard_get()
+            except tk.TclError:
+                return "break"
+            try:
+                bounds = selection_bounds()
+                if is_text() and bounds:
+                    # Text.replace keeps replacing a selection as one undoable action.
+                    widget.replace(bounds[0], bounds[1], text)
+                else:
+                    delete_selection()
+                    widget.insert("insert", text)
+            except tk.TclError:
+                pass
+            return "break"
+
+        def select_all(_event=None):
+            try:
+                if is_text():
+                    widget.tag_add("sel", "1.0", "end-1c")
+                    widget.mark_set("insert", "end-1c")
+                    widget.see("insert")
+                else:
+                    widget.selection_range(0, tk.END)
+                    widget.icursor(tk.END)
+            except tk.TclError:
+                pass
+            return "break"
+
+        def undo(_event=None):
+            if is_text():
+                try:
+                    widget.edit_undo()
+                except tk.TclError:
+                    pass
+            return "break"
+
+        def redo(_event=None):
+            if is_text():
+                try:
+                    widget.edit_redo()
+                except tk.TclError:
+                    pass
+            return "break"
+
+        bindings = (
+            ("<BackSpace>", backspace), ("<Delete>", delete_forward),
+            ("<Control-c>", copy), ("<Control-x>", cut), ("<Control-v>", paste),
+            ("<Control-a>", select_all), ("<Control-z>", undo), ("<Control-y>", redo),
+            ("<Shift-Insert>", paste), ("<Control-Insert>", copy),
+        )
+        for seq, fn in bindings:
+            try:
+                widget.bind(seq, fn, add=False)
+            except tk.TclError:
+                pass
+
+        menu = tk.Menu(widget, tearoff=False)
+        menu.add_command(label="元に戻す", command=undo)
+        menu.add_separator()
+        menu.add_command(label="切り取り", command=cut)
+        menu.add_command(label="コピー", command=copy)
+        menu.add_command(label="貼り付け", command=paste)
+        menu.add_separator()
+        menu.add_command(label="すべて選択", command=select_all)
+
+        def popup(event):
+            try:
+                widget.focus_force()
+                menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                menu.grab_release()
+            return "break"
+
+        widget.bind("<Button-3>", popup, add=False)
+
+    def _enable_readonly_copy(self, widget):
+        """Allow selecting/copying diagnostics even though the output widget is read-only."""
+        def copy(_event=None):
+            try: widget.event_generate("<<Copy>>")
+            except tk.TclError: pass
+            return "break"
+
+        def select_all(_event=None):
+            try:
+                widget.tag_add("sel", "1.0", "end-1c")
+                widget.mark_set("insert", "end-1c")
+                widget.see("insert")
+            except tk.TclError: pass
+            return "break"
+
+        widget.bind("<Control-c>", copy)
+        widget.bind("<Control-a>", select_all)
+        widget.bind("<Command-c>", copy)
+        widget.bind("<Command-a>", select_all)
+
+        menu = tk.Menu(widget, tearoff=False)
+        menu.add_command(label="コピー", command=lambda: copy())
+        menu.add_command(label="すべて選択", command=lambda: select_all())
+        def popup(event):
+            try:
+                menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                menu.grab_release()
+            return "break"
+        widget.bind("<Button-3>", popup)
+
+
+    def open_remote(self):
+        try:
+            if self.remote_window is not None and self.remote_window.winfo_exists():
+                self.remote_window.lift(); self.remote_window.focus_force(); return
+        except tk.TclError:
+            pass
+        self.remote_window = RemoteWindow(self, self.remote_controller)
+
+    def _on_close(self):
+        try:
+            self.preview_runtime.stop()
+            if self.remote_controller.running:
+                self.remote_controller.stop()
+        finally:
+            self.destroy()
+
+    def check_update(self):
+        path = filedialog.askopenfilename(
+            parent=self,
+            title="更新パッケージを選択",
+            filetypes=[("AI App Platform Update", "*.aipupdate *.zip"), ("ZIP", "*.zip"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            candidate = self.updater.inspect_provider(LocalPackageProvider(path))
+            self.pending_update = candidate
+            created = candidate.created_at.replace("T", " ")[:19] if candidate.created_at else "-"
+            self.write(f"✓ 更新確認: v{candidate.version} / {len(candidate.files)} files / SHA-256 {candidate.package_sha256[:16]}…")
+            messagebox.showinfo(
+                "更新を確認",
+                f"更新パッケージを確認しました。\n\n現在: v{VERSION}\n更新: v{candidate.version}\n作成: {created}\nファイル: {len(candidate.files)}\n\n「更新する」で適用できます。",
+                parent=self,
+            )
+        except Exception as exc:
+            self.pending_update = None
+            self.write(f"⚠ 更新パッケージ拒否: {exc}")
+            messagebox.showerror("更新を確認", f"この更新パッケージは使用できません。\n\n{exc}", parent=self)
+
+    def apply_update(self):
+        candidate = self.pending_update
+        if candidate is None:
+            messagebox.showinfo("更新", "先に「更新を確認」から更新パッケージを選択してください。", parent=self)
+            return
+        if not messagebox.askyesno(
+            "更新する",
+            f"v{VERSION} → v{candidate.version} に更新します。\n\n更新前バックアップと自動テストを実行し、失敗時は元の本体へ戻します。\n実行しますか？",
+            parent=self,
+        ):
+            return
+        self.write(f"更新開始: v{VERSION} → v{candidate.version}")
+        self.update_idletasks()
+        result = self.updater.apply(candidate)
+        if result.ok:
+            self.write(f"✓ 更新完了: v{candidate.version}")
+            self.pending_update = None
+            messagebox.showinfo(
+                "更新完了",
+                "更新と自動テストが完了しました。\n\nいったんアプリを閉じて START.bat から再起動してください。",
+                parent=self,
+            )
+        else:
+            status = "ロールバック済み" if result.rolled_back else "要確認"
+            self.write(f"⚠ 更新失敗 ({status}): {result.message}")
+            messagebox.showerror("更新失敗", result.message, parent=self)
+
+    def write(self, text: str):
+        self.output.configure(state="normal"); self.output.insert("end", text + "\n"); self.output.see("end"); self.output.configure(state="disabled")
+
+    def _startup_readiness(self):
+        report = self.readiness.run()
+        if report.ready_for_local_mvp:
+            self.write("✓ 初回準備チェック: ローカルMVPを実行できます。")
+        else:
+            failed = [c.key for c in report.checks if c.status == "fail"]
+            self.write("⚠ 初回準備チェック: 要確認 → " + ", ".join(failed))
+
+    def refresh_projects(self):
+        self.project_rows = list_projects()
+        self.projects.delete(0, "end")
+        for p in self.project_rows: self.projects.insert("end", p["name"])
+
+    def on_project_select(self, _event=None):
+        sel = self.projects.curselection()
+        if not sel: return
+        row = self.project_rows[sel[0]]
+        self.current_slug = row["slug"]
+        self.project_label.configure(text=f"{row['name']}  /  チャットで続けて修正できます")
+        self._load_chat_history()
+
+    def new_project(self):
+        dialog = tk.Toplevel(self); dialog.title("新規プロジェクト"); dialog.transient(self); dialog.grab_set(); dialog.geometry("430x180")
+        ttk.Label(dialog, text="プロジェクト名", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=18, pady=(18,6))
+        entry = ttk.Entry(dialog); entry.pack(fill="x", padx=18); entry.focus()
+        self._enable_text_editing(entry)
+        def create():
+            name = entry.get().strip()
+            if not name:
+                return
+            slug, _ = self.pm.create(name)
+            dialog.destroy()
+            self.refresh_projects()
+            self.current_slug = slug
+            self.project_label.configure(text=f"選択中: {name} ({slug})")
+            # New projects must be immediately editable without another click.
+            self.instruction.configure(state="normal")
+            self.instruction.focus_force()
+            self.write(f"✓ プロジェクト作成: {name}")
+        entry.bind("<Return>", lambda _e: create())
+        ttk.Button(dialog, text="作成", command=create).pack(pady=18)
+
+    def rename_project(self):
+        p = self._current()
+        if not p:
+            return
+        dialog = tk.Toplevel(self)
+        dialog.title("プロジェクト名を変更")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.geometry("430x180")
+        ttk.Label(dialog, text="新しいプロジェクト名", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=18, pady=(18,6))
+        entry = ttk.Entry(dialog)
+        entry.pack(fill="x", padx=18)
+        entry.insert(0, p["name"])
+        entry.selection_range(0, tk.END)
+        entry.icursor(tk.END)
+        self._enable_text_editing(entry)
+        entry.focus_force()
+
+        def save():
+            name = entry.get().strip()
+            if not name:
+                return
+            self.pm.rename(self.current_slug, name)
+            dialog.destroy()
+            self.refresh_projects()
+            self.project_label.configure(text=f"選択中: {name} ({self.current_slug})")
+            self.instruction.configure(state="normal")
+            self.instruction.focus_force()
+            self.write(f"✓ プロジェクト名変更: {name}")
+
+        entry.bind("<Return>", lambda _e: save())
+        ttk.Button(dialog, text="保存", command=save).pack(pady=18)
+
+    def _current(self):
+        if not self.current_slug:
+            messagebox.showinfo("プロジェクト", "先にプロジェクトを作成または選択してください。")
+            return None
+        for p in self.project_rows:
+            if p["slug"] == self.current_slug: return p
+        path = WORKSPACE_DIR / self.current_slug / "project.json"
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+    def _append_chat(self, role: str, text: str):
+        self.chat_history.configure(state="normal")
+        label = "あなた" if role == "user" else "AI"
+        tag = "user" if role == "user" else "assistant"
+        self.chat_history.insert("end", f"{label}\n{text}\n\n", tag)
+        self.chat_history.see("end")
+        self.chat_history.configure(state="disabled")
+
+    def _load_chat_history(self):
+        self.chat_history.configure(state="normal")
+        self.chat_history.delete("1.0", "end")
+        if self.current_slug:
+            path = WORKSPACE_DIR / self.current_slug
+            for row in self.chat_partner.history(path):
+                label = "あなた" if row.get("role") == "user" else "AI"
+                tag = "user" if row.get("role") == "user" else "assistant"
+                self.chat_history.insert("end", f"{label}\n{row.get('content','')}\n\n", tag)
+        self.chat_history.configure(state="disabled")
+        self.chat_history.see("end")
+
+    def _ensure_chat_project(self, first_message: str):
+        if self.current_slug:
+            return self._current()
+        name = self.chat_partner.suggest_project_name(first_message)
+        slug, _ = self.pm.create(name)
+        self.refresh_projects()
+        self.current_slug = slug
+        self.project_label.configure(text=f"{name}  /  AIと制作中")
+        # Select the newly created row when possible.
+        for i, row in enumerate(self.project_rows):
+            if row["slug"] == slug:
+                self.projects.selection_clear(0, "end")
+                self.projects.selection_set(i)
+                self.projects.see(i)
+                break
+        self.write(f"✓ 新しいアプリを自動作成: {name}")
+        return self._current()
+
+    def run_ai(self):
+        text = self.instruction.get("1.0", "end").strip()
+        if not text:
+            messagebox.showinfo("AI パートナー", "作りたい内容や修正内容を入力してください。")
+            return
+        p = self._ensure_chat_project(text)
+        if not p:
+            return
+        path = WORKSPACE_DIR / self.current_slug
+        has_generated = (path / "app_spec.json").exists()
+        self.instruction.delete("1.0", "end")
+        decision = self.chat_partner.handle(path, p["name"], self.current_slug, text, has_generated=has_generated)
+        self._load_chat_history()
+
+        if decision.action == "ask":
+            self.write("AIが必要情報を確認中")
+            return
+
+        if decision.action == "explain":
+            spec_path = path / "app_spec.json"
+            if not spec_path.exists():
+                self._append_chat("assistant", "まだ生成前なので、まずアプリを作成してから説明します。")
+                return
+            from ..core.app_spec import AppSpec
+            raw = json.loads(spec_path.read_text(encoding="utf-8"))
+            spec = AppSpec(**raw)
+            files = [x.name for x in path.iterdir() if x.is_file()]
+            explanation = self.learning_coach.explain(spec, files)
+            self._append_chat("assistant", explanation)
+            return
+
+        self.write("AI: 設計 → 生成 → Design審査 → テストを実行中")
+        self.update_idletasks()
+        result = self.core.execute(p["name"], self.current_slug, path, decision.instruction or text)
+        self._append_chat("assistant", result.message)
+        self.write(("✓ " if result.ok else "⚠ ") + result.message)
+        if result.plan:
+            spec = result.plan["spec"]
+            self.write(f"仕様: {spec['app_type']} / {', '.join(spec['targets'])}")
+        for t in result.tests:
+            self.write(f"{'PASS' if t.passed else 'FAIL'} {t.name}: {t.detail}")
+        if result.design_review:
+            self.write(f"Design AI: {result.design_review.score}/100 {'PASS' if result.design_review.passed else '要改善'}")
+        blockers = result.capability_gaps or []
+        if blockers:
+            self.write("未完了項目:")
+            for gap in blockers[:8]:
+                self.write(f"・{gap.reason} / 根拠: {gap.evidence} / 次: {gap.next_step}")
+        if self.learning_mode.get() and result.plan:
+            from ..core.app_spec import AppSpec
+            spec = AppSpec(**result.plan["spec"])
+            explanation = self.learning_coach.explain(spec, [f.name for f in result.files])
+            self._append_chat("assistant", explanation)
+
+    def vault_save(self):
+        p = self._current()
+        if not p:
+            return
+        try:
+            version = self.vault.save(self.current_slug, "手動保存", actor="local-user", reason="manual save", kind="manual")
+            self.write(f"✓ Code Vault保存: {version.version_id} / {version.file_count} files")
+            messagebox.showinfo("Code Vault", "現在の状態を保存しました。")
+        except Exception as exc:
+            messagebox.showerror("Code Vault", f"保存に失敗しました。\n{exc}")
+
+    def _vault_format_version(self, version):
+        created = version.created_at.replace("T", " ")[:19]
+        return f"{created}  {version.label}  [{version.kind}]"
+
+    def _open_vault_window(self, *, restore_mode: bool = False):
+        p = self._current()
+        if not p:
+            return
+        versions = self.vault.list_versions(self.current_slug)
+        if not versions:
+            messagebox.showinfo("Code Vault", "まだ保存履歴がありません。")
+            return
+
+        win = tk.Toplevel(self)
+        win.title("Code Vault - 履歴")
+        win.transient(self)
+        win.geometry("820x520")
+        outer = ttk.Frame(win, padding=14)
+        outer.pack(fill="both", expand=True)
+        ttk.Label(outer, text=f"{p['name']} の保存履歴", font=("Segoe UI", 14, "bold")).pack(anchor="w")
+        ttk.Label(outer, text="戻したい時点を選べます。復元前には現在の状態を自動保存します。", foreground="#667085").pack(anchor="w", pady=(4,10))
+
+        listbox = tk.Listbox(outer, height=12)
+        listbox.pack(fill="x")
+        for version in versions:
+            listbox.insert("end", self._vault_format_version(version))
+        listbox.selection_set(0)
+
+        details = tk.Text(outer, height=10, wrap="word", state="disabled")
+        details.pack(fill="both", expand=True, pady=(10,8))
+        self._enable_readonly_copy(details)
+
+        def selected_version():
+            sel = listbox.curselection()
+            return versions[sel[0]] if sel else None
+
+        def show_selected_details(_event=None):
+            version = selected_version()
+            if not version:
+                return
+            text = (
+                f"保存日時: {version.created_at}\n"
+                f"ラベル: {version.label}\n"
+                f"種類: {version.kind}\n"
+                f"実行者: {version.actor}\n"
+                f"ファイル数: {version.file_count}\n"
+                f"サイズ: {version.total_bytes} bytes\n"
+                f"理由: {version.reason or '-'}\n"
+            )
+            if version.warnings:
+                text += "注意:\n- " + "\n- ".join(version.warnings)
+            details.configure(state="normal")
+            details.delete("1.0", "end")
+            details.insert("1.0", text)
+            details.configure(state="disabled")
+
+        def show_diff():
+            version = selected_version()
+            if version:
+                self._show_vault_diff(version.version_id)
+
+        def restore():
+            version = selected_version()
+            if not version:
+                return
+            if not messagebox.askyesno(
+                "前の状態に戻す",
+                f"{version.created_at[:19]} の状態に戻しますか？\n\n現在の状態は先に自動保存されます。",
+                parent=win,
+            ):
+                return
+            try:
+                safety = self.vault.restore(self.current_slug, version.version_id, confirmed=True, actor="local-user")
+                self.refresh_projects()
+                self.write(f"✓ Code Vault復元: {version.version_id} / 復元前保存={safety.version_id}")
+                messagebox.showinfo("Code Vault", "復元しました。現在の状態も復元前に保存済みです。", parent=win)
+                win.destroy()
+            except Exception as exc:
+                messagebox.showerror("Code Vault", f"復元に失敗しました。\n{exc}", parent=win)
+
+        listbox.bind("<<ListboxSelect>>", show_selected_details)
+        actions = ttk.Frame(outer)
+        actions.pack(fill="x")
+        ttk.Button(actions, text="この時点との差分", command=show_diff).pack(side="left")
+        ttk.Button(actions, text="この状態に戻す", command=restore).pack(side="left", padx=8)
+        ttk.Button(actions, text="閉じる", command=win.destroy).pack(side="right")
+        show_selected_details()
+        if restore_mode:
+            listbox.focus_force()
+
+    def vault_history(self):
+        self._open_vault_window(restore_mode=False)
+
+    def vault_restore_picker(self):
+        self._open_vault_window(restore_mode=True)
+
+    def vault_show_latest_diff(self):
+        p = self._current()
+        if not p:
+            return
+        versions = self.vault.list_versions(self.current_slug)
+        if not versions:
+            messagebox.showinfo("Code Vault", "まだ保存履歴がありません。")
+            return
+        self._show_vault_diff(versions[0].version_id)
+
+    def _show_vault_diff(self, version_id: str):
+        try:
+            diff = self.vault.diff(self.current_slug, version_id)
+        except Exception as exc:
+            messagebox.showerror("変更を見る", f"差分確認に失敗しました。\n{exc}")
+            return
+        summary = [
+            f"追加: {len(diff.added)}",
+            f"削除: {len(diff.removed)}",
+            f"変更: {len(diff.modified)}",
+            f"変更なし: {diff.unchanged}",
+            "",
+        ]
+        if diff.added:
+            summary.append("追加ファイル:\n  " + "\n  ".join(diff.added[:40]))
+        if diff.removed:
+            summary.append("削除ファイル:\n  " + "\n  ".join(diff.removed[:40]))
+        if diff.modified:
+            summary.append("変更ファイル:\n  " + "\n  ".join(diff.modified[:40]))
+        if diff.unified_diff:
+            summary.append("\n--- テキスト差分 ---\n" + diff.unified_diff[:30000])
+        elif not (diff.added or diff.removed or diff.modified):
+            summary.append("現在の状態と同じです。")
+
+        win = tk.Toplevel(self)
+        win.title("Code Vault - 変更を見る")
+        win.geometry("920x620")
+        text = tk.Text(win, wrap="none")
+        text.pack(fill="both", expand=True, padx=12, pady=12)
+        text.insert("1.0", "\n".join(summary))
+        text.configure(state="disabled")
+        self._enable_readonly_copy(text)
+
+    def run_maintenance(self):
+        p = self._current()
+        if not p: return
+        path = WORKSPACE_DIR / self.current_slug
+        findings = self.maintenance.inspect_project(path)
+        self.maintenance.record(self.current_slug, findings)
+        self.write("--- 保守スキャン ---")
+        for f in findings: self.write(f"[{f.severity}] {f.code}: {f.message}")
+
+    def show_release_risk(self):
+        if not self.current_slug: return
+        path = WORKSPACE_DIR / self.current_slug / "release_risk.json"
+        if not path.exists():
+            messagebox.showinfo("公開前リスク", "制作パイプライン実行後にチェックリストが生成されます。")
+            return
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        lines = ["※自動チェックであり法的保証ではありません。", ""]
+        for item in raw.get("items", []):
+            lines.append(f"[{item['severity']}] {item['message']}")
+        messagebox.showinfo("公開前リスク確認", "\n".join(lines[:18]))
+
+    def make_backup(self):
+        r = self.backup.create("ui")
+        if r.ok:
+            self.write(f"✓ バックアップ作成: {r.path}")
+            messagebox.showinfo("バックアップ", f"作成しました。\n{r.path}")
+        else:
+            messagebox.showerror("バックアップ", r.error or "作成に失敗しました。")
+
+    def preview(self):
+        if not self.current_slug: return
+        project = WORKSPACE_DIR / self.current_slug
+        index = project / "index.html"
+        if not index.exists():
+            messagebox.showinfo("プレビュー", "まだアプリがありません。先にAIへ作りたい内容を送ってください。")
+            return
+        try:
+            if (project / "server.py").exists():
+                session = self.preview_runtime.start(project)
+                webbrowser.open(session.url)
+                self.write(f"✓ 実アプリプレビュー: {session.url}")
+            else:
+                webbrowser.open(index.resolve().as_uri())
+                self.write("✓ Webプレビューを開きました")
+        except Exception as exc:
+            messagebox.showerror("プレビュー", f"プレビューを開始できませんでした。\n{exc}")
+
+    def show_path(self):
+        if self.current_slug: self.write(f"保存先: {WORKSPACE_DIR / self.current_slug}")
+
+    def show_diagnostics(self):
+        d = diagnose()
+        messagebox.showinfo("環境診断", "\n".join(f"{k}: {v}" for k,v in d.items()))
+
+    def show_readiness(self):
+        r = self.readiness.run()
+        lines = [f"ローカルMVP準備: {'OK' if r.ready_for_local_mvp else '要確認'}", ""]
+        for c in r.checks:
+            lines.append(f"[{c.status}] {c.key}: {c.detail}")
+        lines.append(f"\n診断ログ保存先: {LOG_DIR}")
+        messagebox.showinfo("準備状況", "\n".join(lines))

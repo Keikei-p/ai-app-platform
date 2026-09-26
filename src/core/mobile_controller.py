@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+MOBILE_CONTROLLER_HTML = r'''<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AI App Platform Remote</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#111827;background:#f3f4f6}*{box-sizing:border-box}body{margin:0;padding:18px;max-width:760px;margin:auto}.card{background:white;border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 4px 18px #0001}h1{font-size:22px;margin:4px 0 8px}h2{font-size:16px;margin:4px 0 12px}input,textarea,select,button{width:100%;font:inherit;padding:12px;border:1px solid #d1d5db;border-radius:10px;margin:6px 0}textarea{min-height:120px}button{background:#111827;color:white;border:none;font-weight:700}button.secondary{background:#e5e7eb;color:#111827}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.muted{color:#6b7280;font-size:13px}.ok{color:#047857}.bad{color:#b91c1c}pre{white-space:pre-wrap;word-break:break-word;background:#111827;color:#e5e7eb;border-radius:10px;padding:12px;max-height:320px;overflow:auto}.hidden{display:none}</style></head>
+<body><h1>AI App Platform Remote</h1><div class="muted">同じ信頼できるWi‑Fi内で使うLAN Remote Betaです。インターネット公開用ではありません。</div>
+<div id="pairCard" class="card"><h2>このスマホをペアリング</h2><input id="pairCode" placeholder="PCに表示された10文字コード" autocomplete="one-time-code"><input id="deviceName" placeholder="端末名" value="My Phone"><button onclick="pair()">ペアリング</button><div id="pairMsg" class="muted"></div></div>
+<div id="control" class="hidden"><div class="card"><div class="row"><button onclick="status()">状態確認</button><button class="secondary" onclick="loadProjects()">プロジェクト更新</button></div><div class="row"><input id="newProject" placeholder="新しいプロジェクト名"><button class="secondary" onclick="createProject()">新規作成</button></div><select id="project"></select><div class="row"><button class="secondary" onclick="run('run_tests')">テスト</button><button class="secondary" onclick="run('vault_save')">Code Vault保存</button></div><button class="secondary" onclick="run('backup')">全体バックアップ</button></div>
+<div class="card"><h2>アプリ制作・修正</h2><textarea id="instruction" placeholder="例：予約画面に電話番号入力を追加して"></textarea><button onclick="runPipeline()">Safety Check → 制作 → テスト</button></div>
+<div class="card"><h2>結果</h2><pre id="out">Ready.</pre></div></div>
+<script>
+const enc=new TextEncoder();
+function rotr(n,x){return (x>>>n)|(x<<(32-n))}
+function sha256Bytes(bytes){
+  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let l=bytes.length, bitLen=l*8, total=((l+9+63)>>6)<<6, m=new Uint8Array(total);m.set(bytes);m[l]=0x80;
+  let dv=new DataView(m.buffer);dv.setUint32(total-4,bitLen>>>0,false);dv.setUint32(total-8,Math.floor(bitLen/0x100000000),false);
+  let H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19],w=new Uint32Array(64);
+  for(let o=0;o<total;o+=64){for(let i=0;i<16;i++)w[i]=dv.getUint32(o+i*4,false);for(let i=16;i<64;i++){let a=w[i-15],b=w[i-2],s0=rotr(7,a)^rotr(18,a)^(a>>>3),s1=rotr(17,b)^rotr(19,b)^(b>>>10);w[i]=(w[i-16]+s0+w[i-7]+s1)>>>0}let [a,b,c,d,e,f,g,h]=H;for(let i=0;i<64;i++){let S1=rotr(6,e)^rotr(11,e)^rotr(25,e),ch=(e&f)^((~e)&g),t1=(h+S1+ch+K[i]+w[i])>>>0,S0=rotr(2,a)^rotr(13,a)^rotr(22,a),maj=(a&b)^(a&c)^(b&c),t2=(S0+maj)>>>0;h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0}H=[(H[0]+a)>>>0,(H[1]+b)>>>0,(H[2]+c)>>>0,(H[3]+d)>>>0,(H[4]+e)>>>0,(H[5]+f)>>>0,(H[6]+g)>>>0,(H[7]+h)>>>0]}
+  let out=new Uint8Array(32),odv=new DataView(out.buffer);H.forEach((v,i)=>odv.setUint32(i*4,v,false));return out
+}
+function hmacHexSync(secretB64,text){let key=Uint8Array.from(atob(secretB64),c=>c.charCodeAt(0));if(key.length>64)key=sha256Bytes(key);let k=new Uint8Array(64);k.set(key);let i=new Uint8Array(64),o=new Uint8Array(64);for(let n=0;n<64;n++){i[n]=k[n]^0x36;o[n]=k[n]^0x5c}let msg=enc.encode(text),inner=new Uint8Array(64+msg.length);inner.set(i);inner.set(msg,64);let ih=sha256Bytes(inner),outer=new Uint8Array(96);outer.set(o);outer.set(ih,64);return [...sha256Bytes(outer)].map(b=>b.toString(16).padStart(2,'0')).join('')}
+function randomId(){try{let a=new Uint8Array(16);crypto.getRandomValues(a);return [...a].map(b=>b.toString(16).padStart(2,'0')).join('')}catch(e){return String(Date.now())+'-'+String(Math.random()).slice(2)}}
+function getCred(){try{return JSON.parse(localStorage.getItem('aiapp_remote')||'null')}catch(e){return null}}
+function show(){const c=getCred();document.getElementById('pairCard').classList.toggle('hidden',!!c);document.getElementById('control').classList.toggle('hidden',!c);if(c)loadProjects()}
+async function pair(){const code=document.getElementById('pairCode').value.trim();const name=document.getElementById('deviceName').value.trim()||'Phone';let r=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,name})});let j=await r.json();if(!r.ok){document.getElementById('pairMsg').textContent=j.error||'pair failed';return}localStorage.setItem('aiapp_remote',JSON.stringify(j));show()}
+function stable(v){if(Array.isArray(v))return v.map(stable);if(v&&typeof v==='object'){let o={};Object.keys(v).sort().forEach(k=>o[k]=stable(v[k]));return o}return v}
+async function command(action,project_slug=null,payload={}){const cred=getCred();if(!cred)throw new Error('not paired');const issued_at=Math.floor(Date.now()/1000);const cmd={command_id:randomId(),issued_at,expires_at:issued_at+120,action,project_slug,payload};const canonical=JSON.stringify(stable(cmd));const signature=hmacHexSync(cred.secret_b64,canonical);let r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','X-Device-ID':cred.device_id},body:JSON.stringify({command:cmd,signature})});let j=await r.json();if(!r.ok)throw new Error(j.error||'command failed');return j}
+function out(x){document.getElementById('out').textContent=typeof x==='string'?x:JSON.stringify(x,null,2)}
+async function status(){try{out(await command('status'))}catch(e){out(String(e))}}
+async function loadProjects(){try{const r=await command('project_list');const s=document.getElementById('project');s.innerHTML='';(r.data.projects||[]).forEach(p=>{let o=document.createElement('option');o.value=p.slug;o.textContent=p.name+' ('+p.slug+')';s.appendChild(o)});out(r)}catch(e){out(String(e))}}
+function selected(){return document.getElementById('project').value||null}
+async function createProject(){const name=document.getElementById('newProject').value.trim();if(!name){out('プロジェクト名を入力してください');return}try{out(await command('project_create',null,{name}));document.getElementById('newProject').value='';await loadProjects()}catch(e){out(String(e))}}
+async function run(action){try{out(await command(action,action==='backup'?null:selected(),{}))}catch(e){out(String(e))}}
+async function runPipeline(){const slug=selected();const instruction=document.getElementById('instruction').value.trim();if(!slug||!instruction){out('プロジェクトと制作指示を入力してください');return}try{out(await command('run_pipeline',slug,{instruction}))}catch(e){out(String(e))}}
+show();
+</script></body></html>'''

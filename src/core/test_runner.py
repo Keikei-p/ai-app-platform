@@ -1,0 +1,70 @@
+from __future__ import annotations
+from dataclasses import dataclass
+from pathlib import Path
+import json
+import py_compile
+import re
+
+@dataclass(frozen=True)
+class TestResult:
+    name: str
+    passed: bool
+    detail: str
+
+class ProjectTestRunner:
+    def run(self, project_dir: Path) -> list[TestResult]:
+        results: list[TestResult] = []
+        required = ["project.json", "app_spec.json", "index.html", "styles.css", "app.js", "manifest.webmanifest", "generated_manifest.json"]
+        missing = [x for x in required if not (project_dir / x).exists()]
+        results.append(TestResult("required_files", not missing, "OK" if not missing else f"missing: {', '.join(missing)}"))
+
+        spec_path = project_dir / "app_spec.json"
+        spec: dict = {}
+        try:
+            spec = json.loads(spec_path.read_text(encoding="utf-8"))
+            valid = bool(spec.get("project_name") and spec.get("targets"))
+            results.append(TestResult("app_spec", valid, "valid app_spec.json" if valid else "required keys are missing"))
+        except Exception as exc:
+            results.append(TestResult("app_spec", False, f"invalid json: {exc}"))
+
+        index = project_dir / "index.html"
+        if index.exists():
+            text = index.read_text(encoding="utf-8")
+            has_viewport = 'name="viewport"' in text
+            has_title = bool(re.search(r"<title>.+?</title>", text, re.I | re.S))
+            results.append(TestResult("web_basics", has_viewport and has_title, "viewport/title present" if has_viewport and has_title else "viewport/title missing"))
+        else:
+            results.append(TestResult("web_basics", False, "index.html missing"))
+
+        css = project_dir / "styles.css"
+        if css.exists():
+            text = css.read_text(encoding="utf-8")
+            touch = bool(re.search(r"min-height\s*:\s*(4[4-9]|[5-9]\d)px", text))
+            focus = ":focus-visible" in text
+            results.append(TestResult("usability_basics", touch and focus, "touch/focus rules present" if touch and focus else "touch/focus rules missing"))
+
+        if "authentication" in spec.get("features", []) or "database" in spec.get("features", []):
+            server = project_dir / "server.py"
+            if not server.exists():
+                results.append(TestResult("server_runtime", False, "server.py missing"))
+            else:
+                try:
+                    py_compile.compile(str(server), doraise=True)
+                    results.append(TestResult("server_runtime", True, "server.py compiles"))
+                except Exception as exc:
+                    results.append(TestResult("server_runtime", False, f"compile error: {exc}"))
+
+        if any(t in spec.get("targets", []) for t in ("android", "ios")):
+            mobile = project_dir / "mobile"
+            needed = ["package.json", "app.json", "App.tsx", "eas.json"]
+            missing_mobile = [x for x in needed if not (mobile / x).exists()]
+            results.append(TestResult("mobile_source", not missing_mobile, "Expo mobile source present" if not missing_mobile else "missing: " + ", ".join(missing_mobile)))
+            if not missing_mobile:
+                try:
+                    package = json.loads((mobile / "package.json").read_text(encoding="utf-8"))
+                    app = json.loads((mobile / "app.json").read_text(encoding="utf-8"))
+                    ok = bool(package.get("dependencies", {}).get("expo") and app.get("expo", {}).get("name"))
+                    results.append(TestResult("mobile_manifest", ok, "valid Expo manifest" if ok else "invalid Expo manifest"))
+                except Exception as exc:
+                    results.append(TestResult("mobile_manifest", False, f"invalid mobile json: {exc}"))
+        return results
