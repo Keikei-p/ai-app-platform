@@ -34,6 +34,7 @@ class CoreResult:
     lessons_used: list[str] | None = None
     pipeline_report: dict | None = None
     ai_enhancement: dict | None = None
+    repair_attempts: list[dict] | None = None
 
 class AICore:
     """Local-first orchestration core. Models cannot bypass safety, permissions, tests, approval, or audit."""
@@ -175,6 +176,99 @@ class AICore:
             project_dir / ".aiapp" / "approval_state.json",
         ])
 
+        repair_attempts: list[dict] = []
+        for attempt in range(1, 3):
+            if pipeline_report.preview_ready:
+                break
+
+            feedback = self.pipeline.repair_feedback(
+                pipeline_report,
+                design_review.findings,
+            )
+            emit("repair", f"品質エラーを自動修正しています ({attempt}/2)")
+            try:
+                repair = self.coding_brain.enhance(
+                    project_dir,
+                    plan.spec,
+                    enriched + "\n\n自動品質フィードバック:\n" + feedback,
+                )
+                repair_info = repair.to_dict()
+            except Exception as exc:
+                repair_info = {
+                    "status": "fallback",
+                    "summary": f"自動修正を安全に中止: {type(exc).__name__}: {exc}",
+                    "files": [],
+                }
+                repair_attempts.append({
+                    "attempt": attempt,
+                    "coding": repair_info,
+                    "preview_ready": False,
+                    "blocking_reasons": list(pipeline_report.blocking_reasons),
+                })
+                log_event(
+                    "coding_brain.repair_failed",
+                    json.dumps(repair_attempts[-1], ensure_ascii=False),
+                    slug,
+                    "coding-brain",
+                )
+                break
+
+            if repair.status != "applied":
+                repair_attempts.append({
+                    "attempt": attempt,
+                    "coding": repair_info,
+                    "preview_ready": False,
+                    "blocking_reasons": list(pipeline_report.blocking_reasons),
+                })
+                log_event(
+                    "coding_brain.repair_skipped",
+                    json.dumps(repair_attempts[-1], ensure_ascii=False),
+                    slug,
+                    "coding-brain",
+                )
+                break
+
+            files += repair.files
+            windows_prep = self.windows_packager.prepare(project_dir, plan.spec)
+            if windows_prep.prepared:
+                files += windows_prep.files
+
+            design_review = self.design.review(project_dir)
+            self.design.save(project_dir, design_review)
+            gaps = self.capability.assess(plan.spec, project_dir)
+            self.capability.save(project_dir, gaps)
+            test_results = self.tests.run(project_dir)
+            test_summary = [
+                {"name": t.name, "passed": t.passed, "detail": t.detail}
+                for t in test_results
+            ]
+            log_event(
+                "tests.repair_completed",
+                json.dumps({"attempt": attempt, "results": test_summary}, ensure_ascii=False),
+                slug,
+                "test-engine",
+            )
+            pipeline_report = self.pipeline.evaluate(
+                project_dir=project_dir,
+                test_results=test_results,
+                design_passed=design_review.passed,
+                capability_gaps=gaps,
+                risk_items=risk_items,
+            )
+            repair_attempts.append({
+                "attempt": attempt,
+                "coding": repair_info,
+                "preview_ready": pipeline_report.preview_ready,
+                "blocking_reasons": list(pipeline_report.blocking_reasons),
+            })
+            log_event(
+                "coding_brain.repair_completed",
+                json.dumps(repair_attempts[-1], ensure_ascii=False),
+                slug,
+                "coding-brain",
+            )
+
+        pipeline_dict = pipeline_report.to_dict()
         final_ok = pipeline_report.preview_ready
         if final_ok:
             self.vault.save(slug, "AI変更後", actor="ai-core", reason=instruction, kind="auto-after-ai")
@@ -210,4 +304,5 @@ class AICore:
             lessons,
             pipeline_dict,
             enhancement_dict,
+            repair_attempts,
         )
