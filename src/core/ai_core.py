@@ -16,6 +16,7 @@ from .code_vault import CodeVault
 from .design_ai import DesignAI, DesignReview
 from .capability import CapabilityAssessor, CapabilityGap
 from .development_memory import DevelopmentMemory
+from .generation_pipeline import GenerationPipeline
 
 @dataclass
 class CoreResult:
@@ -29,6 +30,7 @@ class CoreResult:
     design_review: DesignReview | None = None
     capability_gaps: list[CapabilityGap] | None = None
     lessons_used: list[str] | None = None
+    pipeline_report: dict | None = None
 
 class AICore:
     """Local-first orchestration core. Models cannot bypass safety, permissions, tests, approval, or audit."""
@@ -45,6 +47,7 @@ class AICore:
         self.design = DesignAI()
         self.capability = CapabilityAssessor()
         self.memory = DevelopmentMemory()
+        self.pipeline = GenerationPipeline()
 
     def execute(
         self,
@@ -115,21 +118,61 @@ class AICore:
         test_summary = [{"name": t.name, "passed": t.passed, "detail": t.detail} for t in test_results]
         log_event("tests.completed", json.dumps(test_summary, ensure_ascii=False), slug, "test-engine")
 
-        # A build may be technically valid but still not be a releasable store binary.
-        release_blockers = [g for g in gaps if g.blocking]
-        design_ok = design_review.passed
-        if passed and design_ok:
+        emit("security", "生成物の秘密情報・危険コード・公開可否を確認しています")
+        pipeline_report = self.pipeline.evaluate(
+            project_dir=project_dir,
+            test_results=test_results,
+            design_passed=design_review.passed,
+            capability_gaps=gaps,
+            risk_items=risk_items,
+        )
+        pipeline_dict = pipeline_report.to_dict()
+        log_event(
+            "pipeline.completed",
+            json.dumps(pipeline_dict, ensure_ascii=False),
+            slug,
+            "generation-pipeline",
+        )
+        files.extend([
+            project_dir / ".aiapp" / "reports" / "security_report.json",
+            project_dir / ".aiapp" / "reports" / "test_report.json",
+            project_dir / ".aiapp" / "reports" / "generated_files_manifest.json",
+            project_dir / ".aiapp" / "reports" / "build_readiness.json",
+            project_dir / ".aiapp" / "approval_state.json",
+        ])
+
+        final_ok = pipeline_report.preview_ready
+        if final_ok:
             self.vault.save(slug, "AI変更後", actor="ai-core", reason=instruction, kind="auto-after-ai")
-            if release_blockers:
-                message = "作成と自動テストは完了しました。未完了の外部/ビルド工程があるため、完成ではなく『完成候補』です。"
+            if not pipeline_report.release_ready:
+                message = (
+                    "生成・デザイン・自動テスト・セキュリティ検査に合格しました。"
+                    "プレビュー可能です。外部ビルド/署名など未完了項目があるため、公開前の完成候補です。"
+                )
             else:
-                message = "作成・デザイン審査・自動テストに合格しました。完成候補です。"
-        elif not design_ok:
+                message = (
+                    "生成・デザイン・自動テスト・セキュリティ検査に合格しました。"
+                    "公開操作は引き続き明示承認が必要です。"
+                )
+        elif not pipeline_report.security.passed:
+            message = "生成物のセキュリティ検査で停止しました。危険項目を修正するまでプレビュー/公開候補にしません。"
+        elif not design_review.passed:
             message = "生成は完了しましたが、Design AIの品質基準に未達です。改善が必要です。"
         else:
             message = "生成は完了しましたが、自動テストに失敗しました。完成扱いにはしません。"
 
-        final_ok = passed and design_ok
         emit("done" if final_ok else "issue", "確認が完了しました" if final_ok else "確認が必要な項目があります")
-        finish_job(job_id, "completed" if final_ok else "test_failed", message)
-        return CoreResult(final_ok, message, decision, files, test_results, plan.to_dict(), risk_items, design_review, gaps, lessons)
+        finish_job(job_id, "completed" if final_ok else "quality_gate_failed", message)
+        return CoreResult(
+            final_ok,
+            message,
+            decision,
+            files,
+            test_results,
+            plan.to_dict(),
+            risk_items,
+            design_review,
+            gaps,
+            lessons,
+            pipeline_dict,
+        )
