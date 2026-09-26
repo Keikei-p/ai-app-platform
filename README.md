@@ -1,8 +1,15 @@
-# AI App Platform v0.6.2
+# AI App Platform v0.6.3
 
 AI App Platform is a local-first app-building partner. The main experience is now conversation-first: describe the app, answer only the missing questions, let the platform generate/test it, then continue the same chat to request corrections.
 
-## v0.6.2 milestone
+## v0.6.3 milestone
+
+- **Category-free landing:** removed the 業務アプリ / 予約アプリ / 相談から shortcut choices. Users start by simply describing what they want.
+- **Premium AI-first welcome:** the empty-chat screen now uses a focused visual identity, a central AI mark and the message 「つくりたいものを、話すだけ。」 instead of template-choice UI.
+- **Cleaner information hierarchy:** project-only actions such as preview and test details stay hidden until a project actually exists.
+- **Contextual progress UI:** the large progress card is hidden while idle and appears only when work is happening; compact windows still retain a small AI status indicator.
+- **Refined visual system:** updated neutral surfaces, typography hierarchy, brand mark, spacing and narrow-window message margins while preserving the pinned composer from v0.6.2.
+- **No hidden shortcut regression:** GUI acceptance explicitly rejects the old category choices and verifies the AI-first headline and contextual action visibility.
 
 - **Pinned composer layout:** chat history is now the only vertically flexible row; the composer is structurally pinned to the bottom instead of being pushed out by history content.
 - **Pinned send action:** the text area and send button use a two-column layout so long/wide text widgets cannot push the send button outside the visible window.
