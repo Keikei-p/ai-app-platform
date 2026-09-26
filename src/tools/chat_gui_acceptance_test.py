@@ -69,6 +69,12 @@ def main() -> int:
                     raise AssertionError(f"legacy category choice is still visible: {forbidden}")
             if "つくりたいものを、話すだけ。" not in visible_copy:
                 raise AssertionError("AI-first landing headline is missing")
+            if app.preview_button.winfo_manager():
+                raise AssertionError("preview action should be hidden before a project exists")
+            if app.details_button.winfo_manager():
+                raise AssertionError("test-details action should be hidden before a project exists")
+            if not app.ai_button.winfo_manager():
+                raise AssertionError("AI connection control should remain available on landing")
 
             # Compact windows must preserve the actual chat and composer inside the visible client area.
             for width, height in ((820, 520), (700, 460), (680, 440)):
@@ -107,6 +113,10 @@ def main() -> int:
 
             if not app.current_slug:
                 raise AssertionError("project was not created for requirement collection")
+            if not app.preview_button.winfo_manager():
+                raise AssertionError("preview action did not appear after project creation")
+            if not app.details_button.winfo_manager():
+                raise AssertionError("test-details action did not appear after project creation")
             project = WORKSPACE_DIR / app.current_slug
             if (project / "app_spec.json").exists():
                 raise AssertionError("app generated before explicit approval")
