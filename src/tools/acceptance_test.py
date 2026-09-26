@@ -89,29 +89,24 @@ def _run_gui_edit_test() -> None:
             if w.get("1.0", "end-1c") != "bde":
                 raise AssertionError("Delete editing failed")
 
-            # New-project name entry must be editable, and the project must
-            # immediately expose an editable instruction field after creation.
+            # New chat must open instantly without forcing a naming dialog.
             import tkinter as tk
             from tkinter import ttk
             app.new_project()
             app.update()
+            if app.current_slug is not None:
+                raise AssertionError("new chat should not create a project before first message")
             dialogs = [x for x in app.winfo_children() if isinstance(x, tk.Toplevel)]
-            if not dialogs:
-                raise AssertionError("new project dialog did not open")
-            dialog = dialogs[-1]
-            entry = next(x for x in dialog.winfo_children() if isinstance(x, ttk.Entry))
-            entry.insert(0, "EditableX")
-            entry.icursor(tk.END)
-            entry.event_generate("<KeyPress-BackSpace>", keysym="BackSpace")
-            entry.event_generate("<KeyRelease-BackSpace>", keysym="BackSpace")
+            if dialogs:
+                raise AssertionError("new chat unexpectedly opened a naming dialog")
+            if app.project_label.cget("text") != "新しいチャット":
+                raise AssertionError("new chat header was not reset")
+
+            # First content creates/names the project automatically.
+            created = app._ensure_chat_project("Editable")
             app.update()
-            if entry.get() != "Editable":
-                raise AssertionError("project-name Backspace editing failed")
-            create_button = next(x for x in dialog.winfo_children() if isinstance(x, ttk.Button))
-            create_button.invoke()
-            app.update()
-            if not app.current_slug:
-                raise AssertionError("project was not created")
+            if not app.current_slug or not created:
+                raise AssertionError("first chat content did not create a project")
 
             app.instruction.delete("1.0", "end")
             app.instruction.insert("1.0", "helloX")
@@ -231,7 +226,7 @@ def main() -> int:
 
     if args.gui:
         _run_gui_edit_test()
-        print("PASS gui_editing_project_create_rename_code_vault_and_update_center")
+        print("PASS gui_editing_new_chat_rename_code_vault_and_update_center")
 
     print("ACCEPTANCE TESTS PASSED")
     return 0
