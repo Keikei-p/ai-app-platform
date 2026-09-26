@@ -366,23 +366,73 @@ class MainWindow(tk.Tk):
             self.details_visible = True
             self.details_button.configure(text="テスト結果を閉じる")
 
+    def _make_prompt_card(self, parent, title: str, subtitle: str, prompt: str):
+        card = tk.Frame(
+            parent, bg="#F7F7F8", highlightbackground="#E5E5E8",
+            highlightthickness=1, cursor="hand2"
+        )
+        inner = tk.Frame(card, bg="#F7F7F8", cursor="hand2")
+        inner.pack(fill="both", expand=True, padx=14, pady=12)
+        title_label = tk.Label(
+            inner, text=title, bg="#F7F7F8", fg="#202123",
+            font=(self.ui_font_semibold, 10, "bold"), cursor="hand2"
+        )
+        title_label.pack(anchor="w")
+        subtitle_label = tk.Label(
+            inner, text=subtitle, bg="#F7F7F8", fg="#77777D",
+            font=(self.ui_font_family, 9), cursor="hand2"
+        )
+        subtitle_label.pack(anchor="w", pady=(4, 0))
+
+        def start(_event=None):
+            self._use_suggestion(prompt)
+            return "break"
+
+        def enter(_event=None):
+            for widget in (card, inner, title_label, subtitle_label):
+                widget.configure(bg="#EEEEF0")
+
+        def leave(_event=None):
+            for widget in (card, inner, title_label, subtitle_label):
+                widget.configure(bg="#F7F7F8")
+
+        for widget in (card, inner, title_label, subtitle_label):
+            widget.bind("<Button-1>", start)
+            widget.bind("<Enter>", enter)
+            widget.bind("<Leave>", leave)
+        return card
+
+    def _update_placeholder(self, _event=None):
+        if not hasattr(self, "placeholder_label"):
+            return
+        has_text = bool(self.instruction.get("1.0", "end-1c").strip())
+        focused = self.focus_get() is self.instruction
+        if has_text or focused or self._busy:
+            self.placeholder_label.place_forget()
+        else:
+            self.placeholder_label.place(x=18, y=15)
+
     def _use_suggestion(self, prompt: str):
         if self._busy:
             return
         self.instruction.delete("1.0", "end")
         self.instruction.insert("1.0", prompt)
+        self._update_placeholder()
         self.instruction.focus_force()
+        # Starter cards are actions, not passive examples: one click starts the conversation.
+        self.after(80, self.run_ai)
 
     def _show_empty_chat(self):
         self.chat_history.configure(state="normal")
         if not self.chat_history.get("1.0", "end-1c").strip():
-            self.chat_history.insert("end", "今日は何を作りますか？\n", "welcome_title")
+            self.chat_history.insert("end", "何を一緒に作りますか？\n", "welcome_title")
             self.chat_history.insert(
                 "end",
-                "専門用語は不要です。作りたいものを普段の言葉で話してください。\n"
-                "AIが必要なことだけ確認し、設計・作成・テストまで進めます。\n",
+                "アプリの内容が決まっていなくても大丈夫です。\n"
+                "作りたいこと・困っていることを、そのまま話してください。\n",
                 "welcome"
             )
+            self._showing_welcome = True
         self.chat_history.configure(state="disabled")
 
     def _sync_starter_visibility(self):
@@ -392,10 +442,10 @@ class MainWindow(tk.Tk):
         if self.current_slug:
             path = WORKSPACE_DIR / self.current_slug
             has_history = bool(self.chat_partner.history(path))
-        if has_history:
+        if has_history or not self._showing_welcome:
             self.starter_frame.pack_forget()
         elif not self.starter_frame.winfo_manager():
-            self.starter_frame.pack(fill="x", padx=72, pady=(0, 8), before=self.instruction.master.master)
+            self.starter_frame.pack(fill="x", padx=72, pady=(0, 12), before=self.instruction.master.master)
 
     def _composer_submit(self, _event=None):
         if self._busy:
@@ -435,7 +485,7 @@ class MainWindow(tk.Tk):
     def _set_busy(self, busy: bool, message: str | None = None):
         self._busy = busy
         if hasattr(self, "send_button"):
-            self.send_button.configure(text="作業中…" if busy else "送信")
+            self.send_button.configure(text="作業中…" if busy else "送信  ↑")
             self.send_button.state(["disabled"] if busy else ["!disabled"])
         self.instruction.configure(state="disabled" if busy else "normal")
         try:
@@ -445,6 +495,7 @@ class MainWindow(tk.Tk):
             pass
         if message:
             self.activity_var.set(message)
+        self._update_placeholder()
         self.update_idletasks()
 
     def _enable_text_editing(self, widget):
@@ -805,6 +856,11 @@ class MainWindow(tk.Tk):
 
     def _append_chat(self, role: str, text: str):
         self.chat_history.configure(state="normal")
+        if self._showing_welcome:
+            self.chat_history.delete("1.0", "end")
+            self._showing_welcome = False
+            if hasattr(self, "starter_frame"):
+                self.starter_frame.pack_forget()
         if role == "user":
             self.chat_history.insert("end", "あなた\n", "user_label")
             self.chat_history.insert("end", f"{text}\n", "user")
