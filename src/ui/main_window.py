@@ -41,64 +41,270 @@ class MainWindow(tk.Tk):
         self.preview_runtime = PreviewRuntime()
         self.remote_window = None
         self.current_slug: str | None = None
+        self._busy = False
+        self.details_visible = False
         self._build()
         self.refresh_projects()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(350, self._startup_readiness)
 
+    def _configure_styles(self):
+        self.configure(background="#F7F7F8")
+        style = ttk.Style(self)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        style.configure("App.TButton", font=("Segoe UI", 10), padding=(11, 8), relief="flat")
+        style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(14, 9), relief="flat",
+                        background="#111827", foreground="#FFFFFF")
+        style.map("Accent.TButton",
+                  background=[("active", "#1F2937"), ("disabled", "#9CA3AF")],
+                  foreground=[("disabled", "#F3F4F6")])
+        style.configure("Ghost.TButton", font=("Segoe UI", 10), padding=(10, 7), relief="flat",
+                        background="#FFFFFF", foreground="#374151")
+        style.map("Ghost.TButton", background=[("active", "#F3F4F6")])
+        style.configure("Sidebar.TButton", font=("Segoe UI", 10), padding=(10, 8), relief="flat",
+                        background="#202123", foreground="#ECECF1")
+        style.map("Sidebar.TButton", background=[("active", "#343541")], foreground=[("active", "#FFFFFF")])
+        style.configure("Sidebar.TCheckbutton", font=("Segoe UI", 9), background="#202123",
+                        foreground="#D1D5DB")
+        style.map("Sidebar.TCheckbutton", background=[("active", "#202123")])
+        style.configure("Header.TLabel", background="#FFFFFF", foreground="#111827")
+        style.configure("Muted.TLabel", background="#FFFFFF", foreground="#6B7280")
+        style.configure("Details.TLabel", background="#F7F7F8", foreground="#111827")
+
     def _build(self):
-        top = ttk.Frame(self, padding=(16, 14)); top.pack(fill="x")
-        ttk.Label(top, text=APP_NAME, font=("Segoe UI", 20, "bold")).pack(side="left")
-        ttk.Label(top, text=f"v{VERSION} / AI Partner", foreground="#667085").pack(side="left", padx=12)
-        ttk.Button(top, text="更新", command=self.check_update).pack(side="right")
-        ttk.Button(top, text="バックアップ", command=self.make_backup).pack(side="right", padx=(8,0))
-        ttk.Button(top, text="リモート", command=self.open_remote).pack(side="right", padx=(8,0))
+        self._configure_styles()
 
-        body = ttk.Panedwindow(self, orient="horizontal"); body.pack(fill="both", expand=True, padx=16, pady=(0,16))
-        left = ttk.Frame(body, padding=12)
-        center = ttk.Frame(body, padding=(14, 8))
-        status = ttk.Frame(body, padding=12)
-        body.add(left, weight=1); body.add(center, weight=4); body.add(status, weight=2)
+        shell = tk.Frame(self, bg="#F7F7F8")
+        shell.pack(fill="both", expand=True)
 
-        ttk.Label(left, text="アプリ", font=("Segoe UI", 13, "bold")).pack(anchor="w")
-        ttk.Label(left, text="選んで会話を続ける", foreground="#667085").pack(anchor="w", pady=(2,8))
-        self.projects = tk.Listbox(left, height=18, activestyle="none"); self.projects.pack(fill="both", expand=True)
+        sidebar = tk.Frame(shell, bg="#202123", width=238)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+
+        brand = tk.Frame(sidebar, bg="#202123")
+        brand.pack(fill="x", padx=14, pady=(16, 10))
+        tk.Label(brand, text="AI App Platform", bg="#202123", fg="#FFFFFF",
+                 font=("Segoe UI", 15, "bold")).pack(anchor="w")
+        tk.Label(brand, text=f"v{VERSION}  AI development partner", bg="#202123", fg="#9CA3AF",
+                 font=("Segoe UI", 9)).pack(anchor="w", pady=(3, 0))
+
+        self.new_app_button = ttk.Button(sidebar, text="＋  新しいアプリ", style="Sidebar.TButton",
+                                         command=self.new_project)
+        self.new_app_button.pack(fill="x", padx=12, pady=(4, 10))
+
+        tk.Label(sidebar, text="プロジェクト", bg="#202123", fg="#9CA3AF",
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=16, pady=(6, 5))
+        self.projects = tk.Listbox(
+            sidebar, activestyle="none", borderwidth=0, highlightthickness=0,
+            bg="#202123", fg="#ECECF1", selectbackground="#343541", selectforeground="#FFFFFF",
+            font=("Segoe UI", 10), exportselection=False,
+        )
+        self.projects.pack(fill="both", expand=True, padx=8)
         self.projects.bind("<<ListboxSelect>>", self.on_project_select)
-        ttk.Button(left, text="＋ 新しいアプリ", command=self.new_project).pack(fill="x", pady=(10,0))
-        ttk.Button(left, text="名前変更", command=self.rename_project).pack(fill="x", pady=(6,0))
-        ttk.Separator(left).pack(fill="x", pady=12)
-        ttk.Checkbutton(left, text="学習モード", variable=self.learning_mode).pack(anchor="w")
-        ttk.Label(left, text="ONで『なぜそうしたか』も説明", foreground="#667085", wraplength=180).pack(anchor="w", pady=(2,10))
-        ttk.Button(left, text="保存履歴", command=self.vault_history).pack(fill="x", pady=(4,0))
-        ttk.Button(left, text="前の状態に戻す", command=self.vault_restore_picker).pack(fill="x", pady=(6,0))
 
-        ttk.Label(center, text="AI パートナー", font=("Segoe UI", 16, "bold")).pack(anchor="w")
-        self.project_label = ttk.Label(center, text="作りたいアプリをそのまま話してください", foreground="#667085")
-        self.project_label.pack(anchor="w", pady=(2,8))
-        self.chat_history = tk.Text(center, wrap="word", state="disabled", padx=12, pady=12, relief="flat", background="#F8FAFC")
-        self.chat_history.pack(fill="both", expand=True)
+        sidebar_bottom = tk.Frame(sidebar, bg="#202123")
+        sidebar_bottom.pack(fill="x", padx=12, pady=12)
+        ttk.Checkbutton(sidebar_bottom, text="学習モード", variable=self.learning_mode,
+                        style="Sidebar.TCheckbutton").pack(anchor="w", pady=(0, 6))
+        ttk.Button(sidebar_bottom, text="保存履歴", style="Sidebar.TButton",
+                   command=self.vault_history).pack(fill="x", pady=2)
+        ttk.Button(sidebar_bottom, text="名前変更", style="Sidebar.TButton",
+                   command=self.rename_project).pack(fill="x", pady=2)
+        ttk.Button(sidebar_bottom, text="設定・詳細", style="Sidebar.TButton",
+                   command=self._toggle_details).pack(fill="x", pady=2)
+
+        main = tk.Frame(shell, bg="#FFFFFF")
+        main.pack(side="left", fill="both", expand=True)
+
+        header = tk.Frame(main, bg="#FFFFFF", height=64)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        header_left = tk.Frame(header, bg="#FFFFFF")
+        header_left.pack(side="left", fill="y", padx=(24, 8))
+        self.project_label = ttk.Label(
+            header_left, text="新しいアプリを作る", style="Header.TLabel",
+            font=("Segoe UI", 12, "bold")
+        )
+        self.project_label.pack(anchor="w", pady=(13, 0))
+        self.activity_var = tk.StringVar(value="準備完了")
+        ttk.Label(header_left, textvariable=self.activity_var, style="Muted.TLabel",
+                  font=("Segoe UI", 9)).pack(anchor="w", pady=(2, 0))
+
+        header_right = tk.Frame(header, bg="#FFFFFF")
+        header_right.pack(side="right", padx=(8, 18), pady=12)
+        ttk.Button(header_right, text="アプリを見る", style="Ghost.TButton",
+                   command=self.preview).pack(side="left", padx=3)
+        ttk.Button(header_right, text="保存", style="Ghost.TButton",
+                   command=self.vault_save).pack(side="left", padx=3)
+        self.details_button = ttk.Button(header_right, text="進捗", style="Ghost.TButton",
+                                         command=self._toggle_details)
+        self.details_button.pack(side="left", padx=3)
+
+        tk.Frame(main, bg="#E5E7EB", height=1).pack(fill="x")
+
+        workspace = tk.Frame(main, bg="#FFFFFF")
+        workspace.pack(fill="both", expand=True)
+
+        chat_column = tk.Frame(workspace, bg="#FFFFFF")
+        chat_column.pack(side="left", fill="both", expand=True)
+
+        history_wrap = tk.Frame(chat_column, bg="#FFFFFF")
+        history_wrap.pack(fill="both", expand=True, padx=(22, 10), pady=(12, 0))
+
+        scrollbar = ttk.Scrollbar(history_wrap, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+        self.chat_history = tk.Text(
+            history_wrap, wrap="word", state="disabled", relief="flat", borderwidth=0,
+            highlightthickness=0, background="#FFFFFF", foreground="#111827",
+            insertbackground="#111827", font=("Segoe UI", 11), padx=18, pady=18,
+            yscrollcommand=scrollbar.set, spacing3=5,
+        )
+        self.chat_history.pack(side="left", fill="both", expand=True)
+        scrollbar.configure(command=self.chat_history.yview)
         self._enable_readonly_copy(self.chat_history)
-        self.chat_history.tag_configure("user", foreground="#101828", spacing1=8, lmargin1=80)
-        self.chat_history.tag_configure("assistant", foreground="#344054", spacing1=8, lmargin2=12)
 
-        composer = ttk.Frame(center); composer.pack(fill="x", pady=(10,0))
-        self.instruction = tk.Text(composer, height=4, wrap="word", undo=True, autoseparators=True, maxundo=-1)
+        self.chat_history.tag_configure(
+            "user_label", foreground="#6B7280", font=("Segoe UI", 9, "bold"),
+            justify="right", lmargin1=120, rmargin=18, spacing1=12
+        )
+        self.chat_history.tag_configure(
+            "user", foreground="#111827", background="#F1F1F1",
+            lmargin1=120, lmargin2=120, rmargin=18, spacing1=2, spacing3=14
+        )
+        self.chat_history.tag_configure(
+            "assistant_label", foreground="#10A37F", font=("Segoe UI", 9, "bold"),
+            lmargin1=18, rmargin=120, spacing1=10
+        )
+        self.chat_history.tag_configure(
+            "assistant", foreground="#1F2937",
+            lmargin1=18, lmargin2=18, rmargin=120, spacing1=2, spacing3=16
+        )
+        self.chat_history.tag_configure(
+            "welcome_title", foreground="#111827", font=("Segoe UI", 18, "bold"),
+            justify="center", spacing1=70, spacing3=8
+        )
+        self.chat_history.tag_configure(
+            "welcome", foreground="#6B7280", font=("Segoe UI", 11),
+            justify="center", lmargin1=80, rmargin=80, spacing3=8
+        )
+
+        composer_area = tk.Frame(chat_column, bg="#FFFFFF")
+        composer_area.pack(fill="x", padx=(34, 22), pady=(8, 18))
+
+        composer = tk.Frame(
+            composer_area, bg="#FFFFFF", highlightbackground="#D1D5DB",
+            highlightcolor="#9CA3AF", highlightthickness=1, bd=0
+        )
+        composer.pack(fill="x")
+        self.instruction = tk.Text(
+            composer, height=4, wrap="word", undo=True, autoseparators=True, maxundo=-1,
+            relief="flat", borderwidth=0, highlightthickness=0, background="#FFFFFF",
+            foreground="#111827", insertbackground="#111827", font=("Segoe UI", 11),
+            padx=14, pady=12
+        )
         self.instruction.pack(side="left", fill="both", expand=True)
         self._enable_text_editing(self.instruction)
-        buttons = ttk.Frame(composer); buttons.pack(side="left", fill="y", padx=(8,0))
-        ttk.Button(buttons, text="送信", command=self.run_ai).pack(fill="x")
-        ttk.Button(buttons, text="アプリを見る", command=self.preview).pack(fill="x", pady=(6,0))
-        ttk.Button(buttons, text="保存", command=self.vault_save).pack(fill="x", pady=(6,0))
+        self.instruction.bind("<Return>", self._composer_submit, add=False)
+        self.instruction.bind("<KP_Enter>", self._composer_submit, add=False)
+        self.instruction.bind("<Shift-Return>", self._composer_newline, add=False)
+        self.instruction.bind("<Control-Return>", self._composer_submit, add=False)
 
-        ttk.Label(status, text="進捗・品質", font=("Segoe UI", 13, "bold")).pack(anchor="w")
-        ttk.Label(status, text="難しいログはここだけに表示", foreground="#667085").pack(anchor="w", pady=(2,8))
-        self.output = tk.Text(status, height=24, wrap="word", state="disabled", relief="flat", background="#FFFFFF")
-        self.output.pack(fill="both", expand=True)
+        send_wrap = tk.Frame(composer, bg="#FFFFFF")
+        send_wrap.pack(side="right", fill="y", padx=(6, 10), pady=10)
+        self.send_button = ttk.Button(send_wrap, text="送信  ↑", style="Accent.TButton",
+                                      command=self.run_ai)
+        self.send_button.pack(side="bottom")
+
+        footer = tk.Frame(composer_area, bg="#FFFFFF")
+        footer.pack(fill="x", pady=(6, 0))
+        tk.Label(
+            footer, text="Enterで送信  ・  Shift+Enterで改行",
+            bg="#FFFFFF", fg="#9CA3AF", font=("Segoe UI", 8)
+        ).pack(side="left")
+        tk.Label(
+            footer, text="AIは作成 → テスト → 改善まで進めます",
+            bg="#FFFFFF", fg="#9CA3AF", font=("Segoe UI", 8)
+        ).pack(side="right")
+
+        self.details_panel = tk.Frame(workspace, bg="#F7F7F8", width=310)
+        self.details_panel.pack_propagate(False)
+        tk.Label(self.details_panel, text="進捗・品質", bg="#F7F7F8", fg="#111827",
+                 font=("Segoe UI", 12, "bold")).pack(anchor="w", padx=16, pady=(18, 2))
+        tk.Label(self.details_panel, text="必要な時だけ見る詳細情報", bg="#F7F7F8", fg="#6B7280",
+                 font=("Segoe UI", 9)).pack(anchor="w", padx=16, pady=(0, 10))
+        self.output = tk.Text(
+            self.details_panel, height=24, wrap="word", state="disabled", relief="flat",
+            background="#FFFFFF", foreground="#374151", borderwidth=0,
+            highlightthickness=1, highlightbackground="#E5E7EB",
+            font=("Consolas", 9), padx=10, pady=10
+        )
+        self.output.pack(fill="both", expand=True, padx=12)
         self._enable_readonly_copy(self.output)
-        ttk.Button(status, text="公開前チェック", command=self.show_release_risk).pack(fill="x", pady=(8,0))
-        ttk.Button(status, text="環境診断", command=self.show_diagnostics).pack(fill="x", pady=(6,0))
-        ttk.Button(status, text="準備状況", command=self.show_readiness).pack(fill="x", pady=(6,0))
+        actions = tk.Frame(self.details_panel, bg="#F7F7F8")
+        actions.pack(fill="x", padx=12, pady=12)
+        ttk.Button(actions, text="公開前チェック", style="App.TButton",
+                   command=self.show_release_risk).pack(fill="x", pady=2)
+        ttk.Button(actions, text="環境診断", style="App.TButton",
+                   command=self.show_diagnostics).pack(fill="x", pady=2)
+        ttk.Button(actions, text="準備状況", style="App.TButton",
+                   command=self.show_readiness).pack(fill="x", pady=2)
+        ttk.Button(actions, text="バックアップ", style="App.TButton",
+                   command=self.make_backup).pack(fill="x", pady=2)
+        ttk.Button(actions, text="リモート", style="App.TButton",
+                   command=self.open_remote).pack(fill="x", pady=2)
+        ttk.Button(actions, text="更新", style="App.TButton",
+                   command=self.check_update).pack(fill="x", pady=2)
 
+        self._show_empty_chat()
+        self.after(120, self.instruction.focus_force)
+
+    def _toggle_details(self):
+        if self.details_visible:
+            self.details_panel.pack_forget()
+            self.details_visible = False
+            self.details_button.configure(text="進捗")
+        else:
+            self.details_panel.pack(side="right", fill="y", padx=(8, 0))
+            self.details_visible = True
+            self.details_button.configure(text="進捗を閉じる")
+
+    def _show_empty_chat(self):
+        self.chat_history.configure(state="normal")
+        if not self.chat_history.get("1.0", "end-1c").strip():
+            self.chat_history.insert("end", "何を作りますか？\n", "welcome_title")
+            self.chat_history.insert(
+                "end",
+                "作りたいアプリを普通の言葉で書いてください。\n"
+                "必要なことだけAIが質問し、設計・作成・テストへ進みます。\n",
+                "welcome",
+            )
+        self.chat_history.configure(state="disabled")
+
+    def _composer_submit(self, _event=None):
+        if self._busy:
+            return "break"
+        self.run_ai()
+        return "break"
+
+    def _composer_newline(self, _event=None):
+        if not self._busy:
+            self.instruction.insert("insert", "\n")
+        return "break"
+
+    def _set_busy(self, busy: bool, message: str | None = None):
+        self._busy = busy
+        if hasattr(self, "send_button"):
+            self.send_button.configure(state="disabled" if busy else "normal",
+                                       text="送信中…" if busy else "送信  ↑")
+        self.instruction.configure(state="disabled" if busy else "normal")
+        if message:
+            self.activity_var.set(message)
+        elif not busy:
+            self.activity_var.set("準備完了")
+        self.update_idletasks()
 
     def _enable_text_editing(self, widget):
         """Windows-friendly text editing with explicit correction and clipboard fallbacks."""
