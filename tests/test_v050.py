@@ -14,6 +14,7 @@ from src.core.development_memory import DevelopmentMemory
 from src.core.generator import StarterGenerator
 from src.core.mobile_generator import MobileGenerator
 from src.core.test_runner import ProjectTestRunner
+from src.core.llm_chat import AIChatEngine
 
 class ChatPartnerTests(unittest.TestCase):
     def test_conversation_can_start_before_project_requirements(self):
@@ -98,6 +99,28 @@ class ChatPartnerTests(unittest.TestCase):
             self.assertEqual(d.action, "build")
             lessons = [x.lesson for x in memory.recent()]
             self.assertTrue(any("44px" in x for x in lessons))
+
+class LLMChatTests(unittest.TestCase):
+    def test_openai_and_gemini_response_parsing_without_network(self):
+        with tempfile.TemporaryDirectory() as td:
+            engine = AIChatEngine(Path(td) / "settings.json")
+            engine.configure("openai", "test-model", "secret", remember_key=False)
+            engine._request_json = lambda *args, **kwargs: {"output_text": "OpenAI reply"}
+            self.assertEqual(engine.reply([], "hello", "system"), "OpenAI reply")
+
+            engine.configure("gemini", "test-model", "secret", remember_key=False)
+            engine._request_json = lambda *args, **kwargs: {
+                "candidates": [{"content": {"parts": [{"text": "Gemini reply"}]}}]
+            }
+            self.assertEqual(engine.reply([], "hello", "system"), "Gemini reply")
+
+    def test_unconfigured_ai_is_explicit(self):
+        with tempfile.TemporaryDirectory() as td:
+            engine = AIChatEngine(Path(td) / "settings.json")
+            status = engine.status()
+            self.assertFalse(status.connected)
+            self.assertIn("未接続", status.detail)
+
 
 class GenerationV050Tests(unittest.TestCase):
     def _base(self, root: Path):
