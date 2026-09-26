@@ -5,6 +5,28 @@ import time
 from pathlib import Path
 
 
+def _assert_chat_visible(app, label: str) -> None:
+    app.update_idletasks()
+    if not app.chat_history.winfo_viewable():
+        raise AssertionError(f"chat history is not viewable at {label}")
+    if not app.instruction.winfo_viewable():
+        raise AssertionError(f"composer input is not viewable at {label}")
+    if not app.send_button.winfo_viewable():
+        raise AssertionError(f"send button is not viewable at {label}")
+    app_top = app.winfo_rooty()
+    app_bottom = app_top + app.winfo_height()
+    composer_top = app.composer_area.winfo_rooty()
+    composer_bottom = composer_top + app.composer_area.winfo_height()
+    if composer_top < app_top or composer_bottom > app_bottom:
+        raise AssertionError(
+            f"composer is clipped at {label}: composer={composer_top}-{composer_bottom}, window={app_top}-{app_bottom}"
+        )
+    if app.instruction.winfo_height() < 55:
+        raise AssertionError(f"composer became too short at {label}: {app.instruction.winfo_height()}px")
+    if app.instruction.cget("foreground") == app.instruction.cget("background"):
+        raise AssertionError(f"composer text is not visually distinguishable at {label}")
+
+
 def _wait_idle(app, timeout: float = 15.0) -> None:
     deadline = time.monotonic() + timeout
     while app._busy and time.monotonic() < deadline:
@@ -25,19 +47,17 @@ def main() -> int:
         try:
             app.deiconify(); app.update()
 
-            # Compact windows must preserve the actual chat and composer.
-            app.geometry("720x540"); app.update()
-            app._apply_responsive_layout(720, 540); app.update()
-            if not app.chat_history.winfo_manager():
-                raise AssertionError("chat history disappeared in compact layout")
-            if not app.instruction.winfo_manager():
-                raise AssertionError("composer disappeared in compact layout")
-            if app.instruction.cget("foreground") == app.instruction.cget("background"):
-                raise AssertionError("composer text is not visually distinguishable")
-            if app.sidebar.winfo_manager():
-                raise AssertionError("sidebar did not collapse in compact layout")
+            # Compact windows must preserve the actual chat and composer inside the visible client area.
+            for width, height in ((820, 520), (700, 460), (680, 440)):
+                app.geometry(f"{width}x{height}"); app.update()
+                app._apply_responsive_layout(width, height); app.update()
+                _assert_chat_visible(app, f"{width}x{height}")
+                if app.sidebar.winfo_manager():
+                    raise AssertionError(f"sidebar did not collapse at {width}x{height}")
+
             app.geometry("1280x820"); app.update()
             app._apply_responsive_layout(1280, 820); app.update()
+            _assert_chat_visible(app, "1280x820")
 
             # A normal greeting must start a real conversation without forcing project setup.
             app.instruction.insert("1.0", "こんにちは")
