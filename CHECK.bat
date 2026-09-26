@@ -4,25 +4,27 @@ cd /d "%~dp0"
 call :find_python
 if not defined PY goto :no_python
 
-echo [1/10] Compile
+echo [1/11] Compile
 %PY% -m compileall -q src tests || goto :failed
-echo [2/10] Security self-check
+echo [2/11] Security self-check
 %PY% -m src.tools.security_selfcheck || goto :failed
-echo [3/10] Preflight
+echo [3/11] Preflight
 %PY% -m src.tools.preflight || goto :failed
-echo [4/10] Unit tests
+echo [4/11] Unit tests
 %PY% -m unittest discover -s tests -v || goto :failed
-echo [5/10] Persistence acceptance
+echo [5/11] Persistence acceptance
 %PY% -m src.tools.acceptance_test || goto :failed
-echo [6/10] GUI editing acceptance
+echo [6/11] GUI editing acceptance
 %PY% -m src.tools.acceptance_test --gui || goto :failed
-echo [7/10] Update engine acceptance
+echo [7/11] Update engine acceptance
 %PY% -m src.tools.update_acceptance_test || goto :failed
-echo [8/10] Remote LAN acceptance
+echo [8/11] Remote LAN acceptance
 %PY% -m src.tools.remote_acceptance_test || goto :failed
-echo [9/10] Remote GUI acceptance
+echo [9/11] Remote GUI acceptance
 %PY% -m src.tools.remote_gui_acceptance_test || goto :failed
-echo [10/10] Production smoke test
+echo [10/11] Chat composer acceptance
+%PY% -m src.tools.chat_gui_acceptance_test || goto :failed
+echo [11/11] Production smoke test
 %PY% -m src.tools.smoke_test || goto :failed
 
 echo.
