@@ -1587,6 +1587,7 @@ class MainWindow(tk.Tk):
             messagebox.showinfo("プレビュー", "まだアプリがありません。先にAIへ作りたい内容を送ってください。")
             return
         try:
+            self.preview_runtime.assert_verified(project)
             if (project / "server.py").exists():
                 session = self.preview_runtime.start(project)
                 webbrowser.open(session.url)
