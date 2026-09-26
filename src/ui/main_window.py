@@ -1381,6 +1381,13 @@ class MainWindow(tk.Tk):
                 self.write("AIコード生成: 未接続のため安定テンプレートを使用")
             else:
                 self.write(f"AIコード生成: {ai_status}")
+        if result.windows_build:
+            if result.windows_build.get("built"):
+                self.write(f"Windows EXE: BUILD PASS / {result.windows_build.get('artifact')}")
+            elif result.windows_build.get("attempted"):
+                self.write(f"Windows EXE: BUILD FAIL / {result.windows_build.get('detail', '')}")
+            else:
+                self.write("Windows EXE: PyInstaller未導入のため自動ビルド未実行（ビルドBATは生成済み）")
         if result.repair_attempts:
             successful_repairs = sum(1 for row in result.repair_attempts if row.get("preview_ready"))
             self.write(
