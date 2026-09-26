@@ -665,22 +665,32 @@ class MainWindow(tk.Tk):
 
     def _append_chat(self, role: str, text: str):
         self.chat_history.configure(state="normal")
-        label = "あなた" if role == "user" else "AI"
-        tag = "user" if role == "user" else "assistant"
-        self.chat_history.insert("end", f"{label}\n{text}\n\n", tag)
+        if role == "user":
+            self.chat_history.insert("end", "あなた\n", "user_label")
+            self.chat_history.insert("end", f"{text}\n", "user")
+        else:
+            self.chat_history.insert("end", "AI App Platform\n", "assistant_label")
+            self.chat_history.insert("end", f"{text}\n", "assistant")
         self.chat_history.see("end")
         self.chat_history.configure(state="disabled")
 
     def _load_chat_history(self):
         self.chat_history.configure(state="normal")
         self.chat_history.delete("1.0", "end")
+        rows = []
         if self.current_slug:
             path = WORKSPACE_DIR / self.current_slug
-            for row in self.chat_partner.history(path):
-                label = "あなた" if row.get("role") == "user" else "AI"
-                tag = "user" if row.get("role") == "user" else "assistant"
-                self.chat_history.insert("end", f"{label}\n{row.get('content','')}\n\n", tag)
+            rows = self.chat_partner.history(path)
+            for row in rows:
+                if row.get("role") == "user":
+                    self.chat_history.insert("end", "あなた\n", "user_label")
+                    self.chat_history.insert("end", f"{row.get('content','')}\n", "user")
+                else:
+                    self.chat_history.insert("end", "AI App Platform\n", "assistant_label")
+                    self.chat_history.insert("end", f"{row.get('content','')}\n", "assistant")
         self.chat_history.configure(state="disabled")
+        if not rows:
+            self._show_empty_chat()
         self.chat_history.see("end")
 
     def _ensure_chat_project(self, first_message: str):
@@ -702,58 +712,85 @@ class MainWindow(tk.Tk):
         return self._current()
 
     def run_ai(self):
+        if self._busy:
+            return
         text = self.instruction.get("1.0", "end").strip()
         if not text:
-            messagebox.showinfo("AI パートナー", "作りたい内容や修正内容を入力してください。")
-            return
-        p = self._ensure_chat_project(text)
-        if not p:
-            return
-        path = WORKSPACE_DIR / self.current_slug
-        has_generated = (path / "app_spec.json").exists()
-        self.instruction.delete("1.0", "end")
-        decision = self.chat_partner.handle(path, p["name"], self.current_slug, text, has_generated=has_generated)
-        self._load_chat_history()
-
-        if decision.action == "ask":
-            self.write("AIが必要情報を確認中")
+            self.activity_var.set("メッセージを入力してください")
+            self.instruction.focus_force()
             return
 
-        if decision.action == "explain":
-            spec_path = path / "app_spec.json"
-            if not spec_path.exists():
-                self._append_chat("assistant", "まだ生成前なので、まずアプリを作成してから説明します。")
+        self._set_busy(True, "AIが内容を確認しています…")
+        try:
+            p = self._ensure_chat_project(text)
+            if not p:
                 return
-            from ..core.app_spec import AppSpec
-            raw = json.loads(spec_path.read_text(encoding="utf-8"))
-            spec = AppSpec(**raw)
-            files = [x.name for x in path.iterdir() if x.is_file()]
-            explanation = self.learning_coach.explain(spec, files)
-            self._append_chat("assistant", explanation)
-            return
+            path = WORKSPACE_DIR / self.current_slug
+            has_generated = (path / "app_spec.json").exists()
+            self.instruction.configure(state="normal")
+            self.instruction.delete("1.0", "end")
+            self.instruction.configure(state="disabled")
 
-        self.write("AI: 設計 → 生成 → Design審査 → テストを実行中")
-        self.update_idletasks()
-        result = self.core.execute(p["name"], self.current_slug, path, decision.instruction or text)
-        self._append_chat("assistant", result.message)
-        self.write(("✓ " if result.ok else "⚠ ") + result.message)
-        if result.plan:
-            spec = result.plan["spec"]
-            self.write(f"仕様: {spec['app_type']} / {', '.join(spec['targets'])}")
-        for t in result.tests:
-            self.write(f"{'PASS' if t.passed else 'FAIL'} {t.name}: {t.detail}")
-        if result.design_review:
-            self.write(f"Design AI: {result.design_review.score}/100 {'PASS' if result.design_review.passed else '要改善'}")
-        blockers = result.capability_gaps or []
-        if blockers:
-            self.write("未完了項目:")
-            for gap in blockers[:8]:
-                self.write(f"・{gap.reason} / 根拠: {gap.evidence} / 次: {gap.next_step}")
-        if self.learning_mode.get() and result.plan:
-            from ..core.app_spec import AppSpec
-            spec = AppSpec(**result.plan["spec"])
-            explanation = self.learning_coach.explain(spec, [f.name for f in result.files])
-            self._append_chat("assistant", explanation)
+            decision = self.chat_partner.handle(
+                path, p["name"], self.current_slug, text, has_generated=has_generated
+            )
+            self._load_chat_history()
+
+            if decision.action == "ask":
+                self.write("AIが必要情報を確認中")
+                self.activity_var.set("あなたの返事を待っています")
+                return
+
+            if decision.action == "explain":
+                spec_path = path / "app_spec.json"
+                if not spec_path.exists():
+                    self._append_chat("assistant", "まだ生成前なので、まずアプリを作成してから説明します。")
+                    self.activity_var.set("説明できる生成物がまだありません")
+                    return
+                from ..core.app_spec import AppSpec
+                raw = json.loads(spec_path.read_text(encoding="utf-8"))
+                spec = AppSpec(**raw)
+                files = [x.name for x in path.iterdir() if x.is_file()]
+                explanation = self.learning_coach.explain(spec, files)
+                self._append_chat("assistant", explanation)
+                self.activity_var.set("説明しました")
+                return
+
+            self.activity_var.set("設計 → 作成 → デザイン審査 → テスト中…")
+            self.write("AI: 設計 → 生成 → Design審査 → テストを実行中")
+            self.update_idletasks()
+            result = self.core.execute(p["name"], self.current_slug, path, decision.instruction or text)
+            self._append_chat("assistant", result.message)
+            self.write(("✓ " if result.ok else "⚠ ") + result.message)
+            if result.plan:
+                spec = result.plan["spec"]
+                self.write(f"仕様: {spec['app_type']} / {', '.join(spec['targets'])}")
+            for t in result.tests:
+                self.write(f"{'PASS' if t.passed else 'FAIL'} {t.name}: {t.detail}")
+            if result.design_review:
+                self.write(
+                    f"Design AI: {result.design_review.score}/100 "
+                    f"{'PASS' if result.design_review.passed else '要改善'}"
+                )
+            blockers = result.capability_gaps or []
+            if blockers:
+                self.write("未完了項目:")
+                for gap in blockers[:8]:
+                    self.write(f"・{gap.reason} / 根拠: {gap.evidence} / 次: {gap.next_step}")
+            if self.learning_mode.get() and result.plan:
+                from ..core.app_spec import AppSpec
+                spec = AppSpec(**result.plan["spec"])
+                explanation = self.learning_coach.explain(spec, [f.name for f in result.files])
+                self._append_chat("assistant", explanation)
+            self.activity_var.set("完成候補を確認できます" if result.ok else "要確認の項目があります")
+        except Exception as exc:
+            message = f"送信処理でエラーが起きました。\n{type(exc).__name__}: {exc}"
+            self._append_chat("assistant", message)
+            self.write("⚠ " + message.replace("\n", " / "))
+            self.activity_var.set("エラーが発生しました")
+        finally:
+            self._set_busy(False, self.activity_var.get())
+            self.instruction.focus_force()
 
     def vault_save(self):
         p = self._current()
