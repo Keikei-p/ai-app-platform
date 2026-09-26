@@ -103,7 +103,10 @@ class GenerationV050Tests(unittest.TestCase):
             spec.save(root); StarterGenerator().generate_from_spec(root, spec)
             review = DesignAI().review(root)
             self.assertTrue(review.passed, review.findings)
-            self.assertGreaterEqual(review.score, 80)
+            self.assertGreaterEqual(review.score, 88)
+            html = (root / "index.html").read_text(encoding="utf-8")
+            self.assertNotIn("AI App Platform", html)
+            self.assertIn("empty-state", html)
 
     def test_mobile_source_generated_for_android_ios(self):
         with tempfile.TemporaryDirectory() as td:
