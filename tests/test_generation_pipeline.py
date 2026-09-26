@@ -5,6 +5,7 @@ from pathlib import Path
 
 from src.core.generation_pipeline import GeneratedArtifactSecurityScanner, GenerationPipeline
 from src.core.test_runner import TestResult
+from src.core.preview_runtime import PreviewRuntime
 
 
 class GeneratedArtifactSecurityTests(unittest.TestCase):
@@ -118,6 +119,24 @@ class GenerationPipelineTests(unittest.TestCase):
             second = json.loads((root / ".aiapp" / "reports" / "generated_files_manifest.json").read_text(encoding="utf-8"))
             second_hash = next(x["sha256"] for x in second["files"] if x["path"] == "app.js")
             self.assertNotEqual(first_hash, second_hash)
+
+
+class PreviewVerificationTests(unittest.TestCase):
+    def test_failed_readiness_report_blocks_preview(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            report = root / ".aiapp" / "reports" / "build_readiness.json"
+            report.parent.mkdir(parents=True)
+            report.write_text(
+                json.dumps({"preview_ready": False, "blocking_reasons": ["security_gate_failed"]}),
+                encoding="utf-8",
+            )
+            with self.assertRaises(PermissionError):
+                PreviewRuntime.assert_verified(root)
+
+    def test_legacy_project_without_report_is_not_broken(self):
+        with tempfile.TemporaryDirectory() as td:
+            PreviewRuntime.assert_verified(Path(td))
 
 
 if __name__ == "__main__":
