@@ -114,14 +114,19 @@ class ProjectTestRunner:
 
         if any(t in spec.get("targets", []) for t in ("android", "ios")):
             mobile = project_dir / "mobile"
-            needed = ["package.json", "app.json", "App.tsx", "eas.json"]
+            needed = ["package.json", "app.json", "App.tsx", "eas.json", "build_readiness.json"]
             missing_mobile = [x for x in needed if not (mobile / x).exists()]
             results.append(TestResult("mobile_source", not missing_mobile, "Expo mobile source present" if not missing_mobile else "missing: " + ", ".join(missing_mobile)))
             if not missing_mobile:
                 try:
                     package = json.loads((mobile / "package.json").read_text(encoding="utf-8"))
                     app = json.loads((mobile / "app.json").read_text(encoding="utf-8"))
-                    ok = bool(package.get("dependencies", {}).get("expo") and app.get("expo", {}).get("name"))
+                    readiness = json.loads((mobile / "build_readiness.json").read_text(encoding="utf-8"))
+                    ok = bool(
+                        package.get("dependencies", {}).get("expo")
+                        and app.get("expo", {}).get("name")
+                        and readiness.get("store_submission", {}).get("status") == "approval_required"
+                    )
                     results.append(TestResult("mobile_manifest", ok, "valid Expo manifest" if ok else "invalid Expo manifest"))
                 except Exception as exc:
                     results.append(TestResult("mobile_manifest", False, f"invalid mobile json: {exc}"))
