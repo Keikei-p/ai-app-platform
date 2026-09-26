@@ -1,12 +1,16 @@
-# Current limits - v0.4.8
+# Current limits - v0.7.0
 
-- AI Core is still an application-development orchestration skeleton, not a ChatGPT-class general model.
-- Generated login UI is not yet a complete production authentication backend unless a real auth adapter is connected.
-- LAN Remote Beta is enabled only after local user action. It is not an internet remote-access solution.
-- LAN Remote Beta uses HTTP inside the trusted LAN; do not use it on public/untrusted Wi-Fi and never port-forward it to the internet.
-- Remote Windows build is not exposed yet; v0.4.8 remote actions are safe task-level operations only.
-- Hosted Worker, production billing, app-store submission, and production cloud deployment are not enabled.
-- Code Vault stores full project-source snapshots and may consume more disk space as history grows.
-- Local update packages are integrity-checked, but automatic HTTPS update download remains disabled until publisher-signature verification is implemented.
-- PyInstaller EXE self-update is not enabled yet; use source/START.bat mode for in-app update testing.
-- Legal/Safety checks are guardrails, not legal guarantees.
+- The coding brain now supports bounded LLM-driven file changes, but it is not a general autonomous software engineer and still relies on supported generation architecture plus quality gates.
+- Live SNS publishing requires the user's own provider app registration, permissions, OAuth/access tokens and any provider-specific review or paid API access.
+- SNS CI uses DRY RUN/mocked provider calls; real production accounts and secrets are intentionally not stored or exercised in repository CI.
+- X generation currently covers text posts; X media upload needs a dedicated media adapter.
+- Instagram generation currently covers public image-URL publishing; Reels/video/carousel flows need dedicated adapters and current Meta API verification.
+- YouTube upload generation uses an OAuth access token, but interactive OAuth setup and token refresh are not yet automated in the generated app.
+- Provider APIs can change independently of the platform. Meta Graph/Threads versions are configurable and must be checked against official documentation before live deployment.
+- Android native debug APK generation is verified. Production signing/AAB/Google Play submission is not yet fully automated.
+- iOS source/bundle generation is verified, but production IPA signing and App Store submission require Apple credentials/tooling and are not yet fully automated.
+- LAN Remote remains a trusted-LAN feature, not a public-internet remote-control solution.
+- Hosted Worker production fleet, full subscription billing and production cloud deployment adapters remain incomplete.
+- Code Vault full-source history can consume increasing disk space.
+- Publisher-signed automatic HTTPS self-update for packaged desktop releases remains future work.
+- Legal, safety, dependency and provider checks are guardrails rather than guarantees.
