@@ -25,22 +25,56 @@ class ChatPartnerTests(unittest.TestCase):
         self.assertIsNotNone(consult)
         self.assertIn("一緒に", consult)
 
-    def test_chat_collects_only_missing_core_requirements(self):
+    def test_chat_collects_requirements_then_requires_explicit_approval(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             memory = DevelopmentMemory(root / "memory.jsonl")
             chat = ChatPartner(memory)
-            d1 = chat.handle(root, "予約", "booking", "美容室の予約アプリを作って", has_generated=False)
+
+            d1 = chat.handle(root, "予約", "booking", "美容室の予約アプリを作りたい", has_generated=False)
             self.assertEqual(d1.action, "ask")
-            self.assertIn("どこで使う", d1.message)
-            d2 = chat.handle(root, "予約", "booking", "スマホ両方", has_generated=False)
+            self.assertIn("誰が使って", d1.message)
+
+            d2 = chat.handle(root, "予約", "booking", "お客さんがスタッフを選び、空いている日時を予約する", has_generated=False)
             self.assertEqual(d2.action, "ask")
-            self.assertIn("デザイン", d2.message)
-            d3 = chat.handle(root, "予約", "booking", "おしゃれでスマート", has_generated=False)
+            self.assertIn("どこで使いますか", d2.message)
+
+            d3 = chat.handle(root, "予約", "booking", "スマホ両方", has_generated=False)
+            self.assertEqual(d3.action, "ask")
+            self.assertIn("必要な機能", d3.message)
+
+            d4 = chat.handle(root, "予約", "booking", "ログイン、データ保存、通知", has_generated=False)
+            self.assertEqual(d4.action, "ask")
+            self.assertIn("見た目", d4.message)
+
+            d5 = chat.handle(root, "予約", "booking", "最先端で洗練されたデザイン", has_generated=False)
+            self.assertEqual(d5.action, "review")
+            self.assertIn("この内容で作る", d5.message)
+            self.assertTrue(chat.state(root).get("awaiting_confirmation"))
+
+            d6 = chat.handle(root, "予約", "booking", "この内容で作る", has_generated=False)
+            self.assertEqual(d6.action, "build")
+            self.assertIn("android", d6.instruction)
+            self.assertIn("ios", d6.instruction)
+            self.assertIn("modern", d6.instruction)
+
+    def test_initial_build_never_starts_without_confirmation(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            chat = ChatPartner(DevelopmentMemory(root / "memory.jsonl"))
+            d1 = chat.handle(
+                root,
+                "Todo",
+                "todo",
+                "営業担当が案件ごとにタスクを登録して期限と完了状況を管理するWebアプリを作りたい。ログインとデータ保存が必要。最先端で洗練されたデザイン。",
+                has_generated=False,
+            )
+            self.assertEqual(d1.action, "review")
+            self.assertNotEqual(d1.action, "build")
+            d2 = chat.handle(root, "Todo", "todo", "いい感じだね", has_generated=False)
+            self.assertEqual(d2.action, "review")
+            d3 = chat.handle(root, "Todo", "todo", "この内容で作る", has_generated=False)
             self.assertEqual(d3.action, "build")
-            self.assertIn("android", d3.instruction)
-            self.assertIn("ios", d3.instruction)
-            self.assertIn("modern", d3.instruction)
 
     def test_correction_is_learned(self):
         with tempfile.TemporaryDirectory() as td:
