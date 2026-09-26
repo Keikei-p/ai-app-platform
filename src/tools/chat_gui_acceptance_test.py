@@ -14,7 +14,9 @@ def main() -> int:
         try:
             app.deiconify(); app.update()
             app.instruction.insert("1.0", "WebでおしゃれなToDoアプリを作って。ログインとデータ保存も必要")
-            app.run_ai(); app.update()
+            app.instruction.focus_force(); app.update()
+            app.instruction.event_generate("<Return>")
+            app.update()
             if not app.current_slug:
                 raise AssertionError("chat did not auto-create a project")
             project = WORKSPACE_DIR / app.current_slug
@@ -27,12 +29,21 @@ def main() -> int:
                 raise AssertionError("chat history not rendered")
 
             app.instruction.insert("1.0", "スマホでボタンが押しにくいから直して")
-            app.run_ai(); app.update()
+            app.send_button.invoke(); app.update()
             memory = Path(td) / "data" / "development_memory.jsonl"
             if not memory.is_file() or "44px" not in memory.read_text(encoding="utf-8"):
                 raise AssertionError("human correction was not learned")
             if "Design AI" not in app.output.get("1.0", "end-1c"):
                 raise AssertionError("design review not surfaced")
+
+            app.instruction.delete("1.0", "end")
+            app.instruction.insert("1.0", "1行目")
+            app.instruction.mark_set("insert", "end-1c")
+            app.instruction.event_generate("<Shift-Return>")
+            app.instruction.insert("insert", "2行目")
+            app.update()
+            if app.instruction.get("1.0", "end-1c") != "1行目\n2行目":
+                raise AssertionError("Shift+Enter did not insert newline")
         finally:
             app.destroy()
     print("CHAT_GUI_ACCEPTANCE: PASS")
