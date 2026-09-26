@@ -162,6 +162,10 @@ class MainWindow(tk.Tk):
                    command=self.rename_project).pack(fill="x", pady=2)
         ttk.Button(sidebar_bottom, text="設定・診断", style="Sidebar.TButton",
                    command=self._toggle_details).pack(fill="x", pady=2)
+        self.sidebar_ai_button = ttk.Button(
+            sidebar_bottom, text="AI接続", style="Sidebar.TButton", command=self._open_ai_settings
+        )
+        self.sidebar_ai_button.pack(fill="x", pady=2)
 
         main = tk.Frame(shell, bg="#FFFFFF")
         self.main_frame = main
@@ -380,6 +384,69 @@ class MainWindow(tk.Tk):
         self.after(120, self.instruction.focus_force)
         self.after(180, self._refresh_ai_status)
         self.after(220, lambda: self._apply_responsive_layout(self.winfo_width(), self.winfo_height()))
+
+    def _on_window_resize(self, event):
+        if event.widget is not self:
+            return
+        self.after_idle(lambda: self._apply_responsive_layout(event.width, event.height))
+
+    def _apply_responsive_layout(self, width: int, height: int):
+        compact = width < 980
+        very_compact = width < 780
+        low_height = height < 650
+        self._compact_layout = compact
+
+        if compact and not self._sidebar_manual_open:
+            if self.sidebar.winfo_manager():
+                self.sidebar.pack_forget()
+            if not self.menu_button.winfo_manager():
+                self.menu_button.pack(side="left", padx=(12, 0), pady=12, before=self.header_left)
+        else:
+            if not self.sidebar.winfo_manager():
+                self.sidebar.pack(side="left", fill="y", before=self.main_frame)
+            if not compact and self.menu_button.winfo_manager():
+                self.menu_button.pack_forget()
+
+        if compact or low_height:
+            if self.progress_card.winfo_manager():
+                self.progress_card.pack_forget()
+        elif not self.progress_card.winfo_manager():
+            self.progress_card.pack(fill="x", padx=24, pady=(12, 0), before=self.history_wrap.master)
+
+        if very_compact:
+            if self.header_right.winfo_manager():
+                self.header_right.pack_forget()
+            self.header_left.pack_configure(padx=(12, 6))
+        else:
+            if not self.header_right.winfo_manager():
+                self.header_right.pack(side="right", padx=(8, 18), pady=12)
+            self.header_left.pack_configure(padx=(26, 8))
+
+        if compact:
+            self.history_wrap.pack_configure(padx=(18, 10), pady=(6, 0))
+            self.composer_area.pack_configure(padx=(18, 12), pady=(4, 12))
+            if self.details_visible:
+                self.details_panel.pack_forget()
+                self.details_visible = False
+                self.details_button.configure(text="テスト結果")
+        else:
+            self.history_wrap.pack_configure(padx=(56, 34), pady=(8, 0))
+            self.composer_area.pack_configure(padx=(72, 54), pady=(4, 18))
+
+        if low_height or very_compact:
+            if self.starter_frame.winfo_manager():
+                self.starter_frame.pack_forget()
+        else:
+            self._sync_starter_visibility()
+
+    def _toggle_sidebar(self):
+        if self.sidebar.winfo_manager():
+            self.sidebar.pack_forget()
+            self._sidebar_manual_open = False
+        else:
+            self.sidebar.pack(side="left", fill="y", before=self.main_frame)
+            self._sidebar_manual_open = True
+        self.after_idle(lambda: self._apply_responsive_layout(self.winfo_width(), self.winfo_height()))
 
     def _toggle_details(self):
         if self.details_visible:
