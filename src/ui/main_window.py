@@ -1048,6 +1048,7 @@ class MainWindow(tk.Tk):
         if self._busy:
             return
         self.current_slug = None
+        self._blank_chat_history = []
         self.projects.selection_clear(0, "end")
         self.project_label.configure(text="新しいチャット")
         self.chat_history.configure(state="normal")
@@ -1185,6 +1186,21 @@ class MainWindow(tk.Tk):
                 elif kind == "error":
                     _, exc = item
                     self._handle_build_error(exc)
+                elif kind == "chat_reply":
+                    _, reply = item
+                    self._append_chat("assistant", reply)
+                    self._record_chat_message("assistant", reply)
+                    self._set_progress("idle", "返答しました", "続けてメッセージを送れます")
+                    self._set_busy(False)
+                    self.instruction.focus_force()
+                elif kind == "chat_error":
+                    _, detail = item
+                    message = "AIとの通信に失敗しました。\n" + detail
+                    self._append_chat("assistant", message)
+                    self._record_chat_message("assistant", message)
+                    self._set_progress("issue", "AI接続エラー", "AI接続設定とネットワークを確認してください")
+                    self._set_busy(False)
+                    self.instruction.focus_force()
         except queue.Empty:
             pass
         try:
@@ -1201,16 +1217,23 @@ class MainWindow(tk.Tk):
             self.instruction.focus_force()
             return
 
-        # Lightweight conversation should feel like an AI chat, not a form wizard.
-        if self.current_slug is None:
-            opening = self.chat_partner.opening_response(text)
-            if opening:
-                self.instruction.delete("1.0", "end")
-                self._append_chat("user", text)
-                self._append_chat("assistant", opening)
-                self._set_progress("idle", "会話できます", "続けて作りたいことや困っていることを話してください")
-                self._update_placeholder()
-                self.instruction.focus_force()
+        # Casual conversation is handled by the configured real LLM.
+        if self.current_slug is None and not self.chat_partner.is_project_request(text):
+            self._start_ai_conversation(text)
+            return
+
+        # After an app exists, ordinary conversation should also stay conversational.
+        if self.current_slug:
+            project_path = WORKSPACE_DIR / self.current_slug
+            has_generated_now = (project_path / "app_spec.json").exists()
+            state_now = self.chat_partner.state(project_path)
+            if (
+                has_generated_now
+                and not state_now.get("awaiting_confirmation")
+                and not self.chat_partner._looks_like_correction(text)
+                and not self.chat_partner._is_learning_question(text)
+            ):
+                self._start_ai_conversation(text)
                 return
 
         self._set_busy(True, "内容を確認しています")
