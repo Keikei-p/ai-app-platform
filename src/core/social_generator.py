@@ -22,6 +22,7 @@ class SocialAutomationGenerator:
             "server.py": self._server(),
             "index.html": self._index(spec),
             "app.js": self._script(),
+            "social.css": self._styles(),
             "SOCIAL_AUTOMATION.md": self._readme(),
             "social_provider_contract.json": json.dumps(
                 {
@@ -276,7 +277,12 @@ def _safe_media_path(value: str) -> Path:
     if not value:
         raise RuntimeError("video_path is required")
     raw = Path(value)
-    target = raw if raw.is_absolute() else MEDIA_ROOT / raw
+    if raw.is_absolute():
+        target = raw
+    elif raw.parts and raw.parts[0].lower() == "media":
+        target = ROOT.joinpath(*raw.parts)
+    else:
+        target = MEDIA_ROOT / raw
     root = MEDIA_ROOT.resolve()
     resolved = target.resolve()
     if resolved != root and root not in resolved.parents:
@@ -751,6 +757,7 @@ if __name__ == "__main__":
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{title}</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="social.css">
 </head>
 <body data-theme="modern">
 <header class="topbar"><div class="shell nav"><strong class="brand">{title}</strong><span class="status-badge"><span class="status-dot"></span>SNS Automation</span></div></header>
@@ -790,6 +797,15 @@ if __name__ == "__main__":
 <script src="app.js"></script>
 </body>
 </html>'''
+
+    @staticmethod
+    def _styles() -> str:
+        return """textarea{width:100%;border:1px solid #D1D5DB;background:#FBFBFC;color:var(--color-text);padding:12px 14px;border-radius:var(--radius-sm);font:inherit;resize:vertical;min-height:130px}
+textarea:focus-visible{outline:3px solid #A5B4FC;outline-offset:2px}
+.clean-list li{align-items:flex-start;flex-wrap:wrap}.clean-list li>span{flex:1 1 320px;white-space:pre-wrap}.clean-list .button-row{margin-top:0}
+#providerStatus{overflow-wrap:anywhere}.status-badge{white-space:nowrap}
+@media(max-width:800px){.clean-list .button-row{width:100%}.clean-list .button-row button{flex:1}}
+"""
 
     @staticmethod
     def _script() -> str:
