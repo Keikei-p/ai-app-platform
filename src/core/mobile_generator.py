@@ -44,6 +44,7 @@ class MobileGenerator:
                 "android": "expo start --android",
                 "ios": "expo start --ios",
                 "web": "expo start --web",
+                "typecheck": "tsc --noEmit",
             },
             "dependencies": {
                 "expo": "~57.0.0",
