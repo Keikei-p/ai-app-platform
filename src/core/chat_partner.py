@@ -146,6 +146,13 @@ class ChatPartner:
     def history(self, project_dir: Path) -> list[dict]:
         return self._load(project_dir).get("history", [])
 
+    def append_external_message(self, project_dir: Path, role: str, content: str) -> None:
+        if role not in {"user", "assistant"}:
+            raise ValueError("invalid chat role")
+        state = self._load(project_dir)
+        self._append(state, role, content)
+        self._save(project_dir, state)
+
     def state(self, project_dir: Path) -> dict:
         return self._load(project_dir)
 
