@@ -6,18 +6,22 @@ import json
 import re
 from .development_memory import DevelopmentMemory
 
+
 @dataclass(frozen=True)
 class ChatDecision:
-    action: str  # ask | build | explain
+    action: str  # chat | ask | review | build | explain
     message: str
     instruction: str | None = None
 
-class ChatPartner:
-    """Conversation-first requirement collector.
 
-    It asks only for missing decisions that materially affect the generated app.
-    State lives inside each project so restarting the platform does not erase the conversation.
+class ChatPartner:
+    """Conversation-first requirement collector with an explicit build gate.
+
+    New projects are never generated from a casual or incomplete message.
+    The assistant first builds a brief, shows it to the user, and only starts
+    generation after explicit confirmation.
     """
+
     TARGET_WORDS = {
         "web": ("web", "ウェブ", "ブラウザ", "pwa"),
         "android": ("android", "アンドロイド", "apk", "aab"),
@@ -27,25 +31,47 @@ class ChatPartner:
     }
     STYLE_WORDS = {
         "minimal": ("シンプル", "ミニマル", "すっきり"),
-        "premium": ("高級", "上品", "ラグジュアリー"),
-        "modern": ("おしゃれ", "スマート", "モダン", "洗練"),
+        "premium": ("高級", "上品", "ラグジュアリー", "プレミアム"),
+        "modern": ("おしゃれ", "スマート", "モダン", "洗練", "最先端"),
         "friendly": ("かわいい", "親しみ", "やさしい"),
         "business": ("ビジネス", "堅実", "信頼感"),
+    }
+    PROJECT_INTENT_WORDS = (
+        "アプリ", "システム", "ツール", "webサイト", "ウェブサイト",
+        "サイトを作", "作って", "作りたい", "開発したい", "開発して",
+        "自動化したい", "自動化して",
+    )
+    FEATURE_LABELS = {
+        "authentication": "ログイン・アカウント",
+        "database": "データ保存",
+        "search": "検索",
+        "notifications": "通知",
+        "payments": "決済",
+        "admin": "管理者機能",
+        "analytics": "分析・集計",
+        "multi_language": "多言語",
+        "offline": "オフライン",
     }
 
     def __init__(self, memory: DevelopmentMemory | None = None):
         self.memory = memory or DevelopmentMemory()
+
+    def is_project_request(self, text: str) -> bool:
+        lowered = text.lower()
+        return any(word.lower() in lowered for word in self.PROJECT_INTENT_WORDS)
 
     def opening_response(self, text: str) -> str | None:
         """Handle lightweight conversation before a real project exists."""
         normalized = re.sub(r"\s+", "", text).lower()
         greetings = ("こんにちは", "こんばんは", "おはよう", "やあ", "hello", "hi", "はじめまして")
         if any(word in normalized for word in greetings):
-            return "こんにちは。作りたいアプリや、まだ曖昧なアイデアでも大丈夫です。『こんなことを楽にしたい』から一緒に整理できます。"
+            return "こんにちは。まず相談だけでも大丈夫です。作りたいものが固まってから、内容を確認して制作に進みます。"
         if any(word in normalized for word in ("何ができる", "なにができる", "使い方", "どう使う")):
-            return "作りたいものを普通の言葉で話してください。必要なことだけ確認して、設計・作成・テスト・修正まで進めます。"
+            return "アプリの相談、要件整理、設計、作成、テスト、修正まで進められます。内容が曖昧な間は勝手に作らず、まず一緒に整理します。"
         if any(word in normalized for word in ("相談したい", "相談から", "まだ曖昧", "決まってない", "決まっていない")):
-            return "もちろん。まず『誰が使うか』『何を楽にしたいか』を一言ずつ教えてください。そこからアプリの形を一緒に決めます。"
+            return "もちろん。作りたいものが決まっていなくても大丈夫です。誰のどんな困りごとを楽にしたいか、そこから一緒に整理できます。"
+        if not self.is_project_request(text):
+            return "話は聞けます。アプリ制作に進めたい時は『○○アプリを作りたい』のように言ってください。内容が固まるまでは勝手に生成しません。"
         return None
 
     def suggest_project_name(self, text: str) -> str:
@@ -65,23 +91,42 @@ class ChatPartner:
             self._save(project_dir, state)
             return decision
 
+        if has_generated and self._looks_like_correction(text):
+            lesson = self._lesson_from_correction(text)
+            self.memory.record(category="human_correction", input_text=text, lesson=lesson, project_slug=slug)
+            instruction = self._compose(state, correction=text)
+            msg = "了解。今の指摘を改善要件として反映し、修正後にもう一度テストします。"
+            self._append(state, "assistant", msg)
+            self._save(project_dir, state)
+            return ChatDecision("build", msg, instruction)
+
+        # Once a brief is ready, building still requires a second explicit action.
+        if state.get("awaiting_confirmation"):
+            if self._is_build_confirmation(text):
+                state["awaiting_confirmation"] = False
+                instruction = self._compose(state)
+                lessons = self.memory.lessons_for(instruction)
+                if lessons:
+                    instruction += "\n過去の学習事項: " + " / ".join(lessons)
+                msg = "確認ありがとう。この設計内容で作成し、デザイン確認と自動テストまで進めます。"
+                self._append(state, "assistant", msg)
+                self._save(project_dir, state)
+                return ChatDecision("build", msg, instruction)
+
+            # Any other message is treated as a revision, not accidental approval.
+            state["awaiting_confirmation"] = False
+            state.setdefault("revision_notes", []).append(text[:400])
+            self._extract(state, text)
+
         if state.get("pending"):
-            self._apply_answer(state, state["pending"], text)
+            pending = state["pending"]
             state["pending"] = None
+            self._apply_answer(state, pending, text)
         else:
             self._extract(state, text)
 
         if not state.get("goal"):
             state["goal"] = text
-
-        if has_generated and self._looks_like_correction(text):
-            lesson = self._lesson_from_correction(text)
-            self.memory.record(category="human_correction", input_text=text, lesson=lesson, project_slug=slug)
-            instruction = self._compose(state, correction=text)
-            msg = "了解。今の指摘を学習履歴に残して、修正→再テストします。"
-            self._append(state, "assistant", msg)
-            self._save(project_dir, state)
-            return ChatDecision("build", msg, instruction)
 
         question = self._next_question(state)
         if question:
@@ -91,14 +136,12 @@ class ChatPartner:
             self._save(project_dir, state)
             return ChatDecision("ask", message)
 
-        instruction = self._compose(state)
-        lessons = self.memory.lessons_for(instruction)
-        if lessons:
-            instruction += "\n過去の学習事項: " + " / ".join(lessons)
-        msg = "必要な情報がそろいました。設計→作成→テストまで進めます。"
-        self._append(state, "assistant", msg)
+        # Requirements are complete enough to review, but never auto-build.
+        state["awaiting_confirmation"] = True
+        message = self._review_message(state)
+        self._append(state, "assistant", message)
         self._save(project_dir, state)
-        return ChatDecision("build", msg, instruction)
+        return ChatDecision("review", message, self._compose(state))
 
     def history(self, project_dir: Path) -> list[dict]:
         return self._load(project_dir).get("history", [])
@@ -107,104 +150,204 @@ class ChatPartner:
         return self._load(project_dir)
 
     def _next_question(self, state: dict) -> tuple[str, str] | None:
+        if not state.get("usage_context"):
+            return (
+                "usage_context",
+                "まず、誰が使って、どんな流れで使うアプリにしたいですか？\n"
+                "例：営業担当が案件ごとにタスクを登録し、期限と完了状況を管理する。",
+            )
         if not state.get("targets"):
-            return "targets", "どこで使うアプリにしますか？ Web／Android／iPhone／PC から選べます。『スマホ両方』でも大丈夫です。"
+            return "targets", "どこで使いますか？ Web／Android／iPhone／Windows など、必要なものを教えてください。"
+        if not state.get("features_confirmed"):
+            return (
+                "features",
+                "必要な機能を教えてください。\n"
+                "例：ログイン、データ保存、検索、通知、管理者画面、分析、決済。不要なものは『特になし』でも大丈夫です。",
+            )
         if not state.get("design_style"):
-            return "design_style", "デザインはどんな雰囲気がいいですか？ 例：シンプル／高級感／おしゃれでスマート／かわいい。"
+            return (
+                "design_style",
+                "見た目はどんな方向にしますか？\n"
+                "例：最先端で洗練／高級感／シンプル／親しみやすい。参考イメージも言葉で伝えられます。",
+            )
         return None
 
     def _extract(self, state: dict, text: str) -> None:
         lowered = text.lower()
         targets = list(state.get("targets") or [])
         if "スマホ" in text and not any(k in lowered for k in ("android", "iphone", "ios")):
-            for t in ("android", "ios"):
-                if t not in targets:
-                    targets.append(t)
+            for target in ("android", "ios"):
+                if target not in targets:
+                    targets.append(target)
         for key, words in self.TARGET_WORDS.items():
-            if any(w.lower() in lowered for w in words) and key not in targets:
+            if any(word.lower() in lowered for word in words) and key not in targets:
                 targets.append(key)
         if targets:
             state["targets"] = targets
+
         for key, words in self.STYLE_WORDS.items():
-            if any(w in text for w in words):
+            if any(word in text for word in words):
                 state["design_style"] = key
+                state["design_note"] = text[:240]
                 break
-        if any(w in text for w in ("ログイン", "会員", "アカウント", "認証")):
-            state["authentication"] = True
-        if any(w in text.lower() for w in ("db", "database")) or any(w in text for w in ("保存", "データベース", "履歴")):
-            state["database"] = True
+
+        features = list(state.get("features") or [])
+        feature_words = {
+            "authentication": ("ログイン", "会員", "アカウント", "認証"),
+            "database": ("保存", "データベース", "db", "履歴"),
+            "search": ("検索",),
+            "notifications": ("通知", "プッシュ"),
+            "payments": ("決済", "課金", "支払い"),
+            "admin": ("管理者", "管理画面"),
+            "analytics": ("分析", "集計", "レポート"),
+            "multi_language": ("多言語", "英語対応"),
+            "offline": ("オフライン",),
+        }
+        for key, words in feature_words.items():
+            if any(word.lower() in lowered for word in words) and key not in features:
+                features.append(key)
+        if features:
+            state["features"] = features
+
+        # A detailed first request can satisfy the usage-context question.
+        detail_markers = ("が使", "向け", "担当", "ユーザー", "利用者", "流れ", "登録", "確認", "管理", "予約", "選ん", "入力")
+        if not state.get("usage_context") and len(text) >= 45 and any(word in text for word in detail_markers):
+            state["usage_context"] = text[:500]
 
     def _apply_answer(self, state: dict, key: str, text: str) -> None:
+        if key == "usage_context":
+            if len(text.strip()) >= 6:
+                state["usage_context"] = text[:500]
+            return
+
         if key == "targets":
             self._extract(state, text)
-            if not state.get("targets"):
-                if "両方" in text or "スマホ" in text:
-                    state["targets"] = ["android", "ios"]
-                else:
-                    state["targets"] = ["web"]
-        elif key == "design_style":
+            return
+
+        if key == "features":
             self._extract(state, text)
-            if not state.get("design_style"):
-                state["design_style"] = "modern"
-                state["design_note"] = text[:120]
+            state["features_confirmed"] = True
+            state["feature_note"] = text[:300]
+            return
+
+        if key == "design_style":
+            self._extract(state, text)
+            if not state.get("design_style") and text.strip():
+                state["design_style"] = "custom"
+                state["design_note"] = text[:300]
+
+    def _review_message(self, state: dict) -> str:
+        targets = " / ".join(state.get("targets") or [])
+        features = state.get("features") or []
+        feature_text = "、".join(self.FEATURE_LABELS.get(x, x) for x in features) if features else "追加機能なし"
+        style = state.get("design_note") or state.get("design_style") or "未指定"
+        notes = state.get("revision_notes") or []
+        lines = [
+            "いきなり作らず、まず設計内容を確認します。",
+            "",
+            f"目的：{state.get('goal', '')}",
+            f"利用者・使い方：{state.get('usage_context', '')}",
+            f"対応：{targets}",
+            f"必要機能：{feature_text}",
+            f"デザイン：{style}",
+        ]
+        if notes:
+            lines.append("追加修正：" + " / ".join(notes[-3:]))
+        lines += [
+            "",
+            "この内容で良ければ「この内容で作る」。",
+            "違うところがあれば、そのまま修正内容を送ってください。まだ生成は始めません。",
+        ]
+        return "\n".join(lines)
 
     def _compose(self, state: dict, correction: str | None = None) -> str:
-        parts = [str(state.get("goal") or "アプリを作成")]
-        targets = state.get("targets") or ["web"]
-        parts.append("出力先: " + ", ".join(targets))
-        parts.append("デザイン: " + str(state.get("design_style") or "modern"))
+        parts = [
+            str(state.get("goal") or "アプリを作成"),
+            "利用者・主要フロー: " + str(state.get("usage_context") or ""),
+            "出力先: " + ", ".join(state.get("targets") or []),
+            "デザイン: " + str(state.get("design_style") or "custom"),
+        ]
         if state.get("design_note"):
             parts.append("デザイン補足: " + state["design_note"])
-        if state.get("authentication"):
-            parts.append("ログイン/認証を実装")
-        if state.get("database"):
-            parts.append("データ保存を実装")
+        features = state.get("features") or []
+        if features:
+            parts.append("必須機能: " + ", ".join(features))
+        if state.get("feature_note"):
+            parts.append("機能補足: " + state["feature_note"])
+        notes = state.get("revision_notes") or []
+        if notes:
+            parts.append("設計修正: " + " / ".join(notes[-5:]))
         if correction:
             parts.append("人間からの訂正: " + correction)
-        parts.append("使いやすさ、スマホ操作性、見た目の一貫性を優先する")
+        parts.extend([
+            "テンプレート感の強い画面を避け、目的に合う情報設計にする",
+            "主要操作、空状態、エラー状態、モバイル表示、アクセシビリティを設計する",
+            "完成扱いの前にデザイン審査と回帰テストを通す",
+        ])
         return "\n".join(parts)
 
     @staticmethod
+    def _is_build_confirmation(text: str) -> bool:
+        normalized = re.sub(r"[\s　。！!]", "", text)
+        confirmations = (
+            "この内容で作る", "この内容で作って", "この内容で進めて",
+            "この設計で作る", "この設計で作って", "これで作って",
+            "これで作る", "作成開始", "制作開始",
+        )
+        return normalized in confirmations
+
+    @staticmethod
     def _looks_like_correction(text: str) -> bool:
-        return any(w in text for w in ("直して", "修正", "もっと", "見にく", "使いにく", "押しにく", "違う", "戻して", "追加して", "消して"))
+        return any(word in text for word in (
+            "直して", "修正", "もっと", "見にく", "使いにく", "押しにく",
+            "違う", "戻して", "追加して", "消して",
+        ))
 
     @staticmethod
     def _lesson_from_correction(text: str) -> str:
-        if any(w in text for w in ("押しにく", "小さい", "タップ")):
+        if any(word in text for word in ("押しにく", "小さい", "タップ")):
             return "スマホでは主要操作のタップ領域を十分大きくし、最低44px以上を維持する。"
-        if any(w in text for w in ("見にく", "ごちゃ", "分かりにく")):
+        if any(word in text for word in ("見にく", "ごちゃ", "分かりにく")):
             return "情報量を整理し、重要操作を目立たせ、余白と視線誘導を改善する。"
-        if any(w in text for w in ("おしゃれ", "高級", "スマート", "美し")):
+        if any(word in text for word in ("おしゃれ", "高級", "スマート", "美し", "最先端")):
             return "テンプレ感を避け、余白・階層・タイポグラフィ・カード配置を統一して洗練する。"
         return "人間の訂正内容を次回生成の要件として優先し、修正後に回帰テストする。"
 
     @staticmethod
     def _is_learning_question(text: str) -> bool:
-        return any(w in text for w in ("なぜ", "説明して", "教えて", "コードは何", "どういう仕組み"))
+        return any(word in text for word in ("なぜ", "説明して", "教えて", "コードは何", "どういう仕組み"))
 
     @staticmethod
     def _append(state: dict, role: str, content: str) -> None:
-        state.setdefault("history", []).append({"role": role, "content": content, "at": datetime.now(timezone.utc).isoformat()})
+        state.setdefault("history", []).append({
+            "role": role,
+            "content": content,
+            "at": datetime.now(timezone.utc).isoformat(),
+        })
         state["history"] = state["history"][-200:]
 
     def _path(self, project_dir: Path) -> Path:
-        p = project_dir / ".ai"
-        p.mkdir(exist_ok=True)
-        return p / "chat_state.json"
+        path = project_dir / ".ai"
+        path.mkdir(exist_ok=True)
+        return path / "chat_state.json"
 
     def _load(self, project_dir: Path) -> dict:
         path = self._path(project_dir)
         if not path.exists():
-            return {"history": [], "targets": []}
+            return {"history": [], "targets": [], "features": []}
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 data.setdefault("history", [])
                 data.setdefault("targets", [])
+                data.setdefault("features", [])
                 return data
         except Exception:
             pass
-        return {"history": [], "targets": []}
+        return {"history": [], "targets": [], "features": []}
 
     def _save(self, project_dir: Path, state: dict) -> None:
-        self._path(project_dir).write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._path(project_dir).write_text(
+            json.dumps(state, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
