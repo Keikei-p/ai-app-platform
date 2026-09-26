@@ -1,4 +1,4 @@
-AI App Platform v0.5.0
+AI App Platform v0.5.2
 
 1) START.bat starts the app
 2) CHECK.bat runs all checks
@@ -18,3 +18,11 @@ Do NOT port-forward the Remote port to the internet.
 User data stays under %LOCALAPPDATA%\AI-App-Platform.
 
 GitHub is the source of truth for program code. Runtime user data and secrets must never be committed.
+
+
+v0.5.2 usability update:
+- Chat-first layout redesigned for clarity
+- Live visible work stages while AI builds/tests
+- Instant new chat without naming dialog
+- Clearer action names and simplified advanced controls
+- Background generation keeps the interface responsive
