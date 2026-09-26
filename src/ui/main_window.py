@@ -4,6 +4,7 @@ import queue
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from tkinter import font as tkfont
 import webbrowser
 from ..core.ai_core import AICore
 from ..core.config import APP_NAME, VERSION, WORKSPACE_DIR, LOG_DIR
@@ -47,6 +48,10 @@ class MainWindow(tk.Tk):
         self._build_thread = None
         self._ui_queue = queue.Queue()
         self.details_visible = False
+        self._showing_welcome = False
+        self.ui_font_family = "Yu Gothic UI"
+        self.ui_font_semibold = "Yu Gothic UI Semibold"
+        self.mono_font_family = "Cascadia Mono"
         self._build()
         self.after(50, self._drain_ui_queue)
         self.refresh_projects()
@@ -60,20 +65,48 @@ class MainWindow(tk.Tk):
             style.theme_use("clam")
         except tk.TclError:
             pass
-        style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"), padding=(14, 9),
-                        relief="flat", background="#111111", foreground="#FFFFFF")
+
+        families = set(tkfont.families(self))
+        if "Yu Gothic UI" not in families:
+            self.ui_font_family = "Meiryo UI" if "Meiryo UI" in families else "Segoe UI"
+        if "Yu Gothic UI Semibold" not in families:
+            self.ui_font_semibold = self.ui_font_family
+        if "Cascadia Mono" not in families:
+            self.mono_font_family = "Consolas"
+
+        # Replace Tk's retro-looking defaults across dialogs, menus and text fields.
+        for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkCaptionFont", "TkSmallCaptionFont"):
+            try:
+                tkfont.nametofont(name).configure(family=self.ui_font_family, size=10)
+            except tk.TclError:
+                pass
+        try:
+            tkfont.nametofont("TkHeadingFont").configure(
+                family=self.ui_font_semibold, size=10, weight="bold"
+            )
+            tkfont.nametofont("TkFixedFont").configure(family=self.mono_font_family, size=9)
+        except tk.TclError:
+            pass
+
+        style.configure("Primary.TButton", font=(self.ui_font_semibold, 10, "bold"),
+                        padding=(16, 10), relief="flat",
+                        background="#111111", foreground="#FFFFFF", borderwidth=0)
         style.map("Primary.TButton",
-                  background=[("active", "#2F2F2F"), ("disabled", "#B4B4B4")],
+                  background=[("active", "#2B2B2B"), ("pressed", "#000000"), ("disabled", "#B8B8B8")],
                   foreground=[("disabled", "#F5F5F5")])
-        style.configure("Secondary.TButton", font=("Segoe UI", 10), padding=(12, 8),
-                        relief="flat", background="#F4F4F4", foreground="#2F2F2F")
-        style.map("Secondary.TButton", background=[("active", "#E9E9E9")])
-        style.configure("Sidebar.TButton", font=("Segoe UI", 10), padding=(11, 9),
-                        relief="flat", background="#F9F9F9", foreground="#2F2F2F")
-        style.map("Sidebar.TButton", background=[("active", "#ECECEC")])
-        style.configure("Sidebar.TCheckbutton", font=("Segoe UI", 9),
-                        background="#F9F9F9", foreground="#5D5D5D")
-        style.map("Sidebar.TCheckbutton", background=[("active", "#F9F9F9")])
+        style.configure("Secondary.TButton", font=(self.ui_font_family, 10),
+                        padding=(13, 9), relief="flat",
+                        background="#F4F4F4", foreground="#262626", borderwidth=0)
+        style.map("Secondary.TButton",
+                  background=[("active", "#EAEAEA"), ("pressed", "#E1E1E1")])
+        style.configure("Sidebar.TButton", font=(self.ui_font_family, 10),
+                        padding=(12, 10), relief="flat",
+                        background="#F7F7F8", foreground="#262626", borderwidth=0)
+        style.map("Sidebar.TButton",
+                  background=[("active", "#ECECEE"), ("pressed", "#E5E5E7")])
+        style.configure("Sidebar.TCheckbutton", font=(self.ui_font_family, 9),
+                        background="#F7F7F8", foreground="#666666")
+        style.map("Sidebar.TCheckbutton", background=[("active", "#F7F7F8")])
 
     def _build(self):
         self._configure_styles()
