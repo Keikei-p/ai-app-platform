@@ -105,6 +105,27 @@ class GenerationPipelineTests(unittest.TestCase):
             self.assertFalse(report.preview_ready)
             self.assertIn("automated_tests_failed", report.blocking_reasons)
 
+
+    def test_repair_feedback_contains_only_quality_failures(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "server.py").write_text("import os\nos.system('unsafe')\n", encoding="utf-8")
+            pipe = GenerationPipeline()
+            report = pipe.evaluate(
+                root,
+                [TestResult("compile", False, "syntax failed")],
+                design_passed=False,
+                capability_gaps=[],
+                risk_items=[],
+            )
+            feedback = pipe.repair_feedback(report, ["touch targets が不足"])
+            self.assertIn("FAILED TESTS", feedback)
+            self.assertIn("compile", feedback)
+            self.assertIn("DESIGN FINDINGS", feedback)
+            self.assertIn("SECURITY FINDINGS", feedback)
+            self.assertIn("os_system", feedback)
+            self.assertIn("Do not weaken tests", feedback)
+
     def test_manifest_hash_changes_with_content(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
