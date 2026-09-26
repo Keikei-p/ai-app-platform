@@ -4,6 +4,8 @@ from pathlib import Path
 import json
 import py_compile
 import re
+import shutil
+import subprocess
 
 @dataclass(frozen=True)
 class TestResult:
@@ -35,6 +37,44 @@ class ProjectTestRunner:
             results.append(TestResult("web_basics", has_viewport and has_title, "viewport/title present" if has_viewport and has_title else "viewport/title missing"))
         else:
             results.append(TestResult("web_basics", False, "index.html missing"))
+
+        for json_name in ("manifest.webmanifest", "generated_manifest.json"):
+            json_path = project_dir / json_name
+            if json_path.exists():
+                try:
+                    parsed = json.loads(json_path.read_text(encoding="utf-8"))
+                    results.append(
+                        TestResult(
+                            f"{json_name}_json",
+                            isinstance(parsed, dict),
+                            "valid JSON object" if isinstance(parsed, dict) else "JSON root must be an object",
+                        )
+                    )
+                except Exception as exc:
+                    results.append(TestResult(f"{json_name}_json", False, f"invalid json: {exc}"))
+
+        app_js = project_dir / "app.js"
+        node = shutil.which("node")
+        if app_js.exists() and node:
+            try:
+                checked = subprocess.run(
+                    [node, "--check", str(app_js)],
+                    cwd=project_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=20,
+                    check=False,
+                    shell=False,
+                )
+                results.append(
+                    TestResult(
+                        "javascript_syntax",
+                        checked.returncode == 0,
+                        "app.js syntax OK" if checked.returncode == 0 else (checked.stderr or checked.stdout)[-1000:],
+                    )
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                results.append(TestResult("javascript_syntax", False, f"node check failed: {exc}"))
 
         css = project_dir / "styles.css"
         if css.exists():
