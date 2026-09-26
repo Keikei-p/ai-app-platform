@@ -1,9 +1,11 @@
-# AI App Platform v0.5.0
+# AI App Platform v0.5.1
 
 AI App Platform is a local-first app-building partner. The main experience is now conversation-first: describe the app, answer only the missing questions, let the platform generate/test it, then continue the same chat to request corrections.
 
-## v0.5.0 milestone
+## v0.5.1 milestone
 
+- ChatGPT-style conversation-first desktop UI: the chat is the main workspace, while project/history/quality controls stay secondary.
+- Reliable composer controls: Enter sends, Shift+Enter creates a new line, and the send button shows busy/error state clearly.
 - Chat-first project creation: a first message can create the project automatically.
 - Requirement collection: target platform and design direction are asked only when missing.
 - Human-correction learning: corrections are stored in Development Memory and can influence later work.
