@@ -19,6 +19,7 @@ from .development_memory import DevelopmentMemory
 from .generation_pipeline import GenerationPipeline
 from .coding_brain import CodingBrain
 from .windows_packager import WindowsPackager
+from .web_packager import WebPackager
 
 @dataclass
 class CoreResult:
@@ -36,6 +37,7 @@ class CoreResult:
     ai_enhancement: dict | None = None
     repair_attempts: list[dict] | None = None
     windows_build: dict | None = None
+    web_build: dict | None = None
 
 class AICore:
     """Local-first orchestration core. Models cannot bypass safety, permissions, tests, approval, or audit."""
@@ -55,6 +57,7 @@ class AICore:
         self.pipeline = GenerationPipeline()
         self.coding_brain = CodingBrain()
         self.windows_packager = WindowsPackager()
+        self.web_packager = WebPackager()
 
     def execute(
         self,
@@ -297,6 +300,30 @@ class AICore:
                     risk_items=risk_items,
                 )
 
+        web_build_info: dict | None = None
+        if pipeline_report.preview_ready and "web" in plan.spec.targets:
+            emit("package", "Web配布用ZIPとチェックサムを作成しています")
+            web_result = self.web_packager.build(project_dir, plan.spec)
+            web_build_info = {
+                "built": web_result.built,
+                "artifact": str(web_result.artifact) if web_result.artifact else None,
+                "manifest": str(web_result.manifest) if web_result.manifest else None,
+                "file_count": web_result.file_count,
+                "sha256": web_result.sha256,
+                "detail": web_result.detail,
+            }
+            if web_result.built:
+                if web_result.artifact is not None:
+                    files.append(web_result.artifact)
+                if web_result.manifest is not None:
+                    files.append(web_result.manifest)
+            log_event(
+                "packager.web.build_result",
+                json.dumps(web_build_info, ensure_ascii=False),
+                slug,
+                "web-packager",
+            )
+
         pipeline_dict = pipeline_report.to_dict()
         final_ok = pipeline_report.preview_ready
         if final_ok:
@@ -335,4 +362,5 @@ class AICore:
             enhancement_dict,
             repair_attempts,
             windows_build_info,
+            web_build_info,
         )
