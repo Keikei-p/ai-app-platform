@@ -54,6 +54,7 @@ class MainWindow(tk.Tk):
         self._blank_chat_history: list[dict] = []
         self._compact_layout = False
         self._sidebar_manual_open = False
+        self._progress_stage = "idle"
         self.ui_font_family = "Yu Gothic UI"
         self.ui_font_semibold = "Yu Gothic UI Semibold"
         self.mono_font_family = "Cascadia Mono"
@@ -214,10 +215,12 @@ class MainWindow(tk.Tk):
             header_right, text="アプリを確認", style="Secondary.TButton", command=self.preview
         )
         self.preview_button.pack(side="left", padx=3)
+        self.preview_button.pack_forget()
         self.details_button = ttk.Button(
             header_right, text="テスト結果", style="Secondary.TButton", command=self._toggle_details
         )
         self.details_button.pack(side="left", padx=3)
+        self.details_button.pack_forget()
         self.ai_button = ttk.Button(
             header_right, text="AI接続", style="Secondary.TButton", command=self._open_ai_settings
         )
@@ -227,7 +230,6 @@ class MainWindow(tk.Tk):
 
         # Visible progress area. It stays compact but always explains the current stage.
         self.progress_card = tk.Frame(main, bg="#F7F8FA", height=76)
-        self.progress_card.pack(fill="x", padx=24, pady=(12, 0))
         self.progress_card.pack_propagate(False)
 
         progress_top = tk.Frame(self.progress_card, bg="#F7F8FA")
@@ -425,6 +427,18 @@ class MainWindow(tk.Tk):
         self.after(180, self._refresh_ai_status)
         self.after(220, lambda: self._apply_responsive_layout(self.winfo_width(), self.winfo_height()))
 
+    def _set_project_actions_visible(self, visible: bool):
+        if not hasattr(self, "preview_button"):
+            return
+        if visible:
+            if not self.preview_button.winfo_manager():
+                self.preview_button.pack(side="left", padx=3, before=self.ai_button)
+            if not self.details_button.winfo_manager():
+                self.details_button.pack(side="left", padx=3, before=self.ai_button)
+        else:
+            self.preview_button.pack_forget()
+            self.details_button.pack_forget()
+
     def _refresh_ai_status(self):
         status = self.chat_engine.status()
         if status.connected:
@@ -582,7 +596,7 @@ class MainWindow(tk.Tk):
                 self.menu_button.pack_forget()
 
         # Secondary chrome disappears before conversation space ever does.
-        if compact or low_height:
+        if compact or low_height or self._progress_stage == "idle":
             if self.progress_card.winfo_manager():
                 self.progress_card.pack_forget()
         elif not self.progress_card.winfo_manager():
@@ -721,6 +735,7 @@ class MainWindow(tk.Tk):
         return "break"
 
     def _set_progress(self, stage: str, title: str, detail: str):
+        self._progress_stage = stage
         order = ["understand", "plan", "build", "design", "test", "done"]
         if stage == "idle":
             active = -1
@@ -744,6 +759,11 @@ class MainWindow(tk.Tk):
         self.progress_detail_var.set(detail)
         self.compact_status_var.set(title)
         self.activity_var.set(detail)
+        if stage == "idle":
+            if self.progress_card.winfo_manager():
+                self.progress_card.pack_forget()
+        elif not self._compact_layout and self.winfo_height() >= 650 and not self.progress_card.winfo_manager():
+            self.progress_card.pack(fill="x", padx=24, pady=(12, 0), before=self.workspace)
 
     def _set_busy(self, busy: bool, message: str | None = None):
         self._busy = busy
@@ -1053,6 +1073,7 @@ class MainWindow(tk.Tk):
         row = self.project_rows[sel[0]]
         self.current_slug = row["slug"]
         self.project_label.configure(text=row["name"])
+        self._set_project_actions_visible(True)
         self._load_chat_history()
         self._sync_welcome_visibility()
         state = self.chat_partner.state(WORKSPACE_DIR / self.current_slug)
@@ -1070,6 +1091,7 @@ class MainWindow(tk.Tk):
         self._blank_chat_history = []
         self.projects.selection_clear(0, "end")
         self.project_label.configure(text="新しいチャット")
+        self._set_project_actions_visible(False)
         self.chat_history.configure(state="normal")
         self.chat_history.delete("1.0", "end")
         self.chat_history.configure(state="disabled")
@@ -1170,6 +1192,7 @@ class MainWindow(tk.Tk):
         self.refresh_projects()
         self.current_slug = slug
         self.project_label.configure(text=name)
+        self._set_project_actions_visible(True)
         # Select the newly created row when possible.
         for i, row in enumerate(self.project_rows):
             if row["slug"] == slug:
@@ -1360,6 +1383,7 @@ class MainWindow(tk.Tk):
             self._append_chat("assistant", explanation)
 
         self._set_build_confirmation(False)
+        self._set_project_actions_visible(True)
         if result.ok:
             self._set_progress("done", "作成とテストが完了", "「アプリを確認」で実際の画面を開けます")
         else:
