@@ -54,6 +54,24 @@ class ProjectTestRunner:
                 except Exception as exc:
                     results.append(TestResult("server_runtime", False, f"compile error: {exc}"))
 
+        if "windows" in spec.get("targets", []):
+            windows_dir = project_dir / "windows"
+            needed_windows = ["launcher.py", "package_manifest.json"]
+            missing_windows = [x for x in needed_windows if not (windows_dir / x).exists()]
+            build_script = project_dir / "BUILD_GENERATED_WINDOWS.bat"
+            if not build_script.exists():
+                missing_windows.append("BUILD_GENERATED_WINDOWS.bat")
+            payload_index = windows_dir / "payload" / "index.html"
+            if not payload_index.exists():
+                missing_windows.append("payload/index.html")
+            results.append(
+                TestResult(
+                    "windows_package_source",
+                    not missing_windows,
+                    "Windows package source present" if not missing_windows else "missing: " + ", ".join(missing_windows),
+                )
+            )
+
         if any(t in spec.get("targets", []) for t in ("android", "ios")):
             mobile = project_dir / "mobile"
             needed = ["package.json", "app.json", "App.tsx", "eas.json"]
