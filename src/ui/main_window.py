@@ -686,7 +686,6 @@ class MainWindow(tk.Tk):
         self.instruction.configure(state="normal")
         self.instruction.delete("1.0", "end")
         self.instruction.insert("1.0", "この内容で作る")
-        self._update_placeholder()
         self.run_ai()
 
     def _show_empty_chat(self):
@@ -759,7 +758,6 @@ class MainWindow(tk.Tk):
             pass
         if message:
             self.activity_var.set(message)
-        self._update_placeholder()
         self.update_idletasks()
 
     def _enable_text_editing(self, widget):
