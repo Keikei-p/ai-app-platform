@@ -1381,6 +1381,18 @@ class MainWindow(tk.Tk):
                 self.write("AIコード生成: 未接続のため安定テンプレートを使用")
             else:
                 self.write(f"AIコード生成: {ai_status}")
+        if result.repair_attempts:
+            successful_repairs = sum(1 for row in result.repair_attempts if row.get("preview_ready"))
+            self.write(
+                f"自動修正: {len(result.repair_attempts)}回実行"
+                + (f" / {successful_repairs}回目で品質ゲート合格" if successful_repairs else "")
+            )
+            for row in result.repair_attempts:
+                coding = row.get("coding") or {}
+                self.write(
+                    f"  修正{row.get('attempt')}: {coding.get('status', 'unknown')} / "
+                    f"{coding.get('summary', '')}"
+                )
         if result.pipeline_report:
             security = result.pipeline_report.get("security") or {}
             findings = security.get("findings") or []
