@@ -16,6 +16,15 @@ from src.core.mobile_generator import MobileGenerator
 from src.core.test_runner import ProjectTestRunner
 
 class ChatPartnerTests(unittest.TestCase):
+    def test_conversation_can_start_before_project_requirements(self):
+        chat = ChatPartner()
+        greeting = chat.opening_response("こんにちは")
+        self.assertIsNotNone(greeting)
+        self.assertIn("作りたい", greeting)
+        consult = chat.opening_response("まだ何を作るか決まってないので相談したい")
+        self.assertIsNotNone(consult)
+        self.assertIn("一緒に", consult)
+
     def test_chat_collects_only_missing_core_requirements(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
