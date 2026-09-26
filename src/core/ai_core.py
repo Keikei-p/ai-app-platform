@@ -20,6 +20,7 @@ from .generation_pipeline import GenerationPipeline
 from .coding_brain import CodingBrain
 from .windows_packager import WindowsPackager
 from .web_packager import WebPackager
+from .social_generator import SocialAutomationGenerator
 
 @dataclass
 class CoreResult:
@@ -58,6 +59,7 @@ class AICore:
         self.coding_brain = CodingBrain()
         self.windows_packager = WindowsPackager()
         self.web_packager = WebPackager()
+        self.social = SocialAutomationGenerator()
 
     def execute(
         self,
@@ -101,6 +103,7 @@ class AICore:
         spec_path = plan.spec.save(project_dir)
         files = [spec_path]
         files += self.generator.generate_from_spec(project_dir, plan.spec)
+        files += self.social.generate(project_dir, plan.spec)
         files += self.mobile.generate(project_dir, plan.spec)
 
         emit("enhance", "AI接続時は要件に合わせてコードを追加改善しています")
