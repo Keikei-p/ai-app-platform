@@ -538,19 +538,21 @@ class MainWindow(tk.Tk):
         compact = width < 980
         very_compact = width < 780
         low_height = height < 650
+        very_low = height < 520
         self._compact_layout = compact
 
         if compact and not self._sidebar_manual_open:
             if self.sidebar.winfo_manager():
                 self.sidebar.pack_forget()
             if not self.menu_button.winfo_manager():
-                self.menu_button.pack(side="left", padx=(12, 0), pady=12, before=self.header_left)
+                self.menu_button.pack(side="left", padx=(12, 0), pady=10, before=self.header_left)
         else:
             if not self.sidebar.winfo_manager():
                 self.sidebar.pack(side="left", fill="y", before=self.main_frame)
             if not compact and self.menu_button.winfo_manager():
                 self.menu_button.pack_forget()
 
+        # Secondary chrome disappears before conversation space ever does.
         if compact or low_height:
             if self.progress_card.winfo_manager():
                 self.progress_card.pack_forget()
@@ -560,28 +562,58 @@ class MainWindow(tk.Tk):
         if very_compact:
             if self.header_right.winfo_manager():
                 self.header_right.pack_forget()
-            self.header_left.pack_configure(padx=(12, 6))
+            self.header_left.pack_configure(padx=(10, 6))
         else:
             if not self.header_right.winfo_manager():
                 self.header_right.pack(side="right", padx=(8, 18), pady=12)
             self.header_left.pack_configure(padx=(26, 8))
 
+        if low_height:
+            if self.activity_label.winfo_manager():
+                self.activity_label.pack_forget()
+            self.header.configure(height=48)
+            self.project_label.pack_configure(pady=(12, 0))
+        else:
+            if not self.activity_label.winfo_manager():
+                self.activity_label.pack(anchor="w", pady=(2, 0))
+            self.header.configure(height=62)
+            self.project_label.pack_configure(pady=(13, 0))
+
         if compact:
-            self.history_wrap.pack_configure(padx=(18, 10), pady=(6, 0))
-            self.composer_area.pack_configure(padx=(18, 12), pady=(4, 12))
+            self.history_wrap.grid_configure(padx=(14, 8), pady=(4, 0))
+            self.composer_area.grid_configure(padx=(14, 10), pady=(4, 10))
             if self.details_visible:
                 self.details_panel.pack_forget()
                 self.details_visible = False
                 self.details_button.configure(text="テスト結果")
         else:
-            self.history_wrap.pack_configure(padx=(56, 34), pady=(8, 0))
-            self.composer_area.pack_configure(padx=(72, 54), pady=(4, 18))
+            self.history_wrap.grid_configure(padx=(56, 34), pady=(8, 0))
+            self.composer_area.grid_configure(padx=(72, 54), pady=(4, 18))
 
         if low_height or very_compact:
             if self.starter_frame.winfo_manager():
-                self.starter_frame.pack_forget()
+                self.starter_frame.grid_remove()
         else:
             self._sync_starter_visibility()
+
+        # At very small heights, trim labels before reducing the actual input field.
+        if very_low:
+            if self.composer_hint.winfo_manager():
+                self.composer_hint.pack_forget()
+            if self.composer_help.winfo_manager():
+                self.composer_help.pack_forget()
+            self.instruction.configure(height=3)
+            self.composer_area.grid_configure(pady=(2, 8))
+        else:
+            if not self.composer_hint.winfo_manager():
+                self.composer_hint.pack(anchor="w", padx=2, pady=(0, 6), before=self.composer)
+            if not self.composer_help.winfo_manager():
+                self.composer_help.pack(side="left")
+            self.instruction.configure(height=4)
+
+        # Grid row 0 is the only row allowed to shrink/grow. Composer row 2 stays requested-size.
+        self.chat_column.grid_rowconfigure(0, weight=1, minsize=56 if very_low else 80)
+        self.update_idletasks()
 
     def _toggle_sidebar(self):
         if self.sidebar.winfo_manager():
@@ -697,9 +729,9 @@ class MainWindow(tk.Tk):
             path = WORKSPACE_DIR / self.current_slug
             has_history = bool(self.chat_partner.history(path))
         if has_history or not self._showing_welcome:
-            self.starter_frame.pack_forget()
+            self.starter_frame.grid_remove()
         elif not self.starter_frame.winfo_manager():
-            self.starter_frame.pack(fill="x", padx=72, pady=(0, 12), before=self.instruction.master.master)
+            self.starter_frame.grid(row=1, column=0, sticky="ew", padx=72, pady=(0, 12))
 
     def _composer_submit(self, _event=None):
         if self._busy:
@@ -1121,7 +1153,7 @@ class MainWindow(tk.Tk):
             self.chat_history.delete("1.0", "end")
             self._showing_welcome = False
             if hasattr(self, "starter_frame"):
-                self.starter_frame.pack_forget()
+                self.starter_frame.grid_remove()
         if role == "user":
             self.chat_history.insert("end", "あなた\n", "user_label")
             self.chat_history.insert("end", f"{text}\n", "user")
