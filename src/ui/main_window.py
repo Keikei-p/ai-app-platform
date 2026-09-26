@@ -877,6 +877,8 @@ class MainWindow(tk.Tk):
         if self.current_slug:
             path = WORKSPACE_DIR / self.current_slug
             rows = self.chat_partner.history(path)
+            if rows:
+                self._showing_welcome = False
             for row in rows:
                 if row.get("role") == "user":
                     self.chat_history.insert("end", "あなた\n", "user_label")
