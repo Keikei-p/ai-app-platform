@@ -36,6 +36,18 @@ class ChatPartner:
     def __init__(self, memory: DevelopmentMemory | None = None):
         self.memory = memory or DevelopmentMemory()
 
+    def opening_response(self, text: str) -> str | None:
+        """Handle lightweight conversation before a real project exists."""
+        normalized = re.sub(r"\s+", "", text).lower()
+        greetings = ("こんにちは", "こんばんは", "おはよう", "やあ", "hello", "hi", "はじめまして")
+        if any(word in normalized for word in greetings):
+            return "こんにちは。作りたいアプリや、まだ曖昧なアイデアでも大丈夫です。『こんなことを楽にしたい』から一緒に整理できます。"
+        if any(word in normalized for word in ("何ができる", "なにができる", "使い方", "どう使う")):
+            return "作りたいものを普通の言葉で話してください。必要なことだけ確認して、設計・作成・テスト・修正まで進めます。"
+        if any(word in normalized for word in ("相談したい", "相談から", "まだ曖昧", "決まってない", "決まっていない")):
+            return "もちろん。まず『誰が使うか』『何を楽にしたいか』を一言ずつ教えてください。そこからアプリの形を一緒に決めます。"
+        return None
+
     def suggest_project_name(self, text: str) -> str:
         cleaned = re.sub(r"[\r\n\t]+", " ", text).strip()
         cleaned = re.sub(r"[。！？!?].*", "", cleaned)
