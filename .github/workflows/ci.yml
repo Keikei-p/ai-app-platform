@@ -28,5 +28,7 @@ jobs:
         run: python -m src.tools.acceptance_test
       - name: LAN remote acceptance
         run: python -m src.tools.remote_acceptance_test
+      - name: Chat composer GUI acceptance
+        run: python -m src.tools.chat_gui_acceptance_test
       - name: Production smoke test
         run: python -m src.tools.smoke_test
