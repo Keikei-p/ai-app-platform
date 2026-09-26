@@ -18,6 +18,7 @@ from .capability import CapabilityAssessor, CapabilityGap
 from .development_memory import DevelopmentMemory
 from .generation_pipeline import GenerationPipeline
 from .coding_brain import CodingBrain
+from .windows_packager import WindowsPackager
 
 @dataclass
 class CoreResult:
@@ -51,6 +52,7 @@ class AICore:
         self.memory = DevelopmentMemory()
         self.pipeline = GenerationPipeline()
         self.coding_brain = CodingBrain()
+        self.windows_packager = WindowsPackager()
 
     def execute(
         self,
@@ -119,6 +121,11 @@ class AICore:
                 slug,
                 "coding-brain",
             )
+
+        emit("package", "対象OSごとのビルド準備を作成しています")
+        windows_prep = self.windows_packager.prepare(project_dir, plan.spec)
+        if windows_prep.prepared:
+            files += windows_prep.files
 
         emit("design", "見やすさと操作性を確認しています")
         design_review = self.design.review(project_dir)
