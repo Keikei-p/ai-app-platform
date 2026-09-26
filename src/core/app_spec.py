@@ -14,6 +14,8 @@ class AppSpec:
     language: str = "ja"
     region: str = "JP"
     risk_level: str = "normal"
+    design_style: str = "modern"
+    usage_context: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
