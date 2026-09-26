@@ -821,7 +821,7 @@ class MainWindow(tk.Tk):
         dialog.transient(self)
         dialog.grab_set()
         dialog.geometry("430x180")
-        ttk.Label(dialog, text="新しいプロジェクト名", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=18, pady=(18,6))
+        ttk.Label(dialog, text="新しいプロジェクト名", font=(self.ui_font_semibold, 11, "bold")).pack(anchor="w", padx=18, pady=(18,6))
         entry = ttk.Entry(dialog)
         entry.pack(fill="x", padx=18)
         entry.insert(0, p["name"])
@@ -949,6 +949,18 @@ class MainWindow(tk.Tk):
             self._set_progress("idle", "メッセージを入力してください", "作りたいものや直したいことを書いて送信してください")
             self.instruction.focus_force()
             return
+
+        # Lightweight conversation should feel like an AI chat, not a form wizard.
+        if self.current_slug is None:
+            opening = self.chat_partner.opening_response(text)
+            if opening:
+                self.instruction.delete("1.0", "end")
+                self._append_chat("user", text)
+                self._append_chat("assistant", opening)
+                self._set_progress("idle", "会話できます", "続けて作りたいことや困っていることを話してください")
+                self._update_placeholder()
+                self.instruction.focus_force()
+                return
 
         self._set_busy(True, "内容を確認しています")
         self._set_progress("understand", "要件を確認中", "メッセージの内容を読み取っています")
@@ -1084,7 +1096,7 @@ class MainWindow(tk.Tk):
         win.geometry("820x520")
         outer = ttk.Frame(win, padding=14)
         outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text=f"{p['name']} の保存履歴", font=("Segoe UI", 14, "bold")).pack(anchor="w")
+        ttk.Label(outer, text=f"{p['name']} の保存履歴", font=(self.ui_font_semibold, 14, "bold")).pack(anchor="w")
         ttk.Label(outer, text="戻したい時点を選べます。復元前には現在の状態を自動保存します。", foreground="#667085").pack(anchor="w", pady=(4,10))
 
         listbox = tk.Listbox(outer, height=12)
