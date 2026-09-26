@@ -20,6 +20,7 @@ from ..core.remote_server import RemoteServerController
 from ..core.chat_partner import ChatPartner
 from ..core.learning_mode import LearningCoach
 from ..core.preview_runtime import PreviewRuntime
+from ..core.llm_chat import AIChatEngine
 from .remote_window import RemoteWindow
 
 class MainWindow(tk.Tk):
@@ -39,6 +40,7 @@ class MainWindow(tk.Tk):
         self.pending_update = None
         self.remote_controller = RemoteServerController()
         self.chat_partner = ChatPartner()
+        self.chat_engine = AIChatEngine()
         self.learning_coach = LearningCoach()
         self.learning_mode = tk.BooleanVar(value=False)
         self.preview_runtime = PreviewRuntime()
@@ -49,6 +51,9 @@ class MainWindow(tk.Tk):
         self._ui_queue = queue.Queue()
         self.details_visible = False
         self._showing_welcome = False
+        self._blank_chat_history: list[dict] = []
+        self._compact_layout = False
+        self._sidebar_manual_open = False
         self.ui_font_family = "Yu Gothic UI"
         self.ui_font_semibold = "Yu Gothic UI Semibold"
         self.mono_font_family = "Cascadia Mono"
