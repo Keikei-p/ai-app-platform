@@ -1,35 +1,82 @@
-# Status — v0.6.3
+# Status — v0.7.0
 
 ## Verified in this build
 
-- Category shortcut UI has been removed; the empty chat is conversation-first.
-- The premium welcome panel is visible before the first message and disappears once conversation begins.
-- Preview/test controls are hidden before project creation and appear contextually after a project exists.
-
 - Python source compilation: PASS
 - Security Self-Check: PASS
-- Unit/security/regression suite: 56 tests PASS
+- Unit/security/regression suite: 96 tests PASS
 - Persistence acceptance: PASS
 - LAN Remote acceptance: PASS
 - Chat GUI acceptance: PASS
+- SNS automation acceptance: PASS
 - Production smoke test: PASS
-- Compact layout keeps chat history, message composer and send button physically visible down to the tested 680×440 minimum.
-- Composer foreground/background contrast is verified so typed text cannot be visually identical to the input surface.
-- OpenAI and Gemini response parsing is regression-tested without external network calls.
-- Casual chat remains separated from build approval; new projects cannot generate before the explicit approval gate.
-- Existing auth/session/CSRF/SQLite CRUD/user-isolation and Design AI checks remain in regression coverage.
+- Generated Windows EXE acceptance: PASS
+- Generated Android/iOS Expo typecheck + bundle acceptance: PASS
+- Generated Android native debug APK acceptance: PASS
 
-## What v0.6.3 changes
+## v0.7.0 — generated-app quality pipeline
 
-The desktop experience now treats chat as a first-class product surface rather than a form around the generator. Composer layout is grid-pinned so conversation history shrinks first and the input/send controls remain reachable. The input field is high-contrast, compact-window behavior prioritizes conversation, and a real LLM provider can be connected for natural conversation.
+Generation is no longer judged only by whether files were written.
 
-OpenAI/Gemini connectivity is optional. Without a configured API key the product says AI未接続 instead of implying that local deterministic replies are equivalent to a full LLM.
+Each generated project now records:
+- automated test results
+- design review
+- generated-file SHA-256 manifest
+- generated-artifact security scan
+- build/readiness status
+- explicit production/store approval state
 
-## Known gaps before Ver1.0
+Generated artifacts are scanned for obvious secret leakage, unsafe dynamic execution, shell=True, symlink/path escapes, risky npm lifecycle scripts, and non-registry package sources. Failed quality gates block preview.
 
-- The app-generation coding brain is still primarily deterministic/rule-based. Real LLM chat is now pluggable, but bespoke LLM-driven architecture/code generation is still a separate next milestone.
-- The current desktop shell is still Tkinter-based. Responsive behavior is improved, but a full web-rendered desktop shell would allow a closer visual match to ChatGPT/Gemini-grade UI polish.
-- Streaming token-by-token chat responses are not yet implemented; provider replies currently arrive as a completed response.
-- Screenshot/visual-diff based design critique is not yet implemented.
-- Android APK/AAB and iOS IPA production signing/store submission are not fully automated.
-- Payments, push notifications, advanced realtime systems and third-party APIs need dedicated adapters and approval gates.
+When a connected coding model proposes changes, its writes are bounded to allowed project text files. It cannot overwrite platform metadata, credential files, build artifacts or paths outside the project. Model failure falls back to the deterministic generator rather than failing the entire build.
+
+When code-repairable quality checks fail, the platform can feed bounded failure details back into the coding brain and retry up to two times. Tests/security/approval gates cannot be disabled by the repair loop.
+
+## v0.7.0 — build outputs
+
+- Verified Web apps can produce a distribution ZIP plus SHA-256 manifest.
+- Windows targets receive a generated package launcher/build script.
+- With PyInstaller available, the platform can automatically build the verified generated Windows EXE.
+- GitHub Windows acceptance has built the generated EXE, launched its self-test and verified writable runtime payload extraction.
+- Android/iOS Expo source is typechecked and bundled in CI.
+- Android native debug APK generation is verified in CI.
+- Production Android signing/AAB and iOS IPA/App Store signing remain external credential/toolchain steps and are not represented as complete until actually performed.
+
+## v0.7.0 — SNS automation generation
+
+Natural-language requests such as SNS自動投稿 / 予約投稿 / Threads / Instagram / YouTube投稿 / X投稿 can select the dedicated social_automation app type.
+
+Generated SNS automation apps include:
+- persistent SQLite posting queue
+- scheduled posting
+- approval mode (default)
+- explicit auto mode
+- DRY RUN by default
+- idempotency keys to avoid duplicate local queue rows
+- retry with bounded exponential backoff
+- posting state/history fields and errors
+- X text-post adapter
+- Threads text-post create/publish flow
+- Instagram public image URL create/publish flow
+- YouTube video upload adapter restricted to media/ files
+- credentials read only from environment variables
+- loopback-only default server binding
+- LAN binding blocked unless AI_APP_ALLOW_LAN=1 and SOCIAL_ADMIN_TOKEN are both configured
+
+End-to-end acceptance starts an actually generated SNS server and verifies:
+queue -> pending approval -> approve -> dry-run worker -> posted,
+and also verifies that auto mode can queue due posts without the manual approval step.
+
+Provider request-contract tests run without sending real posts. X create-post and YouTube upload endpoints were additionally checked against current official API documentation during this milestone. Meta provider API versions remain externally controlled/configurable because those APIs can change independently of this repository.
+
+## Current limitations before Ver1.0
+
+- Real SNS posting still requires the operator's own API applications, permissions, OAuth/access tokens and any provider review/paid access requirements.
+- Live third-party API calls are not performed in CI because production account credentials must not be stored in the repository.
+- Instagram generated support currently targets public image-URL publishing; richer Reels/carousel workflows need dedicated adapters.
+- X generated support currently targets text posts; media upload is a separate future adapter.
+- YouTube access-token refresh/interactive OAuth setup is not yet automated inside the generated app.
+- The desktop shell is still Tkinter-based.
+- Streaming token-by-token chat and screenshot/visual-diff design critique are still future work.
+- iOS production signing/IPA/App Store submission and Android production signing/AAB/store submission still require external credentials and approval.
+- Legal/safety/provider checks are guardrails, not guarantees.
