@@ -1,6 +1,7 @@
 import importlib.util
 import os
 import tempfile
+import sys
 import unittest
 from pathlib import Path
 
@@ -47,6 +48,7 @@ class SocialGeneratedRuntimeTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("generated_social_runtime_test", path)
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
+        sys.modules[spec.name] = module
         spec.loader.exec_module(module)
         return module
 
