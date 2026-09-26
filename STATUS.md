@@ -1,4 +1,4 @@
-# Status — v0.6.1
+# Status — v0.6.2
 
 ## Verified in this build
 
@@ -9,15 +9,15 @@
 - LAN Remote acceptance: PASS
 - Chat GUI acceptance: PASS
 - Production smoke test: PASS
-- Compact layout keeps chat history and the message composer visible at 720×540.
+- Compact layout keeps chat history, message composer and send button physically visible down to the tested 680×440 minimum.
 - Composer foreground/background contrast is verified so typed text cannot be visually identical to the input surface.
 - OpenAI and Gemini response parsing is regression-tested without external network calls.
 - Casual chat remains separated from build approval; new projects cannot generate before the explicit approval gate.
 - Existing auth/session/CSRF/SQLite CRUD/user-isolation and Design AI checks remain in regression coverage.
 
-## What v0.6.1 changes
+## What v0.6.2 changes
 
-The desktop experience now treats chat as a first-class product surface rather than a form around the generator. The input field is high-contrast, compact-window behavior prioritizes conversation, and a real LLM provider can be connected for natural conversation.
+The desktop experience now treats chat as a first-class product surface rather than a form around the generator. Composer layout is grid-pinned so conversation history shrinks first and the input/send controls remain reachable. The input field is high-contrast, compact-window behavior prioritizes conversation, and a real LLM provider can be connected for natural conversation.
 
 OpenAI/Gemini connectivity is optional. Without a configured API key the product says AI未接続 instead of implying that local deterministic replies are equivalent to a full LLM.
 
