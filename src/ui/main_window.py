@@ -1381,6 +1381,14 @@ class MainWindow(tk.Tk):
                 self.write("AIコード生成: 未接続のため安定テンプレートを使用")
             else:
                 self.write(f"AIコード生成: {ai_status}")
+        if result.web_build:
+            if result.web_build.get("built"):
+                self.write(
+                    f"Web配布ZIP: BUILD PASS / {result.web_build.get('artifact')} / "
+                    f"SHA-256 {str(result.web_build.get('sha256') or '')[:16]}…"
+                )
+            else:
+                self.write(f"Web配布ZIP: BUILD FAIL / {result.web_build.get('detail', '')}")
         if result.windows_build:
             if result.windows_build.get("built"):
                 self.write(f"Windows EXE: BUILD PASS / {result.windows_build.get('artifact')}")
