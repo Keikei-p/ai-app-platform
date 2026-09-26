@@ -391,14 +391,12 @@ class MainWindow(tk.Tk):
     def _set_busy(self, busy: bool, message: str | None = None):
         self._busy = busy
         if hasattr(self, "send_button"):
-            self.send_button.configure(
-                state="disabled" if busy else "normal",
-                text="作業中…" if busy else "送信"
-            )
+            self.send_button.configure(text="作業中…" if busy else "送信")
+            self.send_button.state(["disabled"] if busy else ["!disabled"])
         self.instruction.configure(state="disabled" if busy else "normal")
         try:
             self.projects.configure(state="disabled" if busy else "normal")
-            self.new_app_button.configure(state="disabled" if busy else "normal")
+            self.new_app_button.state(["disabled"] if busy else ["!disabled"])
         except (tk.TclError, AttributeError):
             pass
         if message:
