@@ -116,13 +116,15 @@ class MainWindow(tk.Tk):
     def _build(self):
         self._configure_styles()
         self.geometry("1280x820")
-        self.minsize(1000, 680)
+        self.minsize(700, 520)
 
         shell = tk.Frame(self, bg="#FFFFFF")
         shell.pack(fill="both", expand=True)
+        self.shell = shell
 
         # ChatGPT-style neutral sidebar: projects and secondary tools only.
         sidebar = tk.Frame(shell, bg="#F7F7F8", width=250)
+        self.sidebar = sidebar
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
@@ -162,13 +164,17 @@ class MainWindow(tk.Tk):
                    command=self._toggle_details).pack(fill="x", pady=2)
 
         main = tk.Frame(shell, bg="#FFFFFF")
+        self.main_frame = main
         main.pack(side="left", fill="both", expand=True)
 
         # Quiet header: project name + only the two actions users need often.
         header = tk.Frame(main, bg="#FFFFFF", height=62)
+        self.header = header
         header.pack(fill="x")
         header.pack_propagate(False)
+        self.menu_button = ttk.Button(header, text="☰", style="Secondary.TButton", command=self._toggle_sidebar)
         header_left = tk.Frame(header, bg="#FFFFFF")
+        self.header_left = header_left
         header_left.pack(side="left", fill="y", padx=(26, 8))
         self.project_label = tk.Label(
             header_left, text="新しいチャット", bg="#FFFFFF", fg="#202123",
@@ -180,6 +186,7 @@ class MainWindow(tk.Tk):
                  font=(self.ui_font_family, 9)).pack(anchor="w", pady=(2, 0))
 
         header_right = tk.Frame(header, bg="#FFFFFF")
+        self.header_right = header_right
         header_right.pack(side="right", padx=(8, 18), pady=12)
         self.preview_button = ttk.Button(
             header_right, text="アプリを確認", style="Secondary.TButton", command=self.preview
@@ -189,6 +196,10 @@ class MainWindow(tk.Tk):
             header_right, text="テスト結果", style="Secondary.TButton", command=self._toggle_details
         )
         self.details_button.pack(side="left", padx=3)
+        self.ai_button = ttk.Button(
+            header_right, text="AI接続", style="Secondary.TButton", command=self._open_ai_settings
+        )
+        self.ai_button.pack(side="left", padx=3)
 
         tk.Frame(main, bg="#ECECEC", height=1).pack(fill="x")
 
@@ -230,6 +241,7 @@ class MainWindow(tk.Tk):
         chat_column.pack(side="left", fill="both", expand=True)
 
         history_wrap = tk.Frame(chat_column, bg="#FFFFFF")
+        self.history_wrap = history_wrap
         history_wrap.pack(fill="both", expand=True, padx=(56, 34), pady=(8, 0))
         scrollbar = ttk.Scrollbar(history_wrap, orient="vertical")
         scrollbar.pack(side="right", fill="y")
@@ -283,18 +295,25 @@ class MainWindow(tk.Tk):
             self._starter_cards.append(card)
 
         composer_area = tk.Frame(chat_column, bg="#FFFFFF")
+        self.composer_area = composer_area
         composer_area.pack(fill="x", padx=(72, 54), pady=(4, 18))
+        self.composer_hint = tk.Label(
+            composer_area, text="メッセージ", bg="#FFFFFF", fg="#6B7280",
+            font=(self.ui_font_semibold, 9, "bold")
+        )
+        self.composer_hint.pack(anchor="w", padx=2, pady=(0, 6))
         composer = tk.Frame(
-            composer_area, bg="#F7F7F8", highlightbackground="#D9D9DC",
-            highlightcolor="#BDBDC2", highlightthickness=1, bd=0
+            composer_area, bg="#FFFFFF", highlightbackground="#C9CDD4",
+            highlightcolor="#111827", highlightthickness=1, bd=0
         )
         composer.pack(fill="x")
         self.composer = composer
         self.instruction = tk.Text(
-            composer, height=5, wrap="word", undo=True, autoseparators=True, maxundo=-1,
-            relief="flat", borderwidth=0, highlightthickness=0, background="#F7F7F8",
-            foreground="#202123", insertbackground="#202123", font=(self.ui_font_family, 12),
-            padx=18, pady=15
+            composer, height=4, wrap="word", undo=True, autoseparators=True, maxundo=-1,
+            relief="flat", borderwidth=0, highlightthickness=0, background="#FFFFFF",
+            foreground="#111827", insertbackground="#111827", insertwidth=2,
+            selectbackground="#DCE7FF", selectforeground="#111827",
+            font=(self.ui_font_family, 12), padx=18, pady=14
         )
         self.instruction.pack(side="left", fill="both", expand=True)
         self._enable_text_editing(self.instruction)
@@ -302,18 +321,10 @@ class MainWindow(tk.Tk):
         self.instruction.bind("<KP_Enter>", self._composer_submit, add=False)
         self.instruction.bind("<Shift-Return>", self._composer_newline, add=False)
         self.instruction.bind("<Control-Return>", self._composer_submit, add=False)
-        self.instruction.bind("<KeyRelease>", self._update_placeholder, add=True)
-        self.instruction.bind("<FocusIn>", self._update_placeholder, add=True)
-        self.instruction.bind("<FocusOut>", self._update_placeholder, add=True)
+        self.instruction.bind("<FocusIn>", lambda _e: self.composer.configure(highlightbackground="#111827"), add=True)
+        self.instruction.bind("<FocusOut>", lambda _e: self.composer.configure(highlightbackground="#C9CDD4"), add=True)
 
-        self.placeholder_label = tk.Label(
-            composer, text="作りたいアプリや相談したいことを入力…",
-            bg="#F7F7F8", fg="#9A9A9F", font=(self.ui_font_family, 11)
-        )
-        self.placeholder_label.place(x=18, y=15)
-        self.placeholder_label.bind("<Button-1>", lambda _e: self.instruction.focus_force())
-
-        send_wrap = tk.Frame(composer, bg="#F7F7F8")
+        send_wrap = tk.Frame(composer, bg="#FFFFFF")
         send_wrap.pack(side="right", fill="y", padx=(8, 12), pady=12)
         self.send_button = ttk.Button(
             send_wrap, text="送信  ↑", style="Primary.TButton", command=self.run_ai
@@ -365,7 +376,10 @@ class MainWindow(tk.Tk):
 
         self._show_empty_chat()
         self._set_progress("idle", "準備完了", "何を作りたいか、そのまま話してください")
+        self.bind("<Configure>", self._on_window_resize, add=True)
         self.after(120, self.instruction.focus_force)
+        self.after(180, self._refresh_ai_status)
+        self.after(220, lambda: self._apply_responsive_layout(self.winfo_width(), self.winfo_height()))
 
     def _toggle_details(self):
         if self.details_visible:
