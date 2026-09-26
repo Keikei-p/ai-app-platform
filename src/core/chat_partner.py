@@ -208,6 +208,8 @@ class ChatPartner:
                 features.append(key)
         if features:
             state["features"] = features
+            # Mentioning concrete feature requirements counts as an explicit feature decision.
+            state["features_confirmed"] = True
 
         # A detailed first request can satisfy the usage-context question.
         detail_markers = ("が使", "向け", "担当", "ユーザー", "利用者", "流れ", "登録", "確認", "管理", "予約", "選ん", "入力")
