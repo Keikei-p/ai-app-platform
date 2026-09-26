@@ -47,6 +47,29 @@ def main() -> int:
         try:
             app.deiconify(); app.update()
 
+            # Landing page must be AI-first: no category-choice buttons or template picker.
+            if hasattr(app, "starter_frame"):
+                raise AssertionError("legacy category shortcut frame still exists")
+            if not app.welcome_panel.winfo_viewable():
+                raise AssertionError("premium AI-first welcome panel is not visible")
+            def widget_texts(widget):
+                values = []
+                try:
+                    value = widget.cget("text")
+                    if value:
+                        values.append(str(value))
+                except Exception:
+                    pass
+                for child in widget.winfo_children():
+                    values.extend(widget_texts(child))
+                return values
+            visible_copy = "\n".join(widget_texts(app))
+            for forbidden in ("業務アプリ", "予約アプリ", "相談から"):
+                if forbidden in visible_copy:
+                    raise AssertionError(f"legacy category choice is still visible: {forbidden}")
+            if "つくりたいものを、話すだけ。" not in visible_copy:
+                raise AssertionError("AI-first landing headline is missing")
+
             # Compact windows must preserve the actual chat and composer inside the visible client area.
             for width, height in ((820, 520), (700, 460), (680, 440)):
                 app.geometry(f"{width}x{height}"); app.update()
