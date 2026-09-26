@@ -1013,8 +1013,21 @@ class MainWindow(tk.Tk):
             self._load_chat_history()
 
             if decision.action == "ask":
+                self._set_build_confirmation(False)
                 self.write("AIが必要情報を確認中")
                 self._set_progress("understand", "あなたの返事待ち", decision.message)
+                self._set_busy(False)
+                self.instruction.focus_force()
+                return
+
+            if decision.action == "review":
+                self._set_build_confirmation(True)
+                self.write("AI: 設計内容を確認待ち")
+                self._set_progress(
+                    "understand",
+                    "設計内容を確認してください",
+                    "まだ生成していません。良ければ「この内容で作る」。違えば修正内容を送ってください",
+                )
                 self._set_busy(False)
                 self.instruction.focus_force()
                 return
@@ -1036,6 +1049,7 @@ class MainWindow(tk.Tk):
                 self.instruction.focus_force()
                 return
 
+            self._set_build_confirmation(False)
             self.write("AI: 要件確認 → 設計 → 作成 → デザイン確認 → テスト")
             learning_enabled = bool(self.learning_mode.get())
             instruction = decision.instruction or text
@@ -1083,6 +1097,7 @@ class MainWindow(tk.Tk):
             explanation = self.learning_coach.explain(spec, [f.name for f in result.files])
             self._append_chat("assistant", explanation)
 
+        self._set_build_confirmation(False)
         if result.ok:
             self._set_progress("done", "作成とテストが完了", "「アプリを確認」で実際の画面を開けます")
         else:
@@ -1092,6 +1107,7 @@ class MainWindow(tk.Tk):
 
     def _handle_build_error(self, exc: Exception):
         message = f"処理中にエラーが起きました。\n{type(exc).__name__}: {exc}"
+        self._set_build_confirmation(False)
         self._append_chat("assistant", message)
         self.write("⚠ " + message.replace("\n", " / "))
         self._set_progress("issue", "エラーが発生しました", "「テスト結果」を開くと詳細を確認できます")
