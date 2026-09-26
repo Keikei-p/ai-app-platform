@@ -17,6 +17,7 @@ from .design_ai import DesignAI, DesignReview
 from .capability import CapabilityAssessor, CapabilityGap
 from .development_memory import DevelopmentMemory
 from .generation_pipeline import GenerationPipeline
+from .coding_brain import CodingBrain
 
 @dataclass
 class CoreResult:
@@ -31,6 +32,7 @@ class CoreResult:
     capability_gaps: list[CapabilityGap] | None = None
     lessons_used: list[str] | None = None
     pipeline_report: dict | None = None
+    ai_enhancement: dict | None = None
 
 class AICore:
     """Local-first orchestration core. Models cannot bypass safety, permissions, tests, approval, or audit."""
@@ -48,6 +50,7 @@ class AICore:
         self.capability = CapabilityAssessor()
         self.memory = DevelopmentMemory()
         self.pipeline = GenerationPipeline()
+        self.coding_brain = CodingBrain()
 
     def execute(
         self,
@@ -92,6 +95,30 @@ class AICore:
         files = [spec_path]
         files += self.generator.generate_from_spec(project_dir, plan.spec)
         files += self.mobile.generate(project_dir, plan.spec)
+
+        emit("enhance", "AI接続時は要件に合わせてコードを追加改善しています")
+        try:
+            enhancement = self.coding_brain.enhance(project_dir, plan.spec, enriched)
+            files += enhancement.files
+            enhancement_dict = enhancement.to_dict()
+            log_event(
+                "coding_brain.completed",
+                json.dumps(enhancement_dict, ensure_ascii=False),
+                slug,
+                "coding-brain",
+            )
+        except Exception as exc:
+            enhancement_dict = {
+                "status": "fallback",
+                "summary": f"AIコード生成を安全に中止し、安定テンプレートへフォールバック: {type(exc).__name__}: {exc}",
+                "files": [],
+            }
+            log_event(
+                "coding_brain.fallback",
+                json.dumps(enhancement_dict, ensure_ascii=False),
+                slug,
+                "coding-brain",
+            )
 
         emit("design", "見やすさと操作性を確認しています")
         design_review = self.design.review(project_dir)
@@ -175,4 +202,5 @@ class AICore:
             gaps,
             lessons,
             pipeline_dict,
+            enhancement_dict,
         )
