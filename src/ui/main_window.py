@@ -685,32 +685,31 @@ class MainWindow(tk.Tk):
 
     def on_project_select(self, _event=None):
         sel = self.projects.curselection()
-        if not sel: return
+        if not sel:
+            return
         row = self.project_rows[sel[0]]
         self.current_slug = row["slug"]
-        self.project_label.configure(text=f"{row['name']}  /  チャットで続けて修正できます")
+        self.project_label.configure(text=row["name"])
         self._load_chat_history()
+        self._sync_starter_visibility()
+        self._set_progress("idle", "会話を続けられます", "修正したいことをそのまま送ってください")
 
     def new_project(self):
-        dialog = tk.Toplevel(self); dialog.title("新規プロジェクト"); dialog.transient(self); dialog.grab_set(); dialog.geometry("430x180")
-        ttk.Label(dialog, text="プロジェクト名", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=18, pady=(18,6))
-        entry = ttk.Entry(dialog); entry.pack(fill="x", padx=18); entry.focus()
-        self._enable_text_editing(entry)
-        def create():
-            name = entry.get().strip()
-            if not name:
-                return
-            slug, _ = self.pm.create(name)
-            dialog.destroy()
-            self.refresh_projects()
-            self.current_slug = slug
-            self.project_label.configure(text=f"選択中: {name} ({slug})")
-            # New projects must be immediately editable without another click.
-            self.instruction.configure(state="normal")
-            self.instruction.focus_force()
-            self.write(f"✓ プロジェクト作成: {name}")
-        entry.bind("<Return>", lambda _e: create())
-        ttk.Button(dialog, text="作成", command=create).pack(pady=18)
+        """Start a blank chat immediately; the first message creates and names the project."""
+        if self._busy:
+            return
+        self.current_slug = None
+        self.projects.selection_clear(0, "end")
+        self.project_label.configure(text="新しいチャット")
+        self.chat_history.configure(state="normal")
+        self.chat_history.delete("1.0", "end")
+        self.chat_history.configure(state="disabled")
+        self._show_empty_chat()
+        self.instruction.configure(state="normal")
+        self.instruction.delete("1.0", "end")
+        self._sync_starter_visibility()
+        self._set_progress("idle", "準備完了", "何を作りたいか、そのまま話してください")
+        self.instruction.focus_force()
 
     def rename_project(self):
         p = self._current()
@@ -737,7 +736,7 @@ class MainWindow(tk.Tk):
             self.pm.rename(self.current_slug, name)
             dialog.destroy()
             self.refresh_projects()
-            self.project_label.configure(text=f"選択中: {name} ({self.current_slug})")
+            self.project_label.configure(text=name)
             self.instruction.configure(state="normal")
             self.instruction.focus_force()
             self.write(f"✓ プロジェクト名変更: {name}")
@@ -783,6 +782,7 @@ class MainWindow(tk.Tk):
         if not rows:
             self._show_empty_chat()
         self.chat_history.see("end")
+        self._sync_starter_visibility()
 
     def _ensure_chat_project(self, first_message: str):
         if self.current_slug:
@@ -791,7 +791,7 @@ class MainWindow(tk.Tk):
         slug, _ = self.pm.create(name)
         self.refresh_projects()
         self.current_slug = slug
-        self.project_label.configure(text=f"{name}  /  AIと制作中")
+        self.project_label.configure(text=name)
         # Select the newly created row when possible.
         for i, row in enumerate(self.project_rows):
             if row["slug"] == slug:
@@ -802,19 +802,33 @@ class MainWindow(tk.Tk):
         self.write(f"✓ 新しいアプリを自動作成: {name}")
         return self._current()
 
+    def _progress_from_core(self, stage: str, message: str):
+        titles = {
+            "understand": "要件を確認中",
+            "plan": "設計中",
+            "build": "アプリを作成中",
+            "design": "デザインを確認中",
+            "test": "自動テスト中",
+            "done": "確認完了",
+            "issue": "確認が必要です",
+        }
+        self.after(0, lambda: self._set_progress(stage, titles.get(stage, "作業中"), message))
+
     def run_ai(self):
         if self._busy:
             return
         text = self.instruction.get("1.0", "end").strip()
         if not text:
-            self.activity_var.set("メッセージを入力してください")
+            self._set_progress("idle", "メッセージを入力してください", "作りたいものや直したいことを書いて送信してください")
             self.instruction.focus_force()
             return
 
-        self._set_busy(True, "AIが内容を確認しています…")
+        self._set_busy(True, "内容を確認しています")
+        self._set_progress("understand", "要件を確認中", "メッセージの内容を読み取っています")
         try:
             p = self._ensure_chat_project(text)
             if not p:
+                self._set_busy(False)
                 return
             path = WORKSPACE_DIR / self.current_slug
             has_generated = (path / "app_spec.json").exists()
@@ -829,59 +843,88 @@ class MainWindow(tk.Tk):
 
             if decision.action == "ask":
                 self.write("AIが必要情報を確認中")
-                self.activity_var.set("あなたの返事を待っています")
+                self._set_progress("understand", "あなたの返事待ち", decision.message)
+                self._set_busy(False)
+                self.instruction.focus_force()
                 return
 
             if decision.action == "explain":
                 spec_path = path / "app_spec.json"
                 if not spec_path.exists():
                     self._append_chat("assistant", "まだ生成前なので、まずアプリを作成してから説明します。")
-                    self.activity_var.set("説明できる生成物がまだありません")
-                    return
-                from ..core.app_spec import AppSpec
-                raw = json.loads(spec_path.read_text(encoding="utf-8"))
-                spec = AppSpec(**raw)
-                files = [x.name for x in path.iterdir() if x.is_file()]
-                explanation = self.learning_coach.explain(spec, files)
-                self._append_chat("assistant", explanation)
-                self.activity_var.set("説明しました")
+                    self._set_progress("idle", "まだ生成前です", "先に作りたいアプリを送ってください")
+                else:
+                    from ..core.app_spec import AppSpec
+                    raw = json.loads(spec_path.read_text(encoding="utf-8"))
+                    spec = AppSpec(**raw)
+                    files = [x.name for x in path.iterdir() if x.is_file()]
+                    explanation = self.learning_coach.explain(spec, files)
+                    self._append_chat("assistant", explanation)
+                    self._set_progress("done", "説明しました", "続けて質問や修正を送れます")
+                self._set_busy(False)
+                self.instruction.focus_force()
                 return
 
-            self.activity_var.set("設計 → 作成 → デザイン審査 → テスト中…")
-            self.write("AI: 設計 → 生成 → Design審査 → テストを実行中")
-            self.update_idletasks()
-            result = self.core.execute(p["name"], self.current_slug, path, decision.instruction or text)
-            self._append_chat("assistant", result.message)
-            self.write(("✓ " if result.ok else "⚠ ") + result.message)
-            if result.plan:
-                spec = result.plan["spec"]
-                self.write(f"仕様: {spec['app_type']} / {', '.join(spec['targets'])}")
-            for t in result.tests:
-                self.write(f"{'PASS' if t.passed else 'FAIL'} {t.name}: {t.detail}")
-            if result.design_review:
-                self.write(
-                    f"Design AI: {result.design_review.score}/100 "
-                    f"{'PASS' if result.design_review.passed else '要改善'}"
-                )
-            blockers = result.capability_gaps or []
-            if blockers:
-                self.write("未完了項目:")
-                for gap in blockers[:8]:
-                    self.write(f"・{gap.reason} / 根拠: {gap.evidence} / 次: {gap.next_step}")
-            if self.learning_mode.get() and result.plan:
-                from ..core.app_spec import AppSpec
-                spec = AppSpec(**result.plan["spec"])
-                explanation = self.learning_coach.explain(spec, [f.name for f in result.files])
-                self._append_chat("assistant", explanation)
-            self.activity_var.set("完成候補を確認できます" if result.ok else "要確認の項目があります")
+            self.write("AI: 要件確認 → 設計 → 作成 → デザイン確認 → テスト")
+            learning_enabled = bool(self.learning_mode.get())
+            instruction = decision.instruction or text
+            self._build_thread = threading.Thread(
+                target=self._run_build_background,
+                args=(p, path, instruction, learning_enabled),
+                daemon=True,
+            )
+            self._build_thread.start()
         except Exception as exc:
-            message = f"送信処理でエラーが起きました。\n{type(exc).__name__}: {exc}"
-            self._append_chat("assistant", message)
-            self.write("⚠ " + message.replace("\n", " / "))
-            self.activity_var.set("エラーが発生しました")
-        finally:
-            self._set_busy(False, self.activity_var.get())
-            self.instruction.focus_force()
+            self._handle_build_error(exc)
+
+    def _run_build_background(self, project: dict, path, instruction: str, learning_enabled: bool):
+        try:
+            result = self.core.execute(
+                project["name"], self.current_slug, path, instruction,
+                progress=self._progress_from_core,
+            )
+            self.after(0, lambda: self._finish_build(result, learning_enabled))
+        except Exception as exc:
+            self.after(0, lambda exc=exc: self._handle_build_error(exc))
+
+    def _finish_build(self, result, learning_enabled: bool):
+        self._append_chat("assistant", result.message)
+        self.write(("✓ " if result.ok else "⚠ ") + result.message)
+        if result.plan:
+            spec = result.plan["spec"]
+            self.write(f"仕様: {spec['app_type']} / {', '.join(spec['targets'])}")
+        for t in result.tests:
+            self.write(f"{'PASS' if t.passed else 'FAIL'} {t.name}: {t.detail}")
+        if result.design_review:
+            self.write(
+                f"Design AI: {result.design_review.score}/100 "
+                f"{'PASS' if result.design_review.passed else '要改善'}"
+            )
+        blockers = result.capability_gaps or []
+        if blockers:
+            self.write("未完了項目:")
+            for gap in blockers[:8]:
+                self.write(f"・{gap.reason} / 根拠: {gap.evidence} / 次: {gap.next_step}")
+        if learning_enabled and result.plan:
+            from ..core.app_spec import AppSpec
+            spec = AppSpec(**result.plan["spec"])
+            explanation = self.learning_coach.explain(spec, [f.name for f in result.files])
+            self._append_chat("assistant", explanation)
+
+        if result.ok:
+            self._set_progress("done", "作成とテストが完了", "「アプリを確認」で実際の画面を開けます")
+        else:
+            self._set_progress("issue", "確認が必要です", "「テスト結果」を開くと原因を確認できます")
+        self._set_busy(False)
+        self.instruction.focus_force()
+
+    def _handle_build_error(self, exc: Exception):
+        message = f"処理中にエラーが起きました。\n{type(exc).__name__}: {exc}"
+        self._append_chat("assistant", message)
+        self.write("⚠ " + message.replace("\n", " / "))
+        self._set_progress("issue", "エラーが発生しました", "「テスト結果」を開くと詳細を確認できます")
+        self._set_busy(False)
+        self.instruction.focus_force()
 
     def vault_save(self):
         p = self._current()
