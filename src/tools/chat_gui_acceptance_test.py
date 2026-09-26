@@ -34,23 +34,41 @@ def main() -> int:
             if "こんにちは" not in greeting_text or "作りたい" not in greeting_text:
                 raise AssertionError("natural opening conversation was not rendered")
 
-            # Direct creation from a fresh blank chat must also work and preserve the user's message.
+            # Direct creation from a fresh blank chat must gather/review requirements first.
             app.new_project(); app.update()
-            app.instruction.insert("1.0", "WebでおしゃれなToDoアプリを作って。ログインとデータ保存も必要")
+            app.instruction.insert(
+                "1.0",
+                "営業担当が案件ごとにタスクを登録して期限と完了状況を管理するWebのToDoアプリを作りたい。ログインとデータ保存が必要。最先端で洗練されたデザイン。"
+            )
             app.instruction.focus_force(); app.update()
             if not app.instruction.bind("<Return>"):
                 raise AssertionError("Enter send binding is missing")
             result = app._composer_submit()
             if result != "break":
                 raise AssertionError("Enter handler did not consume the key event")
-            _wait_idle(app)
+            app.update()
+
             if not app.current_slug:
-                raise AssertionError("chat did not auto-create a project")
+                raise AssertionError("project was not created for requirement collection")
             project = WORKSPACE_DIR / app.current_slug
+            if (project / "app_spec.json").exists():
+                raise AssertionError("app generated before explicit approval")
+            if not app.build_confirm_button.winfo_manager():
+                raise AssertionError("explicit build approval control was not shown")
+            if app.progress_title_var.get() != "設計内容を確認してください":
+                raise AssertionError("review state was not surfaced")
+
+            chat_text = app.chat_history.get("1.0", "end-1c")
+            if "この内容で作る" not in chat_text:
+                raise AssertionError("design brief review was not rendered")
+
+            # Only the explicit approval may begin generation.
+            app.build_confirm_button.invoke()
+            _wait_idle(app)
             if not (project / "app_spec.json").is_file():
-                raise AssertionError("chat did not generate app spec")
+                raise AssertionError("approved chat did not generate app spec")
             if not (project / "server.py").is_file():
-                raise AssertionError("chat did not generate functional server")
+                raise AssertionError("approved chat did not generate functional server")
             chat_text = app.chat_history.get("1.0", "end-1c")
             if "あなた" not in chat_text or "AI" not in chat_text:
                 raise AssertionError("chat history not rendered")
