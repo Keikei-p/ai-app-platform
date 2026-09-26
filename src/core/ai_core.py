@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 import json
 from .safety import SafetyGate, SafetyDecision
 from .permissions import PermissionEngine
@@ -45,7 +46,23 @@ class AICore:
         self.capability = CapabilityAssessor()
         self.memory = DevelopmentMemory()
 
-    def execute(self, project_name: str, slug: str, project_dir: Path, instruction: str) -> CoreResult:
+    def execute(
+        self,
+        project_name: str,
+        slug: str,
+        project_dir: Path,
+        instruction: str,
+        progress: Callable[[str, str], None] | None = None,
+    ) -> CoreResult:
+        def emit(stage: str, message: str) -> None:
+            if progress is not None:
+                try:
+                    progress(stage, message)
+                except Exception:
+                    # Progress reporting must never break the build pipeline.
+                    pass
+
+        emit("understand", "内容と安全性を確認しています")
         job_id = create_job(slug, instruction)
         decision = self.safety.check(instruction)
         log_event("safety.checked", json.dumps({"level": decision.level, "reasons": decision.reasons}, ensure_ascii=False), slug, "safety-gate")
@@ -58,12 +75,14 @@ class AICore:
             finish_job(job_id, "review_required", msg)
             return CoreResult(False, msg, decision, [], [], None, [], None, [], [])
 
+        emit("plan", "要件を整理して設計しています")
         lessons = self.memory.lessons_for(instruction)
         enriched = instruction
         if lessons:
             enriched += "\n過去の改善学習: " + " / ".join(lessons)
 
         plan = self.planner.plan(project_name, slug, enriched, decision.level)
+        emit("build", "アプリのコードと画面を作成しています")
         self.projects.snapshot(slug, "before-ai-change")
         self.vault.save(slug, "AI変更前", actor="ai-core", reason=instruction, kind="auto-before-ai")
         spec_path = plan.spec.save(project_dir)
@@ -71,6 +90,7 @@ class AICore:
         files += self.generator.generate_from_spec(project_dir, plan.spec)
         files += self.mobile.generate(project_dir, plan.spec)
 
+        emit("design", "見やすさと操作性を確認しています")
         design_review = self.design.review(project_dir)
         files.append(self.design.save(project_dir, design_review))
         log_event("design.reviewed", json.dumps(design_review.to_dict(), ensure_ascii=False), slug, "design-ai")
@@ -89,6 +109,7 @@ class AICore:
         files.append(risk_path)
         log_event("risk.assessed", json.dumps(risk_items, ensure_ascii=False), slug, "risk-engine")
 
+        emit("test", "自動テストで動作を確認しています")
         test_results = self.tests.run(project_dir)
         passed = all(t.passed for t in test_results)
         test_summary = [{"name": t.name, "passed": t.passed, "detail": t.detail} for t in test_results]
@@ -109,5 +130,6 @@ class AICore:
             message = "生成は完了しましたが、自動テストに失敗しました。完成扱いにはしません。"
 
         final_ok = passed and design_ok
+        emit("done" if final_ok else "issue", "確認が完了しました" if final_ok else "確認が必要な項目があります")
         finish_job(job_id, "completed" if final_ok else "test_failed", message)
         return CoreResult(final_ok, message, decision, files, test_results, plan.to_dict(), risk_items, design_review, gaps, lessons)
