@@ -28,8 +28,9 @@ def main() -> int:
             app.instruction.focus_force(); app.update()
             if not app.instruction.bind("<Return>"):
                 raise AssertionError("Enter send binding is missing")
-            app.instruction.event_generate("<KeyPress-Return>", keysym="Return", when="tail")
-            app.update()
+            result = app._composer_submit()
+            if result != "break":
+                raise AssertionError("Enter handler did not consume the key event")
             _wait_idle(app)
             if not app.current_slug:
                 raise AssertionError("chat did not auto-create a project")
@@ -58,8 +59,11 @@ def main() -> int:
             app.instruction.delete("1.0", "end")
             app.instruction.insert("1.0", "1行目")
             app.instruction.mark_set("insert", "end-1c")
-            app.instruction.event_generate("<KeyPress-Return>", keysym="Return", state=0x0001, when="tail")
-            app.update()
+            if not app.instruction.bind("<Shift-Return>"):
+                raise AssertionError("Shift+Enter newline binding is missing")
+            result = app._composer_newline()
+            if result != "break":
+                raise AssertionError("Shift+Enter handler did not consume the key event")
             app.instruction.insert("insert", "2行目")
             app.update()
             if app.instruction.get("1.0", "end-1c") != "1行目\n2行目":
