@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import queue
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -44,8 +45,10 @@ class MainWindow(tk.Tk):
         self.current_slug: str | None = None
         self._busy = False
         self._build_thread = None
+        self._ui_queue = queue.Queue()
         self.details_visible = False
         self._build()
+        self.after(50, self._drain_ui_queue)
         self.refresh_projects()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(350, self._startup_readiness)
@@ -393,6 +396,11 @@ class MainWindow(tk.Tk):
                 text="作業中…" if busy else "送信"
             )
         self.instruction.configure(state="disabled" if busy else "normal")
+        try:
+            self.projects.configure(state="disabled" if busy else "normal")
+            self.new_app_button.configure(state="disabled" if busy else "normal")
+        except (tk.TclError, AttributeError):
+            pass
         if message:
             self.activity_var.set(message)
         self.update_idletasks()
@@ -803,6 +811,9 @@ class MainWindow(tk.Tk):
         return self._current()
 
     def _progress_from_core(self, stage: str, message: str):
+        self._ui_queue.put(("progress", stage, message))
+
+    def _drain_ui_queue(self):
         titles = {
             "understand": "要件を確認中",
             "plan": "設計中",
@@ -812,7 +823,25 @@ class MainWindow(tk.Tk):
             "done": "確認完了",
             "issue": "確認が必要です",
         }
-        self.after(0, lambda: self._set_progress(stage, titles.get(stage, "作業中"), message))
+        try:
+            while True:
+                item = self._ui_queue.get_nowait()
+                kind = item[0]
+                if kind == "progress":
+                    _, stage, message = item
+                    self._set_progress(stage, titles.get(stage, "作業中"), message)
+                elif kind == "result":
+                    _, result, learning_enabled = item
+                    self._finish_build(result, learning_enabled)
+                elif kind == "error":
+                    _, exc = item
+                    self._handle_build_error(exc)
+        except queue.Empty:
+            pass
+        try:
+            self.after(50, self._drain_ui_queue)
+        except tk.TclError:
+            pass
 
     def run_ai(self):
         if self._busy:
@@ -868,24 +897,25 @@ class MainWindow(tk.Tk):
             self.write("AI: 要件確認 → 設計 → 作成 → デザイン確認 → テスト")
             learning_enabled = bool(self.learning_mode.get())
             instruction = decision.instruction or text
+            build_slug = self.current_slug
             self._build_thread = threading.Thread(
                 target=self._run_build_background,
-                args=(p, path, instruction, learning_enabled),
+                args=(p, build_slug, path, instruction, learning_enabled),
                 daemon=True,
             )
             self._build_thread.start()
         except Exception as exc:
             self._handle_build_error(exc)
 
-    def _run_build_background(self, project: dict, path, instruction: str, learning_enabled: bool):
+    def _run_build_background(self, project: dict, slug: str, path, instruction: str, learning_enabled: bool):
         try:
             result = self.core.execute(
-                project["name"], self.current_slug, path, instruction,
+                project["name"], slug, path, instruction,
                 progress=self._progress_from_core,
             )
-            self.after(0, lambda: self._finish_build(result, learning_enabled))
+            self._ui_queue.put(("result", result, learning_enabled))
         except Exception as exc:
-            self.after(0, lambda exc=exc: self._handle_build_error(exc))
+            self._ui_queue.put(("error", exc))
 
     def _finish_build(self, result, learning_enabled: bool):
         self._append_chat("assistant", result.message)
