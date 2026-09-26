@@ -1,10 +1,14 @@
 from __future__ import annotations
 import shutil
+import sys
 import uuid
 from pathlib import Path
 from src.core.ai_core import AICore
 from src.core.project_manager import ProjectManager
 from src.core.database import delete_project_record
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 if __name__ == "__main__":
     name = "Smoke Test " + uuid.uuid4().hex[:8]
