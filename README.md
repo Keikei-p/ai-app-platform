@@ -27,3 +27,13 @@ v0.5.0 generates Android/iOS Expo/React Native source and validates the project 
 Windows: `START.bat`
 
 Validation: `CHECK.bat`
+
+## Git workflow
+
+This repository is the source of truth for AI App Platform program code.
+
+- `main`: stable and tested
+- `develop`: active integration
+- `feature/*`: larger isolated changes
+
+Runtime user data, generated projects, logs, backups, credentials, API keys, certificates and signing keys are not stored in Git. Normal development does not create a new ZIP or `.aipupdate` file for every change. Release artifacts are produced only from verified version tags.

@@ -4,7 +4,9 @@ cd /d "%~dp0"
 call :find_python
 if not defined PY goto :no_python
 
-echo AI App Platform v0.4.8
+set "APP_VERSION=unknown"
+if exist VERSION set /p APP_VERSION=<VERSION
+echo AI App Platform v%APP_VERSION%
 echo Running startup checks...
 %PY% -m src.tools.preflight || goto :failed
 %PY% -m unittest discover -s tests -q || goto :failed
