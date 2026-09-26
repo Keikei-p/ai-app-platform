@@ -213,6 +213,35 @@ class GenerationPipeline:
             })
         return rows
 
+    @staticmethod
+    def repair_feedback(report: PipelineReport, design_findings: list[str] | None = None) -> str:
+        """Return bounded, non-secret quality feedback for one automatic repair attempt."""
+        lines: list[str] = []
+        failed_tests = [x for x in report.test_results if not x.get("passed")]
+        if failed_tests:
+            lines.append("FAILED TESTS:")
+            for row in failed_tests[:12]:
+                detail = str(row.get("detail") or "")[:500]
+                lines.append(f"- {row.get('name', 'unknown')}: {detail}")
+        if design_findings:
+            lines.append("DESIGN FINDINGS:")
+            for finding in design_findings[:12]:
+                lines.append(f"- {str(finding)[:500]}")
+        blocking_security = [x for x in report.security.findings if x.blocking]
+        if blocking_security:
+            lines.append("SECURITY FINDINGS:")
+            for finding in blocking_security[:12]:
+                lines.append(
+                    f"- {finding.key} in {finding.path}: {finding.detail}"
+                )
+        if not lines:
+            lines.append("No code-repairable quality failure was identified.")
+        lines.append(
+            "Fix only the application source needed for these findings. "
+            "Do not weaken tests, security gates, approval checks, or platform metadata."
+        )
+        return "\n".join(lines)
+
     def evaluate(
         self,
         project_dir: Path,
