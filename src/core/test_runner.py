@@ -94,6 +94,48 @@ class ProjectTestRunner:
                 except Exception as exc:
                     results.append(TestResult("server_runtime", False, f"compile error: {exc}"))
 
+        if spec.get("app_type") == "social_automation" or "social_publish" in spec.get("features", []):
+            social_needed = [
+                "social_runtime.py",
+                "server.py",
+                "social_provider_contract.json",
+                "SOCIAL_AUTOMATION.md",
+            ]
+            missing_social = [x for x in social_needed if not (project_dir / x).exists()]
+            results.append(
+                TestResult(
+                    "social_automation_source",
+                    not missing_social,
+                    "SNS automation runtime present" if not missing_social else "missing: " + ", ".join(missing_social),
+                )
+            )
+            for name in ("social_runtime.py", "server.py"):
+                path = project_dir / name
+                if path.exists():
+                    try:
+                        py_compile.compile(str(path), doraise=True)
+                        results.append(TestResult(f"{name}_compile", True, f"{name} compiles"))
+                    except Exception as exc:
+                        results.append(TestResult(f"{name}_compile", False, f"compile error: {exc}"))
+            contract_path = project_dir / "social_provider_contract.json"
+            if contract_path.exists():
+                try:
+                    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+                    safe_default = (
+                        contract.get("default_mode") == "dry-run"
+                        and contract.get("safety", {}).get("auto_mode_default") is False
+                        and contract.get("safety", {}).get("credentials_persisted") is False
+                    )
+                    results.append(
+                        TestResult(
+                            "social_safe_defaults",
+                            safe_default,
+                            "dry-run/manual approval/no credential persistence" if safe_default else "unsafe social defaults",
+                        )
+                    )
+                except Exception as exc:
+                    results.append(TestResult("social_safe_defaults", False, f"invalid social contract: {exc}"))
+
         if "windows" in spec.get("targets", []):
             windows_dir = project_dir / "windows"
             needed_windows = ["launcher.py", "package_manifest.json"]
