@@ -1,10 +1,13 @@
-# AI App Platform v0.5.1
+# AI App Platform v0.5.2
 
 AI App Platform is a local-first app-building partner. The main experience is now conversation-first: describe the app, answer only the missing questions, let the platform generate/test it, then continue the same chat to request corrections.
 
-## v0.5.1 milestone
+## v0.5.2 milestone
 
-- ChatGPT-style conversation-first desktop UI: the chat is the main workspace, while project/history/quality controls stay secondary.
+- ChatGPT-style conversation-first desktop UI: neutral sidebar, spacious chat, clear composer, and secondary controls kept out of the main flow.
+- Live build progress: requirement review → design → generation → design review → automated tests → completion is visible while work runs in the background.
+- Instant new chat: opening a new chat no longer forces a project-name dialog; the first message creates and names the project automatically.
+- Clearer actions: labels such as "アプリを確認", "テスト結果", "履歴・復元", and "設定・診断" describe exactly what each control does.
 - Reliable composer controls: Enter sends, Shift+Enter creates a new line, and the send button shows busy/error state clearly.
 - Chat-first project creation: a first message can create the project automatically.
 - Requirement collection: target platform and design direction are asked only when missing.
