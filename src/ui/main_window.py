@@ -316,11 +316,17 @@ class MainWindow(tk.Tk):
         self.send_button.pack(side="bottom")
 
         footer = tk.Frame(composer_area, bg="#FFFFFF")
-        footer.pack(fill="x", pady=(6, 0))
-        tk.Label(footer, text="Enterで送信  ·  Shift+Enterで改行",
-                 bg="#FFFFFF", fg="#A0A0A0", font=(self.ui_font_family, 8)).pack(side="left")
-        tk.Label(footer, text="生成物は自動テスト後に「完成候補」として表示します",
-                 bg="#FFFFFF", fg="#A0A0A0", font=(self.ui_font_family, 8)).pack(side="right")
+        footer.pack(fill="x", pady=(7, 0))
+        tk.Label(
+            footer, text="Enterで送信  ·  Shift+Enterで改行",
+            bg="#FFFFFF", fg="#A0A0A0", font=(self.ui_font_family, 8)
+        ).pack(side="left")
+        self.build_confirm_button = ttk.Button(
+            footer, text="この内容で作る  →", style="Primary.TButton",
+            command=self._confirm_build
+        )
+        self.build_confirm_button.pack(side="right")
+        self.build_confirm_button.pack_forget()
 
         # Advanced information stays hidden unless requested.
         self.details_panel = tk.Frame(workspace, bg="#F7F7F8", width=330)
@@ -365,6 +371,24 @@ class MainWindow(tk.Tk):
             self.details_panel.pack(side="right", fill="y", padx=(8, 0))
             self.details_visible = True
             self.details_button.configure(text="テスト結果を閉じる")
+
+    def _set_build_confirmation(self, visible: bool):
+        if not hasattr(self, "build_confirm_button"):
+            return
+        if visible:
+            if not self.build_confirm_button.winfo_manager():
+                self.build_confirm_button.pack(side="right")
+        else:
+            self.build_confirm_button.pack_forget()
+
+    def _confirm_build(self):
+        if self._busy:
+            return
+        self.instruction.configure(state="normal")
+        self.instruction.delete("1.0", "end")
+        self.instruction.insert("1.0", "この内容で作る")
+        self._update_placeholder()
+        self.run_ai()
 
     def _make_prompt_card(self, parent, title: str, subtitle: str, prompt: str):
         card = tk.Frame(
@@ -793,7 +817,12 @@ class MainWindow(tk.Tk):
         self.project_label.configure(text=row["name"])
         self._load_chat_history()
         self._sync_starter_visibility()
-        self._set_progress("idle", "会話を続けられます", "修正したいことをそのまま送ってください")
+        state = self.chat_partner.state(WORKSPACE_DIR / self.current_slug)
+        self._set_build_confirmation(bool(state.get("awaiting_confirmation")))
+        if state.get("awaiting_confirmation"):
+            self._set_progress("understand", "設計内容を確認してください", "良ければ「この内容で作る」。違えば修正内容を送ってください")
+        else:
+            self._set_progress("idle", "会話を続けられます", "修正したいことをそのまま送ってください")
 
     def new_project(self):
         """Start a blank chat immediately; the first message creates and names the project."""
@@ -806,6 +835,7 @@ class MainWindow(tk.Tk):
         self.chat_history.delete("1.0", "end")
         self.chat_history.configure(state="disabled")
         self._show_empty_chat()
+        self._set_build_confirmation(False)
         self.instruction.configure(state="normal")
         self.instruction.delete("1.0", "end")
         self._sync_starter_visibility()
