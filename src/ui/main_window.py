@@ -192,6 +192,14 @@ class MainWindow(tk.Tk):
         )
         self.activity_label.pack(anchor="w", pady=(2, 0))
 
+        self.compact_status_var = tk.StringVar(value="準備完了")
+        self.compact_status_label = tk.Label(
+            header, textvariable=self.compact_status_var,
+            bg="#F3F4F6", fg="#4B5563",
+            font=(self.ui_font_semibold, 8, "bold"),
+            padx=9, pady=5
+        )
+
         header_right = tk.Frame(header, bg="#FFFFFF")
         self.header_right = header_right
         header_right.pack(side="right", padx=(8, 18), pady=12)
@@ -571,9 +579,13 @@ class MainWindow(tk.Tk):
         if low_height:
             if self.activity_label.winfo_manager():
                 self.activity_label.pack_forget()
+            if not self.compact_status_label.winfo_manager():
+                self.compact_status_label.pack(side="right", padx=(4, 12), pady=10)
             self.header.configure(height=48)
             self.project_label.pack_configure(pady=(12, 0))
         else:
+            if self.compact_status_label.winfo_manager():
+                self.compact_status_label.pack_forget()
             if not self.activity_label.winfo_manager():
                 self.activity_label.pack(anchor="w", pady=(2, 0))
             self.header.configure(height=62)
@@ -581,6 +593,10 @@ class MainWindow(tk.Tk):
 
         if compact:
             self.history_wrap.grid_configure(padx=(14, 8), pady=(4, 0))
+            self.chat_history.tag_configure("user_label", lmargin1=70, rmargin=8)
+            self.chat_history.tag_configure("user", lmargin1=70, lmargin2=70, rmargin=8)
+            self.chat_history.tag_configure("assistant_label", lmargin1=8, rmargin=70)
+            self.chat_history.tag_configure("assistant", lmargin1=8, lmargin2=8, rmargin=70)
             self.composer_area.grid_configure(padx=(14, 10), pady=(4, 10))
             if self.details_visible:
                 self.details_panel.pack_forget()
@@ -589,6 +605,10 @@ class MainWindow(tk.Tk):
         else:
             self.history_wrap.grid_configure(padx=(56, 34), pady=(8, 0))
             self.composer_area.grid_configure(padx=(72, 54), pady=(4, 18))
+            self.chat_history.tag_configure("user_label", lmargin1=155, rmargin=12)
+            self.chat_history.tag_configure("user", lmargin1=155, lmargin2=155, rmargin=12)
+            self.chat_history.tag_configure("assistant_label", lmargin1=12, rmargin=155)
+            self.chat_history.tag_configure("assistant", lmargin1=12, lmargin2=12, rmargin=155)
 
         if low_height or very_compact:
             if self.starter_frame.winfo_manager():
@@ -766,6 +786,7 @@ class MainWindow(tk.Tk):
             label.configure(fg=text_color)
         self.progress_title_var.set(title)
         self.progress_detail_var.set(detail)
+        self.compact_status_var.set(title)
         self.activity_var.set(detail)
 
     def _set_busy(self, busy: bool, message: str | None = None):
