@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import importlib.util
 import json
 import shutil
+import subprocess
+import sys
 
 from .app_spec import AppSpec
 from .database import log_event
@@ -14,6 +17,14 @@ class WindowsPackagePreparation:
     prepared: bool
     artifact: str
     files: list[Path]
+
+
+@dataclass(frozen=True)
+class WindowsBuildResult:
+    attempted: bool
+    built: bool
+    artifact: Path | None
+    detail: str
 
 
 class WindowsPackager:
@@ -87,6 +98,60 @@ class WindowsPackager:
         log_event("packager.windows.prepared", f"Prepared {len(copied)} payload files", spec.slug)
         return WindowsPackagePreparation(True, f"artifacts/windows/{spec.slug}.exe", files)
 
+    def build(self, project_dir: Path, spec: AppSpec, timeout: int = 300) -> WindowsBuildResult:
+        if "windows" not in spec.targets:
+            return WindowsBuildResult(False, False, None, "windows target not requested")
+        if importlib.util.find_spec("PyInstaller") is None:
+            return WindowsBuildResult(False, False, None, "PyInstaller is not installed")
+
+        prep = self.prepare(project_dir, spec)
+        artifact = self.artifact_path(project_dir, spec.slug)
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        work = project_dir / ".aiapp-build" / "windows"
+        work.mkdir(parents=True, exist_ok=True)
+        name = "".join(ch for ch in spec.slug if ch.isalnum() or ch in "-_") or "generated-app"
+        cmd = [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            "--onefile",
+            "--windowed",
+            "--name",
+            name,
+            "--distpath",
+            str(artifact.parent),
+            "--workpath",
+            str(work),
+            "--specpath",
+            str(work),
+            "--add-data",
+            f"{project_dir / 'windows' / 'payload'}{';' if sys.platform == 'win32' else ':'}app",
+            str(project_dir / "windows" / "launcher.py"),
+        ]
+        try:
+            completed = subprocess.run(
+                cmd,
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log_event("packager.windows.build_failed", str(exc), spec.slug)
+            return WindowsBuildResult(True, False, None, str(exc))
+
+        built = completed.returncode == 0 and artifact.is_file()
+        detail = "Windows EXE built" if built else (completed.stderr or completed.stdout)[-2000:]
+        log_event(
+            "packager.windows.built" if built else "packager.windows.build_failed",
+            detail,
+            spec.slug,
+        )
+        return WindowsBuildResult(True, built, artifact if built else None, detail)
+
     @staticmethod
     def artifact_path(project_dir: Path, slug: str) -> Path:
         return project_dir / "artifacts" / "windows" / f"{slug}.exe"
@@ -149,6 +214,11 @@ def main() -> int:
     if not source.exists():
         raise RuntimeError("packaged application payload is missing")
     sync_payload(source, target)
+    if "--self-test" in sys.argv:
+        if not (target / "index.html").is_file():
+            raise RuntimeError("index.html missing after payload sync")
+        print("AI_APP_WINDOWS_SELFTEST_OK", flush=True)
+        return 0
     server = server_for(target)
     port = int(server.server_address[1])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
