@@ -1,0 +1,38 @@
+name: Generated Mobile App Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/core/mobile_generator.py"
+      - "src/core/ai_core.py"
+      - "src/core/test_runner.py"
+      - "src/tools/mobile_source_acceptance.py"
+      - ".github/workflows/mobile-generated-app.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/core/mobile_generator.py"
+      - "src/core/ai_core.py"
+      - "src/core/test_runner.py"
+      - "src/tools/mobile_source_acceptance.py"
+      - ".github/workflows/mobile-generated-app.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck-and-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate generated Android/iOS source
+        run: python -m src.tools.mobile_source_acceptance
