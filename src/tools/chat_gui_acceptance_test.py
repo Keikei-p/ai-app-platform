@@ -53,7 +53,7 @@ def main() -> int:
                 raise AssertionError("design review not surfaced")
             if app.progress_title_var.get() != "作成とテストが完了":
                 raise AssertionError("final progress state was not surfaced")
-            if app.send_button.cget("state") != "normal":
+            if app.send_button.instate(["disabled"]):
                 raise AssertionError("send button did not recover after background build")
 
             app.instruction.delete("1.0", "end")
