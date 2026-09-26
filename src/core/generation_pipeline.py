@@ -155,6 +155,48 @@ class GeneratedArtifactSecurityScanner:
                 if pattern.search(text):
                     findings.append(SecurityFinding(key, "high", rel.as_posix(), detail))
 
+            if path.name == "package.json":
+                try:
+                    package = json.loads(text)
+                except json.JSONDecodeError as exc:
+                    findings.append(
+                        SecurityFinding(
+                            "invalid_package_json",
+                            "high",
+                            rel.as_posix(),
+                            f"package.json is invalid JSON: {exc}",
+                        )
+                    )
+                else:
+                    scripts = package.get("scripts") or {}
+                    if isinstance(scripts, dict):
+                        for lifecycle in ("preinstall", "install", "postinstall", "prepare"):
+                            command = scripts.get(lifecycle)
+                            if isinstance(command, str) and command.strip():
+                                findings.append(
+                                    SecurityFinding(
+                                        "package_lifecycle_script",
+                                        "high",
+                                        rel.as_posix(),
+                                        f"npm lifecycle script '{lifecycle}' requires human review",
+                                    )
+                                )
+                    for section in ("dependencies", "devDependencies", "optionalDependencies"):
+                        deps = package.get(section) or {}
+                        if not isinstance(deps, dict):
+                            continue
+                        for name, value in deps.items():
+                            version = str(value).strip().lower()
+                            if version.startswith(("http:", "https:", "git:", "git+", "github:", "file:")):
+                                findings.append(
+                                    SecurityFinding(
+                                        "non_registry_dependency",
+                                        "high",
+                                        rel.as_posix(),
+                                        f"{section} dependency '{name}' uses a non-registry source",
+                                    )
+                                )
+
             if re.search(r"(?i)(?:host|bind)\s*=\s*[\"']0\.0\.0\.0[\"']", text):
                 findings.append(
                     SecurityFinding(
