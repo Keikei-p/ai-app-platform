@@ -25,6 +25,13 @@ class ChatPartnerTests(unittest.TestCase):
         self.assertIsNotNone(consult)
         self.assertIn("一緒に", consult)
 
+    def test_casual_message_is_not_treated_as_project_request(self):
+        chat = ChatPartner()
+        self.assertFalse(chat.is_project_request("今日めっちゃ疲れた"))
+        reply = chat.opening_response("今日めっちゃ疲れた")
+        self.assertIsNotNone(reply)
+        self.assertIn("勝手に生成しません", reply)
+
     def test_chat_collects_requirements_then_requires_explicit_approval(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
