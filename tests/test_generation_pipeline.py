@@ -25,6 +25,38 @@ class GeneratedArtifactSecurityTests(unittest.TestCase):
             self.assertFalse(report.passed)
             self.assertIn("openai_key", {x.key for x in report.findings})
 
+    def test_npm_lifecycle_script_is_blocked(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "package.json").write_text(
+                json.dumps({"name": "demo", "scripts": {"postinstall": "node install.js"}}),
+                encoding="utf-8",
+            )
+            report = GeneratedArtifactSecurityScanner().scan(root)
+            self.assertFalse(report.passed)
+            self.assertIn("package_lifecycle_script", {x.key for x in report.findings})
+
+    def test_non_registry_dependency_is_blocked(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "package.json").write_text(
+                json.dumps({"name": "demo", "dependencies": {"demo-lib": "git+https://example.com/repo.git"}}),
+                encoding="utf-8",
+            )
+            report = GeneratedArtifactSecurityScanner().scan(root)
+            self.assertFalse(report.passed)
+            self.assertIn("non_registry_dependency", {x.key for x in report.findings})
+
+    def test_normal_registry_dependency_is_allowed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "package.json").write_text(
+                json.dumps({"name": "demo", "dependencies": {"react": "19.2.3"}}),
+                encoding="utf-8",
+            )
+            report = GeneratedArtifactSecurityScanner().scan(root)
+            self.assertTrue(report.passed, report.findings)
+
     def test_shell_true_is_blocked(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
