@@ -1,8 +1,15 @@
-# AI App Platform v0.6.1
+# AI App Platform v0.6.2
 
 AI App Platform is a local-first app-building partner. The main experience is now conversation-first: describe the app, answer only the missing questions, let the platform generate/test it, then continue the same chat to request corrections.
 
-## v0.6.1 milestone
+## v0.6.2 milestone
+
+- **Pinned composer layout:** chat history is now the only vertically flexible row; the composer is structurally pinned to the bottom instead of being pushed out by history content.
+- **Pinned send action:** the text area and send button use a two-column layout so long/wide text widgets cannot push the send button outside the visible window.
+- **Verified minimum-size visibility:** GUI acceptance now checks that chat history, input field and send button are physically viewable and inside the client area at 820×520, 700×460 and 680×440.
+- **Compact-first prioritization:** starter cards, progress chrome, subtitles and helper text collapse before the actual conversation/input area.
+- **Compact AI status:** when the full progress card is hidden, a small status indicator remains visible so users can still tell what the AI is doing.
+- **Adaptive message margins:** chat bubbles use tighter margins on narrow windows instead of wasting horizontal space.
 
 - **Real AI chat providers:** optional OpenAI Responses API or Gemini API connections provide actual LLM conversation for chat/consultation instead of pretending rule-based replies are equivalent.
 - **Explicit AI connection state:** the UI clearly shows AI未接続 until a provider and API key are configured.
