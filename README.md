@@ -1,8 +1,17 @@
-# AI App Platform v0.6.0
+# AI App Platform v0.6.1
 
 AI App Platform is a local-first app-building partner. The main experience is now conversation-first: describe the app, answer only the missing questions, let the platform generate/test it, then continue the same chat to request corrections.
 
-## v0.6.0 milestone
+## v0.6.1 milestone
+
+- **Real AI chat providers:** optional OpenAI Responses API or Gemini API connections provide actual LLM conversation for chat/consultation instead of pretending rule-based replies are equivalent.
+- **Explicit AI connection state:** the UI clearly shows AI未接続 until a provider and API key are configured.
+- **Secure Windows key storage:** when remembered on Windows, API keys are stored with Windows DPAPI instead of plaintext settings.
+- **High-contrast composer:** the chat input no longer uses an overlaid placeholder that can cover typed text; the field uses a white surface, dark text, visible caret and selection contrast.
+- **Responsive desktop layout:** at compact widths/heights the sidebar, progress card and secondary controls collapse first while chat history and the composer remain visible.
+- **Compact-window navigation:** a menu control restores access to projects/settings when the sidebar is automatically collapsed.
+- **Single version source:** the application title now reads the repository VERSION file instead of a stale hardcoded version.
+- v0.6.0 approval-first generation remains: casual chat cannot start generation and new builds still require a reviewed brief plus explicit 「この内容で作る」 approval.
 
 - **No accidental generation:** casual chat and vague messages never start app generation.
 - **Explicit build gate:** new apps follow 相談 → 要件整理 → 設計確認 → 「この内容で作る」→ generation. Even a message containing「作って」does not bypass this gate.
