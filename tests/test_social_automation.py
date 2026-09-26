@@ -225,6 +225,51 @@ class SocialGeneratedRuntimeTests(unittest.TestCase):
                     else:
                         os.environ[key] = value
 
+    def test_youtube_provider_builds_authenticated_upload_request(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._generate(root)
+            runtime = self._load_runtime(root)
+            media = root / "media"
+            media.mkdir(exist_ok=True)
+            (media / "video.mp4").write_bytes(b"fake-video")
+            old_token = os.environ.get("YOUTUBE_ACCESS_TOKEN")
+            old_media = runtime.MEDIA_ROOT
+            captured = {}
+            class FakeResponse:
+                def __enter__(self):
+                    return self
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+                def read(self):
+                    return b'{"id":"yt-123"}'
+            try:
+                os.environ["YOUTUBE_ACCESS_TOKEN"] = "token"
+                runtime.MEDIA_ROOT = media
+                def fake_urlopen(request, timeout=0):
+                    captured["url"] = request.full_url
+                    captured["authorization"] = request.headers.get("Authorization")
+                    captured["content_type"] = request.headers.get("Content-type")
+                    captured["body"] = request.data
+                    return FakeResponse()
+                runtime.urllib.request.urlopen = fake_urlopen
+                result = runtime.YouTubeProvider().publish({
+                    "text": "description",
+                    "video_path": "video.mp4",
+                    "metadata": {"title": "Demo", "privacyStatus": "private"},
+                })
+                self.assertEqual(result.remote_id, "yt-123")
+                self.assertIn("https://www.googleapis.com/upload/youtube/v3/videos", captured["url"])
+                self.assertEqual(captured["authorization"], "Bearer token")
+                self.assertIn("multipart/related", captured["content_type"])
+                self.assertIn(b'"title": "Demo"', captured["body"])
+            finally:
+                runtime.MEDIA_ROOT = old_media
+                if old_token is None:
+                    os.environ.pop("YOUTUBE_ACCESS_TOKEN", None)
+                else:
+                    os.environ["YOUTUBE_ACCESS_TOKEN"] = old_token
+
     def test_credential_status_does_not_return_secret_values(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
