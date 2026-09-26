@@ -1371,6 +1371,29 @@ class MainWindow(tk.Tk):
                 f"Design AI: {result.design_review.score}/100 "
                 f"{'PASS' if result.design_review.passed else '要改善'}"
             )
+        if result.ai_enhancement:
+            ai_status = result.ai_enhancement.get("status", "unknown")
+            if ai_status == "applied":
+                self.write(f"AIコード生成: 適用済み / {result.ai_enhancement.get('summary', '')}")
+            elif ai_status == "fallback":
+                self.write(f"AIコード生成: 安全フォールバック / {result.ai_enhancement.get('summary', '')}")
+            elif ai_status == "not_connected":
+                self.write("AIコード生成: 未接続のため安定テンプレートを使用")
+            else:
+                self.write(f"AIコード生成: {ai_status}")
+        if result.pipeline_report:
+            security = result.pipeline_report.get("security") or {}
+            findings = security.get("findings") or []
+            self.write(
+                "品質ゲート: "
+                + ("PASS" if result.pipeline_report.get("preview_ready") else "BLOCKED")
+                + f" / Security {'PASS' if security.get('passed') else 'FAIL'}"
+                + f" / findings {len(findings)}"
+            )
+            self.write(
+                "公開準備: "
+                + ("READY（要明示承認）" if result.pipeline_report.get("release_ready") else "未完了項目あり")
+            )
         blockers = result.capability_gaps or []
         if blockers:
             self.write("未完了項目:")
