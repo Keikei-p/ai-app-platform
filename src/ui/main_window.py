@@ -239,6 +239,7 @@ class MainWindow(tk.Tk):
             self._progress_labels.append(label)
 
         workspace = tk.Frame(main, bg="#FFFFFF")
+        self.workspace = workspace
         workspace.pack(fill="both", expand=True)
 
         chat_column = tk.Frame(workspace, bg="#FFFFFF")
@@ -544,7 +545,7 @@ class MainWindow(tk.Tk):
             if self.progress_card.winfo_manager():
                 self.progress_card.pack_forget()
         elif not self.progress_card.winfo_manager():
-            self.progress_card.pack(fill="x", padx=24, pady=(12, 0), before=self.history_wrap.master)
+            self.progress_card.pack(fill="x", padx=24, pady=(12, 0), before=self.workspace)
 
         if very_compact:
             if self.header_right.winfo_manager():
