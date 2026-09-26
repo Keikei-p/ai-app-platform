@@ -385,6 +385,139 @@ class MainWindow(tk.Tk):
         self.after(180, self._refresh_ai_status)
         self.after(220, lambda: self._apply_responsive_layout(self.winfo_width(), self.winfo_height()))
 
+    def _refresh_ai_status(self):
+        status = self.chat_engine.status()
+        if status.connected:
+            label = "AI: " + ("OpenAI" if status.provider == "openai" else "Gemini")
+        else:
+            label = "AI未接続"
+        if hasattr(self, "ai_button"):
+            self.ai_button.configure(text=label)
+        if hasattr(self, "sidebar_ai_button"):
+            self.sidebar_ai_button.configure(text=label + "  /  接続設定")
+
+    def _open_ai_settings(self):
+        cfg = self.chat_engine.settings()
+        status = self.chat_engine.status()
+        win = tk.Toplevel(self)
+        win.title("AI接続")
+        win.transient(self)
+        win.grab_set()
+        win.geometry("520x390")
+        win.minsize(460, 350)
+        body = tk.Frame(win, bg="#FFFFFF")
+        body.pack(fill="both", expand=True, padx=24, pady=22)
+
+        tk.Label(body, text="AIモデルを接続", bg="#FFFFFF", fg="#111827",
+                 font=(self.ui_font_semibold, 16, "bold")).pack(anchor="w")
+        tk.Label(
+            body,
+            text="OpenAI または Gemini を接続すると、雑談・相談・要件整理を本物のLLMで行えます。\nAPIキーはWindows上ではDPAPIで暗号化して保存します。",
+            bg="#FFFFFF", fg="#6B7280", justify="left", wraplength=455,
+            font=(self.ui_font_family, 9)
+        ).pack(anchor="w", pady=(6, 16))
+
+        tk.Label(body, text="プロバイダー", bg="#FFFFFF", fg="#374151",
+                 font=(self.ui_font_semibold, 9, "bold")).pack(anchor="w")
+        provider_var = tk.StringVar(value=cfg["provider"])
+        provider = ttk.Combobox(body, textvariable=provider_var, state="readonly",
+                                values=["none", "openai", "gemini"])
+        provider.pack(fill="x", pady=(5, 12))
+
+        tk.Label(body, text="モデル", bg="#FFFFFF", fg="#374151",
+                 font=(self.ui_font_semibold, 9, "bold")).pack(anchor="w")
+        model_var = tk.StringVar(value=cfg["model"])
+        model = ttk.Entry(body, textvariable=model_var)
+        model.pack(fill="x", pady=(5, 12))
+
+        tk.Label(body, text="APIキー", bg="#FFFFFF", fg="#374151",
+                 font=(self.ui_font_semibold, 9, "bold")).pack(anchor="w")
+        key_var = tk.StringVar()
+        key = ttk.Entry(body, textvariable=key_var, show="●")
+        key.pack(fill="x", pady=(5, 4))
+        tk.Label(
+            body,
+            text=("接続済み。変更しない場合は空欄のままでOK。" if status.connected else
+                  "ChatGPT/Geminiの通常契約とは別に、各APIのキーが必要です。"),
+            bg="#FFFFFF", fg="#8A8F98", font=(self.ui_font_family, 8)
+        ).pack(anchor="w", pady=(0, 14))
+
+        remember_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(body, text="このWindowsユーザーに暗号化して保存",
+                        variable=remember_var).pack(anchor="w")
+
+        buttons = tk.Frame(body, bg="#FFFFFF")
+        buttons.pack(fill="x", pady=(20, 0))
+
+        def save():
+            try:
+                self.chat_engine.configure(
+                    provider_var.get(),
+                    model_var.get(),
+                    key_var.get().strip(),
+                    remember_key=bool(remember_var.get()),
+                )
+                self._refresh_ai_status()
+                win.destroy()
+                self._set_progress("idle", "AI接続を更新しました", self.chat_engine.status().detail)
+            except Exception as exc:
+                messagebox.showerror("AI接続", str(exc), parent=win)
+
+        ttk.Button(buttons, text="保存", style="Primary.TButton", command=save).pack(side="right")
+        ttk.Button(buttons, text="閉じる", style="Secondary.TButton",
+                   command=win.destroy).pack(side="right", padx=(0, 8))
+
+    def _conversation_history(self) -> list[dict]:
+        if self.current_slug:
+            return self.chat_partner.history(WORKSPACE_DIR / self.current_slug)
+        return list(self._blank_chat_history)
+
+    def _record_chat_message(self, role: str, content: str):
+        if self.current_slug:
+            self.chat_partner.append_external_message(WORKSPACE_DIR / self.current_slug, role, content)
+        else:
+            self._blank_chat_history.append({"role": role, "content": content})
+            self._blank_chat_history = self._blank_chat_history[-100:]
+
+    def _start_ai_conversation(self, text: str):
+        history = self._conversation_history()
+        self.instruction.configure(state="normal")
+        self.instruction.delete("1.0", "end")
+        self._append_chat("user", text)
+        self._record_chat_message("user", text)
+
+        status = self.chat_engine.status()
+        if not status.connected:
+            local = self.chat_partner.opening_response(text) or (
+                "AIモデルがまだ接続されていません。右上の「AI未接続」からOpenAIまたはGeminiを接続すると、"
+                "ここで自然な相談や会話ができます。アプリ制作の要件整理は未接続でも続けられます。"
+            )
+            self._append_chat("assistant", local)
+            self._record_chat_message("assistant", local)
+            self._set_progress("idle", "AI未接続", "AI接続からOpenAIまたはGeminiを設定できます")
+            self.instruction.focus_force()
+            return
+
+        self._set_busy(True, "AIが考えています")
+        self.activity_var.set("AIが返答を考えています…")
+        system_instruction = (
+            "あなたはAI App Platformの会話パートナーです。日本語で自然に会話してください。"
+            "雑談は雑談として返し、ユーザーがアプリ制作を相談している場合も勝手に制作開始を宣言しません。"
+            "要件が曖昧なら整理を手伝い、断定しすぎず、短く分かりやすく答えてください。"
+        )
+        threading.Thread(
+            target=self._run_llm_reply,
+            args=(history, text, system_instruction),
+            daemon=True,
+        ).start()
+
+    def _run_llm_reply(self, history: list[dict], text: str, system_instruction: str):
+        try:
+            reply = self.chat_engine.reply(history, text, system_instruction)
+            self._ui_queue.put(("chat_reply", reply))
+        except Exception as exc:
+            self._ui_queue.put(("chat_error", str(exc)))
+
     def _on_window_resize(self, event):
         if event.widget is not self:
             return
