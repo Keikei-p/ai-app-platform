@@ -34,3 +34,10 @@ v0.6.1 chat update:
 - Optional OpenAI / Gemini real LLM conversation
 - Explicit AI未接続 state until a provider key is configured
 - Approval-first generation from v0.6.0 remains enforced
+
+
+v0.6.2 responsive fix:
+- Chat composer is pinned to the bottom
+- Send button stays visible at compact sizes
+- Chat/history/input visibility is acceptance-tested at 680x440
+- Nonessential UI collapses before the conversation area
