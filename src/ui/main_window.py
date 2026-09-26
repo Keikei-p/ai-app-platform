@@ -197,7 +197,7 @@ class MainWindow(tk.Tk):
         self.progress_title_var = tk.StringVar(value="準備完了")
         self.progress_detail_var = tk.StringVar(value="メッセージを送ると、ここにAIの作業状況が表示されます")
         tk.Label(progress_top, textvariable=self.progress_title_var, bg="#F8F8F9", fg="#202123",
-                 font=("Segoe UI", 10, "bold")).pack(side="left")
+                 font=(self.ui_font_semibold, 10, "bold")).pack(side="left")
         tk.Label(progress_top, textvariable=self.progress_detail_var, bg="#F8F8F9", fg="#8E8E8E",
                  font=(self.ui_font_family, 9)).pack(side="right")
 
