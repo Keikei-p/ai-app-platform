@@ -70,6 +70,7 @@ from typing import Any
 import hashlib
 import json
 import mimetypes
+from contextlib import contextmanager
 import os
 import sqlite3
 import threading
@@ -333,8 +334,20 @@ class SocialStore:
         conn.row_factory = sqlite3.Row
         return conn
 
+    @contextmanager
+    def _connection(self):
+        conn = self._connect()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     def _ensure(self) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.executescript("""
             CREATE TABLE IF NOT EXISTS social_settings(
               key TEXT PRIMARY KEY,
@@ -363,14 +376,14 @@ class SocialStore:
             )
 
     def auto_mode(self) -> bool:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 "SELECT value FROM social_settings WHERE key='auto_mode'"
             ).fetchone()
         return bool(row and row["value"] == "1")
 
     def set_auto_mode(self, enabled: bool) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 "INSERT INTO social_settings(key,value) VALUES('auto_mode',?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -412,7 +425,7 @@ class SocialStore:
             ).hexdigest()
         now = utc_ts()
         status = "queued" if self.auto_mode() else "pending_approval"
-        with self._lock, self._connect() as conn:
+        with self._lock, self._connection() as conn:
             existing = conn.execute(
                 "SELECT * FROM social_posts WHERE idempotency_key=?", (key,)
             ).fetchone()
@@ -445,14 +458,14 @@ class SocialStore:
 
     def list_posts(self, limit: int = 100) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 500))
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 "SELECT * FROM social_posts ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
         return [self._row(row) for row in rows]
 
     def counts(self) -> dict[str, int]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 "SELECT status,COUNT(*) AS n FROM social_posts GROUP BY status"
             ).fetchall()
@@ -463,7 +476,7 @@ class SocialStore:
 
     def approve(self, post_id: int) -> bool:
         now = utc_ts()
-        with self._connect() as conn:
+        with self._connection() as conn:
             cur = conn.execute(
                 "UPDATE social_posts SET status='queued',next_attempt_at=scheduled_at,updated_at=? "
                 "WHERE id=? AND status='pending_approval'",
@@ -473,7 +486,7 @@ class SocialStore:
 
     def cancel(self, post_id: int) -> bool:
         now = utc_ts()
-        with self._connect() as conn:
+        with self._connection() as conn:
             cur = conn.execute(
                 "UPDATE social_posts SET status='cancelled',updated_at=? "
                 "WHERE id=? AND status IN ('pending_approval','queued','retry')",
@@ -483,7 +496,7 @@ class SocialStore:
 
     def retry(self, post_id: int) -> bool:
         now = utc_ts()
-        with self._connect() as conn:
+        with self._connection() as conn:
             cur = conn.execute(
                 "UPDATE social_posts SET status='queued',next_attempt_at=?,last_error='',updated_at=? "
                 "WHERE id=? AND status='failed'",
@@ -493,7 +506,7 @@ class SocialStore:
 
     def claim_due(self) -> dict[str, Any] | None:
         now = utc_ts()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._connection() as conn:
             row = conn.execute(
                 "SELECT * FROM social_posts "
                 "WHERE status IN ('queued','retry') AND scheduled_at<=? AND next_attempt_at<=? "
@@ -514,7 +527,7 @@ class SocialStore:
 
     def mark_posted(self, post_id: int, result: PublishResult) -> None:
         now = utc_ts()
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 "UPDATE social_posts SET status='posted',remote_id=?,last_error='',updated_at=? WHERE id=?",
                 (result.remote_id[:500], now, int(post_id)),
@@ -522,7 +535,7 @@ class SocialStore:
 
     def mark_failed(self, post_id: int, error: str) -> None:
         now = utc_ts()
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 "SELECT attempts FROM social_posts WHERE id=?", (int(post_id),)
             ).fetchone()
