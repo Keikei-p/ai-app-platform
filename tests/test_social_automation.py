@@ -136,6 +136,95 @@ class SocialGeneratedRuntimeTests(unittest.TestCase):
             finally:
                 runtime.MEDIA_ROOT = old_root
 
+    def test_x_provider_builds_official_create_post_request(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._generate(root)
+            runtime = self._load_runtime(root)
+            previous = os.environ.get("X_ACCESS_TOKEN")
+            calls = []
+            try:
+                os.environ["X_ACCESS_TOKEN"] = "token"
+                def fake_json(url, payload, headers=None):
+                    calls.append((url, payload, headers or {}))
+                    return {"data": {"id": "x-123"}}
+                runtime._json_request = fake_json
+                result = runtime.XProvider().publish({"text": "hello"})
+                self.assertEqual(result.remote_id, "x-123")
+                self.assertEqual(calls[0][0], "https://api.x.com/2/tweets")
+                self.assertEqual(calls[0][1], {"text": "hello"})
+                self.assertEqual(calls[0][2]["Authorization"], "Bearer token")
+            finally:
+                if previous is None:
+                    os.environ.pop("X_ACCESS_TOKEN", None)
+                else:
+                    os.environ["X_ACCESS_TOKEN"] = previous
+
+    def test_threads_provider_uses_create_then_publish(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._generate(root)
+            runtime = self._load_runtime(root)
+            old_user = os.environ.get("THREADS_USER_ID")
+            old_token = os.environ.get("THREADS_ACCESS_TOKEN")
+            old_base = os.environ.get("THREADS_GRAPH_BASE")
+            calls = []
+            try:
+                os.environ["THREADS_USER_ID"] = "123"
+                os.environ["THREADS_ACCESS_TOKEN"] = "token"
+                os.environ["THREADS_GRAPH_BASE"] = "https://graph.threads.net/v1.0"
+                def fake_form(url, payload):
+                    calls.append((url, dict(payload)))
+                    return {"id": "creation-1"} if url.endswith("/threads") else {"id": "thread-1"}
+                runtime._form_request = fake_form
+                result = runtime.ThreadsProvider().publish({"text": "hello threads"})
+                self.assertEqual(result.remote_id, "thread-1")
+                self.assertTrue(calls[0][0].endswith("/123/threads"))
+                self.assertEqual(calls[0][1]["media_type"], "TEXT")
+                self.assertTrue(calls[1][0].endswith("/123/threads_publish"))
+                self.assertEqual(calls[1][1]["creation_id"], "creation-1")
+            finally:
+                for key, old in (
+                    ("THREADS_USER_ID", old_user),
+                    ("THREADS_ACCESS_TOKEN", old_token),
+                    ("THREADS_GRAPH_BASE", old_base),
+                ):
+                    if old is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = old
+
+    def test_instagram_provider_uses_media_then_publish(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._generate(root)
+            runtime = self._load_runtime(root)
+            old = {k: os.environ.get(k) for k in (
+                "INSTAGRAM_USER_ID", "INSTAGRAM_ACCESS_TOKEN", "META_GRAPH_API_BASE"
+            )}
+            calls = []
+            try:
+                os.environ["INSTAGRAM_USER_ID"] = "456"
+                os.environ["INSTAGRAM_ACCESS_TOKEN"] = "token"
+                os.environ["META_GRAPH_API_BASE"] = "https://graph.facebook.com/v-current"
+                def fake_form(url, payload):
+                    calls.append((url, dict(payload)))
+                    return {"id": "container-1"} if url.endswith("/media") else {"id": "ig-1"}
+                runtime._form_request = fake_form
+                result = runtime.InstagramProvider().publish(
+                    {"text": "caption", "media_url": "https://example.com/image.jpg"}
+                )
+                self.assertEqual(result.remote_id, "ig-1")
+                self.assertTrue(calls[0][0].endswith("/456/media"))
+                self.assertEqual(calls[0][1]["image_url"], "https://example.com/image.jpg")
+                self.assertTrue(calls[1][0].endswith("/456/media_publish"))
+            finally:
+                for key, value in old.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
     def test_credential_status_does_not_return_secret_values(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
