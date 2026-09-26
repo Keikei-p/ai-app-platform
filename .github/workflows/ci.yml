@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile
+        run: python -m compileall -q src tests
+      - name: Security self-check
+        run: python -m src.tools.security_selfcheck
+      - name: Unit and regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Persistence acceptance
+        run: python -m src.tools.acceptance_test
+      - name: LAN remote acceptance
+        run: python -m src.tools.remote_acceptance_test
+      - name: Production smoke test
+        run: python -m src.tools.smoke_test

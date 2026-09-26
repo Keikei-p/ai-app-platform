@@ -1,0 +1,47 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Build output
+build/
+dist/
+*.spec
+*.aipupdate
+*.zip
+
+# Runtime/user state: never commit personal data, app projects, logs, backups, or local DBs.
+data/
+data/*
+logs/
+logs/*
+backups/
+backups/*
+workspace/
+workspace/*
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets / signing material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials*.json
+secrets*.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
