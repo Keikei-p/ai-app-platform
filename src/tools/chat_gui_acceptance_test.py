@@ -1,7 +1,18 @@
 from __future__ import annotations
 import os
 import tempfile
+import time
 from pathlib import Path
+
+
+def _wait_idle(app, timeout: float = 15.0) -> None:
+    deadline = time.monotonic() + timeout
+    while app._busy and time.monotonic() < deadline:
+        app.update()
+        time.sleep(0.03)
+    app.update()
+    if app._busy:
+        raise AssertionError("chat build did not finish before timeout")
 
 
 def main() -> int:
@@ -16,7 +27,7 @@ def main() -> int:
             app.instruction.insert("1.0", "WebでおしゃれなToDoアプリを作って。ログインとデータ保存も必要")
             app.instruction.focus_force(); app.update()
             app.instruction.event_generate("<Return>")
-            app.update()
+            _wait_idle(app)
             if not app.current_slug:
                 raise AssertionError("chat did not auto-create a project")
             project = WORKSPACE_DIR / app.current_slug
@@ -29,12 +40,17 @@ def main() -> int:
                 raise AssertionError("chat history not rendered")
 
             app.instruction.insert("1.0", "スマホでボタンが押しにくいから直して")
-            app.send_button.invoke(); app.update()
+            app.send_button.invoke()
+            _wait_idle(app)
             memory = Path(td) / "data" / "development_memory.jsonl"
             if not memory.is_file() or "44px" not in memory.read_text(encoding="utf-8"):
                 raise AssertionError("human correction was not learned")
             if "Design AI" not in app.output.get("1.0", "end-1c"):
                 raise AssertionError("design review not surfaced")
+            if app.progress_title_var.get() != "作成とテストが完了":
+                raise AssertionError("final progress state was not surfaced")
+            if app.send_button.cget("state") != "normal":
+                raise AssertionError("send button did not recover after background build")
 
             app.instruction.delete("1.0", "end")
             app.instruction.insert("1.0", "1行目")
