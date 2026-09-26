@@ -164,7 +164,7 @@ class CodingBrain:
                 raise ValueError(f"duplicate proposal path: {raw_path}")
             seen.add(normalized)
 
-            target = project_dir.joinpath(*pure.parts)
+            target = root.joinpath(*pure.parts)
             parent = target.parent
             while parent != root:
                 if parent.exists() and parent.is_symlink():
