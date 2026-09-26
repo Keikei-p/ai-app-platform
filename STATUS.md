@@ -1,6 +1,10 @@
-# Status — v0.6.2
+# Status — v0.6.3
 
 ## Verified in this build
+
+- Category shortcut UI has been removed; the empty chat is conversation-first.
+- The premium welcome panel is visible before the first message and disappears once conversation begins.
+- Preview/test controls are hidden before project creation and appear contextually after a project exists.
 
 - Python source compilation: PASS
 - Security Self-Check: PASS
@@ -15,7 +19,7 @@
 - Casual chat remains separated from build approval; new projects cannot generate before the explicit approval gate.
 - Existing auth/session/CSRF/SQLite CRUD/user-isolation and Design AI checks remain in regression coverage.
 
-## What v0.6.2 changes
+## What v0.6.3 changes
 
 The desktop experience now treats chat as a first-class product surface rather than a form around the generator. Composer layout is grid-pinned so conversation history shrinks first and the input/send controls remain reachable. The input field is high-contrast, compact-window behavior prioritizes conversation, and a real LLM provider can be connected for natural conversation.
 
