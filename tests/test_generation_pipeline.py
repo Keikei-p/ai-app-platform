@@ -1,10 +1,11 @@
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
 from src.core.generation_pipeline import GeneratedArtifactSecurityScanner, GenerationPipeline
-from src.core.test_runner import TestResult
+from src.core.test_runner import ProjectTestRunner, TestResult
 from src.core.preview_runtime import PreviewRuntime
 
 
@@ -172,6 +173,55 @@ class GenerationPipelineTests(unittest.TestCase):
             second = json.loads((root / ".aiapp" / "reports" / "generated_files_manifest.json").read_text(encoding="utf-8"))
             second_hash = next(x["sha256"] for x in second["files"] if x["path"] == "app.js")
             self.assertNotEqual(first_hash, second_hash)
+
+
+class GeneratedSyntaxValidationTests(unittest.TestCase):
+    def test_invalid_generated_json_is_reported(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "project.json").write_text('{"name":"Demo"}', encoding="utf-8")
+            (root / "app_spec.json").write_text(
+                json.dumps({"project_name": "Demo", "targets": ["web"], "features": []}),
+                encoding="utf-8",
+            )
+            (root / "index.html").write_text(
+                '<html><head><meta name="viewport" content="width=device-width"><title>Demo</title></head><body></body></html>',
+                encoding="utf-8",
+            )
+            (root / "styles.css").write_text(
+                "button{min-height:48px}button:focus-visible{outline:2px solid}",
+                encoding="utf-8",
+            )
+            (root / "app.js").write_text("const ok = true;", encoding="utf-8")
+            (root / "manifest.webmanifest").write_text("{broken", encoding="utf-8")
+            (root / "generated_manifest.json").write_text("{}", encoding="utf-8")
+            results = ProjectTestRunner().run(root)
+            row = next(x for x in results if x.name == "manifest.webmanifest_json")
+            self.assertFalse(row.passed)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not available")
+    def test_invalid_javascript_is_reported_when_node_exists(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "project.json").write_text('{"name":"Demo"}', encoding="utf-8")
+            (root / "app_spec.json").write_text(
+                json.dumps({"project_name": "Demo", "targets": ["web"], "features": []}),
+                encoding="utf-8",
+            )
+            (root / "index.html").write_text(
+                '<html><head><meta name="viewport" content="width=device-width"><title>Demo</title></head><body></body></html>',
+                encoding="utf-8",
+            )
+            (root / "styles.css").write_text(
+                "button{min-height:48px}button:focus-visible{outline:2px solid}",
+                encoding="utf-8",
+            )
+            (root / "app.js").write_text("const broken = ;", encoding="utf-8")
+            (root / "manifest.webmanifest").write_text("{}", encoding="utf-8")
+            (root / "generated_manifest.json").write_text("{}", encoding="utf-8")
+            results = ProjectTestRunner().run(root)
+            row = next(x for x in results if x.name == "javascript_syntax")
+            self.assertFalse(row.passed)
 
 
 class PreviewVerificationTests(unittest.TestCase):
