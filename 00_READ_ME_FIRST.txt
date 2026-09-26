@@ -1,4 +1,4 @@
-AI App Platform v0.5.2
+AI App Platform v0.6.3
 
 1) START.bat starts the app
 2) CHECK.bat runs all checks
@@ -41,3 +41,10 @@ v0.6.2 responsive fix:
 - Send button stays visible at compact sizes
 - Chat/history/input visibility is acceptance-tested at 680x440
 - Nonessential UI collapses before the conversation area
+
+
+v0.6.3 design update:
+- Removed app-category shortcut buttons
+- Premium AI-first landing with a single conversational entry point
+- Project-only controls stay hidden until relevant
+- Large progress UI only appears during active work
