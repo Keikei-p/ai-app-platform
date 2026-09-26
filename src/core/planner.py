@@ -35,6 +35,13 @@ class IntentPlanner:
         lowered = text.lower()
         return [key for key, words in table if any(w.lower() in lowered for w in words)]
 
+    @staticmethod
+    def _field(instruction: str, prefix: str) -> str:
+        for line in instruction.splitlines():
+            if line.startswith(prefix):
+                return line[len(prefix):].strip()
+        return ""
+
     def plan(self, project_name: str, slug: str, instruction: str, risk_level: str = "normal") -> AppPlan:
         kinds = self._matches(instruction, self.APP_TYPES)
         app_type = kinds[0] if kinds else "generic"
@@ -48,6 +55,8 @@ class IntentPlanner:
             features=features,
             targets=targets,
             risk_level=risk_level,
+            design_style=self._field(instruction, "デザイン: ") or "modern",
+            usage_context=self._field(instruction, "利用者・主要フロー: "),
         )
         steps = [
             BuildStep("snapshot", "変更前スナップショット"),
