@@ -116,7 +116,7 @@ class MainWindow(tk.Tk):
     def _build(self):
         self._configure_styles()
         self.geometry("1280x820")
-        self.minsize(700, 520)
+        self.minsize(680, 440)
 
         shell = tk.Frame(self, bg="#FFFFFF")
         shell.pack(fill="both", expand=True)
@@ -186,8 +186,11 @@ class MainWindow(tk.Tk):
         )
         self.project_label.pack(anchor="w", pady=(13, 0))
         self.activity_var = tk.StringVar(value="何を作りたいか、そのまま話してください")
-        tk.Label(header_left, textvariable=self.activity_var, bg="#FFFFFF", fg="#8E8E8E",
-                 font=(self.ui_font_family, 9)).pack(anchor="w", pady=(2, 0))
+        self.activity_label = tk.Label(
+            header_left, textvariable=self.activity_var, bg="#FFFFFF", fg="#8E8E8E",
+            font=(self.ui_font_family, 9)
+        )
+        self.activity_label.pack(anchor="w", pady=(2, 0))
 
         header_right = tk.Frame(header, bg="#FFFFFF")
         self.header_right = header_right
@@ -243,11 +246,16 @@ class MainWindow(tk.Tk):
         workspace.pack(fill="both", expand=True)
 
         chat_column = tk.Frame(workspace, bg="#FFFFFF")
+        self.chat_column = chat_column
         chat_column.pack(side="left", fill="both", expand=True)
+        chat_column.grid_columnconfigure(0, weight=1)
+        chat_column.grid_rowconfigure(0, weight=1, minsize=80)
+        chat_column.grid_rowconfigure(1, weight=0)
+        chat_column.grid_rowconfigure(2, weight=0)
 
         history_wrap = tk.Frame(chat_column, bg="#FFFFFF")
         self.history_wrap = history_wrap
-        history_wrap.pack(fill="both", expand=True, padx=(56, 34), pady=(8, 0))
+        history_wrap.grid(row=0, column=0, sticky="nsew", padx=(56, 34), pady=(8, 0))
         scrollbar = ttk.Scrollbar(history_wrap, orient="vertical")
         scrollbar.pack(side="right", fill="y")
         self.chat_history = tk.Text(
@@ -287,7 +295,7 @@ class MainWindow(tk.Tk):
 
         # Starter cards feel like modern AI suggestions and start the conversation immediately.
         self.starter_frame = tk.Frame(chat_column, bg="#FFFFFF")
-        self.starter_frame.pack(fill="x", padx=72, pady=(0, 12))
+        self.starter_frame.grid(row=1, column=0, sticky="ew", padx=72, pady=(0, 12))
         self._starter_cards = []
         suggestions = [
             ("業務アプリ", "仕事の管理をもっと楽に", "営業実績を管理できるWebアプリを作りたい"),
@@ -301,7 +309,7 @@ class MainWindow(tk.Tk):
 
         composer_area = tk.Frame(chat_column, bg="#FFFFFF")
         self.composer_area = composer_area
-        composer_area.pack(fill="x", padx=(72, 54), pady=(4, 18))
+        composer_area.grid(row=2, column=0, sticky="ew", padx=(72, 54), pady=(4, 18))
         self.composer_hint = tk.Label(
             composer_area, text="メッセージ", bg="#FFFFFF", fg="#6B7280",
             font=(self.ui_font_semibold, 9, "bold")
@@ -337,11 +345,13 @@ class MainWindow(tk.Tk):
         self.send_button.pack(side="bottom")
 
         footer = tk.Frame(composer_area, bg="#FFFFFF")
+        self.composer_footer = footer
         footer.pack(fill="x", pady=(7, 0))
-        tk.Label(
+        self.composer_help = tk.Label(
             footer, text="Enterで送信  ·  Shift+Enterで改行",
             bg="#FFFFFF", fg="#A0A0A0", font=(self.ui_font_family, 8)
-        ).pack(side="left")
+        )
+        self.composer_help.pack(side="left")
         self.build_confirm_button = ttk.Button(
             footer, text="この内容で作る  →", style="Primary.TButton",
             command=self._confirm_build
