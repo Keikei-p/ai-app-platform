@@ -24,6 +24,16 @@ def main() -> int:
         app = MainWindow()
         try:
             app.deiconify(); app.update()
+
+            # A normal greeting must start a real conversation without forcing project setup.
+            app.instruction.insert("1.0", "こんにちは")
+            app.run_ai(); app.update()
+            if app.current_slug is not None:
+                raise AssertionError("greeting unexpectedly created a project")
+            greeting_text = app.chat_history.get("1.0", "end-1c")
+            if "こんにちは" not in greeting_text or "作りたい" not in greeting_text:
+                raise AssertionError("natural opening conversation was not rendered")
+
             app.instruction.insert("1.0", "WebでおしゃれなToDoアプリを作って。ログインとデータ保存も必要")
             app.instruction.focus_force(); app.update()
             if not app.instruction.bind("<Return>"):
