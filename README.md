@@ -17,4 +17,26 @@ AI App Platform is a local-first app-building partner. The main experience is no
 
 v0.6.0 improves requirement discipline and the deterministic generator substantially, but the reasoning/generation engine is still primarily **rule-based**. It is not yet using a full LLM as its coding brain. That means it can now avoid premature/low-context builds and create stronger supported app patterns, but truly bespoke ChatGPT-level architecture and implementation still requires the model-provider layer to be upgraded.
 
+## One-app principle
 
+Normal users should not need to open PowerShell, unzip source files, edit code, or switch between many browser tabs. The platform keeps chat, project state, quality status, preview, history and update controls in one desktop application. Advanced details remain available when needed.
+
+## Current mobile status
+
+v0.6.0 generates Android/iOS Expo/React Native source and validates the project structure. It does **not** claim APK/AAB/IPA or store submission is complete until signing/build/store requirements are actually satisfied.
+
+## Run
+
+Windows: `START.bat`
+
+Validation: `CHECK.bat`
+
+## Git workflow
+
+This repository is the source of truth for AI App Platform program code.
+
+- `main`: stable and tested
+- `develop`: active integration
+- `feature/*`: larger isolated changes
+
+Runtime user data, generated projects, logs, backups, credentials, API keys, certificates and signing keys are not stored in Git. Normal development does not create a new ZIP or `.aipupdate` file for every change. Release artifacts are produced only from verified version tags.
