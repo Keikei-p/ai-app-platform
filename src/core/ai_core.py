@@ -35,6 +35,7 @@ class CoreResult:
     pipeline_report: dict | None = None
     ai_enhancement: dict | None = None
     repair_attempts: list[dict] | None = None
+    windows_build: dict | None = None
 
 class AICore:
     """Local-first orchestration core. Models cannot bypass safety, permissions, tests, approval, or audit."""
@@ -268,6 +269,34 @@ class AICore:
                 "coding-brain",
             )
 
+        windows_build_info: dict | None = None
+        if pipeline_report.preview_ready and "windows" in plan.spec.targets:
+            emit("package", "Windows EXEを安全にビルドできるか確認しています")
+            build_result = self.windows_packager.build(project_dir, plan.spec)
+            windows_build_info = {
+                "attempted": build_result.attempted,
+                "built": build_result.built,
+                "artifact": str(build_result.artifact) if build_result.artifact else None,
+                "detail": build_result.detail,
+            }
+            log_event(
+                "packager.windows.build_result",
+                json.dumps(windows_build_info, ensure_ascii=False),
+                slug,
+                "windows-packager",
+            )
+            if build_result.built and build_result.artifact is not None:
+                files.append(build_result.artifact)
+                gaps = self.capability.assess(plan.spec, project_dir)
+                self.capability.save(project_dir, gaps)
+                pipeline_report = self.pipeline.evaluate(
+                    project_dir=project_dir,
+                    test_results=test_results,
+                    design_passed=design_review.passed,
+                    capability_gaps=gaps,
+                    risk_items=risk_items,
+                )
+
         pipeline_dict = pipeline_report.to_dict()
         final_ok = pipeline_report.preview_ready
         if final_ok:
@@ -305,4 +334,5 @@ class AICore:
             pipeline_dict,
             enhancement_dict,
             repair_attempts,
+            windows_build_info,
         )
