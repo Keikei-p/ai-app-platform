@@ -16,6 +16,30 @@ class CapabilityGap:
 class CapabilityAssessor:
     def assess(self, spec: AppSpec, project_dir: Path) -> list[CapabilityGap]:
         gaps: list[CapabilityGap] = []
+        if spec.app_type == "social_automation" or "social_publish" in spec.features:
+            required = ["social_runtime.py", "social_provider_contract.json", "server.py"]
+            missing = [name for name in required if not (project_dir / name).exists()]
+            if missing:
+                gaps.append(
+                    CapabilityGap(
+                        "social_automation_runtime",
+                        "high",
+                        "SNS自動投稿ランタイムが未生成です。",
+                        "不足: " + ", ".join(missing),
+                        "SNS専用ランタイムを再生成する。",
+                    )
+                )
+            else:
+                gaps.append(
+                    CapabilityGap(
+                        "social_provider_credentials",
+                        "info",
+                        "実投稿には各SNS公式APIの認証情報が必要です。",
+                        "認証情報は安全のため生成コードへ保存しません。",
+                        "DRY RUN確認後、利用するSNSの認証情報を環境変数へ設定する。",
+                        False,
+                    )
+                )
         mobile_dir = project_dir / "mobile"
         if any(t in spec.targets for t in ("android", "ios")) and not mobile_dir.exists():
             gaps.append(CapabilityGap("mobile_source", "high", "スマホ向けソースが未生成です。", "mobile/ が存在しません。", "React Native/Expoプロジェクトを生成する。"))
