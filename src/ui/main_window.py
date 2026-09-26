@@ -64,7 +64,7 @@ class MainWindow(tk.Tk):
         self.after(350, self._startup_readiness)
 
     def _configure_styles(self):
-        self.configure(background="#FFFFFF")
+        self.configure(background="#FBFBFC")
         style = ttk.Style(self)
         try:
             style.theme_use("clam")
@@ -106,11 +106,11 @@ class MainWindow(tk.Tk):
                   background=[("active", "#EAEAEA"), ("pressed", "#E1E1E1")])
         style.configure("Sidebar.TButton", font=(self.ui_font_family, 10),
                         padding=(12, 10), relief="flat",
-                        background="#F7F7F8", foreground="#262626", borderwidth=0)
+                        background="#F4F5F7", foreground="#262626", borderwidth=0)
         style.map("Sidebar.TButton",
                   background=[("active", "#ECECEE"), ("pressed", "#E5E5E7")])
         style.configure("Sidebar.TCheckbutton", font=(self.ui_font_family, 9),
-                        background="#F7F7F8", foreground="#666666")
+                        background="#F4F5F7", foreground="#666666")
         style.map("Sidebar.TCheckbutton", background=[("active", "#F7F7F8")])
 
     def _build(self):
@@ -118,39 +118,46 @@ class MainWindow(tk.Tk):
         self.geometry("1280x820")
         self.minsize(680, 440)
 
-        shell = tk.Frame(self, bg="#FFFFFF")
+        shell = tk.Frame(self, bg="#FBFBFC")
         shell.pack(fill="both", expand=True)
         self.shell = shell
 
         # ChatGPT-style neutral sidebar: projects and secondary tools only.
-        sidebar = tk.Frame(shell, bg="#F7F7F8", width=250)
+        sidebar = tk.Frame(shell, bg="#F4F5F7", width=250)
         self.sidebar = sidebar
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
-        brand = tk.Frame(sidebar, bg="#F7F7F8")
-        brand.pack(fill="x", padx=14, pady=(14, 8))
-        tk.Label(brand, text="AI App Platform", bg="#F7F7F8", fg="#202123",
-                 font=(self.ui_font_semibold, 14, "bold")).pack(anchor="w")
-        tk.Label(brand, text=f"v{VERSION}", bg="#F7F7F8", fg="#8E8E8E",
-                 font=(self.ui_font_family, 8)).pack(anchor="w", pady=(2, 0))
+        brand = tk.Frame(sidebar, bg="#F4F5F7")
+        brand.pack(fill="x", padx=14, pady=(15, 9))
+        brand_row = tk.Frame(brand, bg="#F4F5F7")
+        brand_row.pack(fill="x")
+        mark = tk.Canvas(brand_row, width=28, height=28, bg="#F4F5F7", highlightthickness=0)
+        mark.pack(side="left", padx=(0, 9))
+        mark.create_oval(2, 2, 26, 26, fill="#111827", outline="")
+        mark.create_arc(6, 6, 22, 22, start=25, extent=210, style="arc", outline="#8B5CF6", width=3)
+        mark.create_arc(8, 8, 20, 20, start=205, extent=170, style="arc", outline="#22C3A6", width=3)
+        tk.Label(brand_row, text="AI App Platform", bg="#F4F5F7", fg="#17181A",
+                 font=(self.ui_font_semibold, 13, "bold")).pack(side="left")
+        tk.Label(brand, text=f"v{VERSION}", bg="#F4F5F7", fg="#9A9CA1",
+                 font=(self.ui_font_family, 8)).pack(anchor="w", padx=37, pady=(2, 0))
 
         self.new_app_button = ttk.Button(
             sidebar, text="＋  新しいチャット", style="Sidebar.TButton", command=self.new_project
         )
         self.new_app_button.pack(fill="x", padx=10, pady=(4, 12))
 
-        tk.Label(sidebar, text="プロジェクト", bg="#F7F7F8", fg="#8E8E8E",
+        tk.Label(sidebar, text="プロジェクト", bg="#F4F5F7", fg="#8E8E8E",
                  font=(self.ui_font_semibold, 9, "bold")).pack(anchor="w", padx=16, pady=(4, 5))
         self.projects = tk.Listbox(
             sidebar, activestyle="none", borderwidth=0, highlightthickness=0,
-            bg="#F7F7F8", fg="#343541", selectbackground="#ECECEC",
-            selectforeground="#202123", font=(self.ui_font_family, 10), exportselection=False
+            bg="#F4F5F7", fg="#343541", selectbackground="#ECECEC",
+            selectforeground="#17181A", font=(self.ui_font_family, 10), exportselection=False
         )
         self.projects.pack(fill="both", expand=True, padx=8)
         self.projects.bind("<<ListboxSelect>>", self.on_project_select)
 
-        sidebar_bottom = tk.Frame(sidebar, bg="#F7F7F8")
+        sidebar_bottom = tk.Frame(sidebar, bg="#F4F5F7")
         sidebar_bottom.pack(fill="x", padx=10, pady=12)
         ttk.Checkbutton(
             sidebar_bottom, text="学習モード  —  理由も説明", variable=self.learning_mode,
@@ -167,27 +174,27 @@ class MainWindow(tk.Tk):
         )
         self.sidebar_ai_button.pack(fill="x", pady=2)
 
-        main = tk.Frame(shell, bg="#FFFFFF")
+        main = tk.Frame(shell, bg="#FBFBFC")
         self.main_frame = main
         main.pack(side="left", fill="both", expand=True)
 
         # Quiet header: project name + only the two actions users need often.
-        header = tk.Frame(main, bg="#FFFFFF", height=62)
+        header = tk.Frame(main, bg="#FBFBFC", height=62)
         self.header = header
         header.pack(fill="x")
         header.pack_propagate(False)
         self.menu_button = ttk.Button(header, text="☰", style="Secondary.TButton", command=self._toggle_sidebar)
-        header_left = tk.Frame(header, bg="#FFFFFF")
+        header_left = tk.Frame(header, bg="#FBFBFC")
         self.header_left = header_left
         header_left.pack(side="left", fill="y", padx=(26, 8))
         self.project_label = tk.Label(
-            header_left, text="新しいチャット", bg="#FFFFFF", fg="#202123",
+            header_left, text="新しいチャット", bg="#FBFBFC", fg="#17181A",
             font=(self.ui_font_semibold, 12, "bold")
         )
         self.project_label.pack(anchor="w", pady=(13, 0))
         self.activity_var = tk.StringVar(value="何を作りたいか、そのまま話してください")
         self.activity_label = tk.Label(
-            header_left, textvariable=self.activity_var, bg="#FFFFFF", fg="#8E8E8E",
+            header_left, textvariable=self.activity_var, bg="#FBFBFC", fg="#8E8E8E",
             font=(self.ui_font_family, 9)
         )
         self.activity_label.pack(anchor="w", pady=(2, 0))
@@ -200,7 +207,7 @@ class MainWindow(tk.Tk):
             padx=9, pady=5
         )
 
-        header_right = tk.Frame(header, bg="#FFFFFF")
+        header_right = tk.Frame(header, bg="#FBFBFC")
         self.header_right = header_right
         header_right.pack(side="right", padx=(8, 18), pady=12)
         self.preview_button = ttk.Button(
@@ -219,56 +226,55 @@ class MainWindow(tk.Tk):
         tk.Frame(main, bg="#ECECEC", height=1).pack(fill="x")
 
         # Visible progress area. It stays compact but always explains the current stage.
-        self.progress_card = tk.Frame(main, bg="#F8F8F9", height=76)
+        self.progress_card = tk.Frame(main, bg="#F7F8FA", height=76)
         self.progress_card.pack(fill="x", padx=24, pady=(12, 0))
         self.progress_card.pack_propagate(False)
 
-        progress_top = tk.Frame(self.progress_card, bg="#F8F8F9")
+        progress_top = tk.Frame(self.progress_card, bg="#F7F8FA")
         progress_top.pack(fill="x", padx=16, pady=(10, 6))
         self.progress_title_var = tk.StringVar(value="準備完了")
         self.progress_detail_var = tk.StringVar(value="メッセージを送ると、ここにAIの作業状況が表示されます")
-        tk.Label(progress_top, textvariable=self.progress_title_var, bg="#F8F8F9", fg="#202123",
+        tk.Label(progress_top, textvariable=self.progress_title_var, bg="#F7F8FA", fg="#202123",
                  font=(self.ui_font_semibold, 10, "bold")).pack(side="left")
-        tk.Label(progress_top, textvariable=self.progress_detail_var, bg="#F8F8F9", fg="#8E8E8E",
+        tk.Label(progress_top, textvariable=self.progress_detail_var, bg="#F7F8FA", fg="#8E8E8E",
                  font=(self.ui_font_family, 9)).pack(side="right")
 
-        stages = tk.Frame(self.progress_card, bg="#F8F8F9")
+        stages = tk.Frame(self.progress_card, bg="#F7F8FA")
         stages.pack(fill="x", padx=16, pady=(0, 9))
         self._progress_segments = []
         self._progress_labels = []
         stage_names = ["要件確認", "設計", "作成", "デザイン確認", "テスト", "完了"]
         for i, name in enumerate(stage_names):
-            cell = tk.Frame(stages, bg="#F8F8F9")
+            cell = tk.Frame(stages, bg="#F7F8FA")
             cell.pack(side="left", fill="x", expand=True, padx=(0 if i == 0 else 3, 0))
             bar = tk.Frame(cell, bg="#E5E5E5", height=4)
             bar.pack(fill="x")
             bar.pack_propagate(False)
-            label = tk.Label(cell, text=name, bg="#F8F8F9", fg="#A0A0A0",
+            label = tk.Label(cell, text=name, bg="#F7F8FA", fg="#A0A0A0",
                              font=(self.ui_font_family, 8))
             label.pack(anchor="w", pady=(3, 0))
             self._progress_segments.append(bar)
             self._progress_labels.append(label)
 
-        workspace = tk.Frame(main, bg="#FFFFFF")
+        workspace = tk.Frame(main, bg="#FBFBFC")
         self.workspace = workspace
         workspace.pack(fill="both", expand=True)
 
-        chat_column = tk.Frame(workspace, bg="#FFFFFF")
+        chat_column = tk.Frame(workspace, bg="#FBFBFC")
         self.chat_column = chat_column
         chat_column.pack(side="left", fill="both", expand=True)
         chat_column.grid_columnconfigure(0, weight=1)
         chat_column.grid_rowconfigure(0, weight=1, minsize=80)
         chat_column.grid_rowconfigure(1, weight=0)
-        chat_column.grid_rowconfigure(2, weight=0)
 
-        history_wrap = tk.Frame(chat_column, bg="#FFFFFF")
+        history_wrap = tk.Frame(chat_column, bg="#FBFBFC")
         self.history_wrap = history_wrap
         history_wrap.grid(row=0, column=0, sticky="nsew", padx=(56, 34), pady=(8, 0))
         scrollbar = ttk.Scrollbar(history_wrap, orient="vertical")
         scrollbar.pack(side="right", fill="y")
         self.chat_history = tk.Text(
             history_wrap, wrap="word", state="disabled", relief="flat", borderwidth=0,
-            highlightthickness=0, background="#FFFFFF", foreground="#202123",
+            highlightthickness=0, background="#FBFBFC", foreground="#17181A",
             insertbackground="#202123", font=(self.ui_font_family, 11), padx=18, pady=18,
             yscrollcommand=scrollbar.set, spacing3=5
         )
@@ -281,7 +287,7 @@ class MainWindow(tk.Tk):
             justify="right", lmargin1=155, rmargin=12, spacing1=12
         )
         self.chat_history.tag_configure(
-            "user", foreground="#202123", background="#F4F4F4",
+            "user", foreground="#17181A", background="#F4F4F4",
             lmargin1=155, lmargin2=155, rmargin=12, spacing1=3, spacing3=16
         )
         self.chat_history.tag_configure(
@@ -289,11 +295,11 @@ class MainWindow(tk.Tk):
             lmargin1=12, rmargin=155, spacing1=10
         )
         self.chat_history.tag_configure(
-            "assistant", foreground="#202123",
+            "assistant", foreground="#17181A",
             lmargin1=12, lmargin2=12, rmargin=155, spacing1=3, spacing3=18
         )
         self.chat_history.tag_configure(
-            "welcome_title", foreground="#202123", font=(self.ui_font_semibold, 22, "bold"),
+            "welcome_title", foreground="#17181A", font=(self.ui_font_semibold, 22, "bold"),
             justify="center", spacing1=58, spacing3=10
         )
         self.chat_history.tag_configure(
@@ -301,30 +307,41 @@ class MainWindow(tk.Tk):
             justify="center", lmargin1=90, rmargin=90, spacing3=10
         )
 
-        # Starter cards feel like modern AI suggestions and start the conversation immediately.
-        self.starter_frame = tk.Frame(chat_column, bg="#FFFFFF")
-        self.starter_frame.grid(row=1, column=0, sticky="ew", padx=72, pady=(0, 12))
-        self._starter_cards = []
-        suggestions = [
-            ("業務アプリ", "仕事の管理をもっと楽に", "営業実績を管理できるWebアプリを作りたい"),
-            ("予約アプリ", "スマホで簡単に予約", "スマホで使いやすい予約アプリを作りたい"),
-            ("相談から", "まだ決まってなくてもOK", "作りたいものがまだ曖昧なので、アイデア整理から手伝って"),
-        ]
-        for title, subtitle, prompt in suggestions:
-            card = self._make_prompt_card(self.starter_frame, title, subtitle, prompt)
-            card.pack(side="left", expand=True, fill="both", padx=5)
-            self._starter_cards.append(card)
+        # Minimal AI-first landing experience. No category buttons; the user just talks.
+        self.welcome_panel = tk.Frame(history_wrap, bg="#FBFBFC")
+        hero_mark = tk.Canvas(self.welcome_panel, width=96, height=96, bg="#FBFBFC", highlightthickness=0)
+        hero_mark.pack(pady=(0, 18))
+        hero_mark.create_oval(7, 7, 89, 89, fill="#F2EEFF", outline="")
+        hero_mark.create_oval(18, 18, 78, 78, fill="#E9F8F5", outline="")
+        hero_mark.create_oval(29, 29, 67, 67, fill="#17181A", outline="")
+        hero_mark.create_arc(19, 19, 77, 77, start=30, extent=205, style="arc", outline="#7C5CFC", width=5)
+        hero_mark.create_arc(22, 22, 74, 74, start=205, extent=175, style="arc", outline="#18B99A", width=5)
+        hero_mark.create_text(48, 48, text="AI", fill="#FFFFFF",
+                              font=(self.ui_font_semibold, 11, "bold"))
+        tk.Label(
+            self.welcome_panel, text="つくりたいものを、話すだけ。",
+            bg="#FBFBFC", fg="#151618",
+            font=(self.ui_font_semibold, 24, "bold")
+        ).pack()
+        tk.Label(
+            self.welcome_panel,
+            text="アイデア整理から設計・実装・テストまで。\n"
+                 "難しい言葉やテンプレート選択は必要ありません。",
+            bg="#FBFBFC", fg="#73767D", justify="center",
+            font=(self.ui_font_family, 10)
+        ).pack(pady=(10, 0))
+        self.welcome_panel.place(relx=0.5, rely=0.48, anchor="center")
 
-        composer_area = tk.Frame(chat_column, bg="#FFFFFF")
+        composer_area = tk.Frame(chat_column, bg="#FBFBFC")
         self.composer_area = composer_area
-        composer_area.grid(row=2, column=0, sticky="ew", padx=(72, 54), pady=(4, 18))
+        composer_area.grid(row=1, column=0, sticky="ew", padx=(72, 54), pady=(4, 18))
         self.composer_hint = tk.Label(
-            composer_area, text="メッセージ", bg="#FFFFFF", fg="#6B7280",
-            font=(self.ui_font_semibold, 9, "bold")
+            composer_area, text="思いついたことを、そのまま話してください", bg="#FBFBFC", fg="#7A7D84",
+            font=(self.ui_font_family, 9)
         )
         self.composer_hint.pack(anchor="w", padx=2, pady=(0, 6))
         composer = tk.Frame(
-            composer_area, bg="#FFFFFF", highlightbackground="#C9CDD4",
+            composer_area, bg="#FBFBFC", highlightbackground="#C9CDD4",
             highlightcolor="#111827", highlightthickness=1, bd=0
         )
         composer.pack(fill="x")
@@ -334,7 +351,7 @@ class MainWindow(tk.Tk):
         self.composer = composer
         self.instruction = tk.Text(
             composer, width=1, height=4, wrap="word", undo=True, autoseparators=True, maxundo=-1,
-            relief="flat", borderwidth=0, highlightthickness=0, background="#FFFFFF",
+            relief="flat", borderwidth=0, highlightthickness=0, background="#FBFBFC",
             foreground="#111827", insertbackground="#111827", insertwidth=2,
             selectbackground="#DCE7FF", selectforeground="#111827",
             font=(self.ui_font_family, 12), padx=18, pady=14
@@ -348,7 +365,7 @@ class MainWindow(tk.Tk):
         self.instruction.bind("<FocusIn>", lambda _e: self.composer.configure(highlightbackground="#111827"), add=True)
         self.instruction.bind("<FocusOut>", lambda _e: self.composer.configure(highlightbackground="#C9CDD4"), add=True)
 
-        send_wrap = tk.Frame(composer, bg="#FFFFFF")
+        send_wrap = tk.Frame(composer, bg="#FBFBFC")
         self.send_wrap = send_wrap
         send_wrap.grid(row=0, column=1, sticky="se", padx=(8, 12), pady=10)
         self.send_button = ttk.Button(
@@ -356,12 +373,12 @@ class MainWindow(tk.Tk):
         )
         self.send_button.pack(side="bottom")
 
-        footer = tk.Frame(composer_area, bg="#FFFFFF")
+        footer = tk.Frame(composer_area, bg="#FBFBFC")
         self.composer_footer = footer
         footer.pack(fill="x", pady=(7, 0))
         self.composer_help = tk.Label(
             footer, text="Enterで送信  ·  Shift+Enterで改行",
-            bg="#FFFFFF", fg="#A0A0A0", font=(self.ui_font_family, 8)
+            bg="#FBFBFC", fg="#A0A0A0", font=(self.ui_font_family, 8)
         )
         self.composer_help.pack(side="left")
         self.build_confirm_button = ttk.Button(
@@ -372,21 +389,21 @@ class MainWindow(tk.Tk):
         self.build_confirm_button.pack_forget()
 
         # Advanced information stays hidden unless requested.
-        self.details_panel = tk.Frame(workspace, bg="#F7F7F8", width=330)
+        self.details_panel = tk.Frame(workspace, bg="#F4F5F7", width=330)
         self.details_panel.pack_propagate(False)
-        tk.Label(self.details_panel, text="テスト結果と詳細", bg="#F7F7F8", fg="#202123",
+        tk.Label(self.details_panel, text="テスト結果と詳細", bg="#F4F5F7", fg="#202123",
                  font=(self.ui_font_semibold, 12, "bold")).pack(anchor="w", padx=16, pady=(18, 2))
-        tk.Label(self.details_panel, text="普段は閉じたままで大丈夫です", bg="#F7F7F8", fg="#8E8E8E",
+        tk.Label(self.details_panel, text="普段は閉じたままで大丈夫です", bg="#F4F5F7", fg="#8E8E8E",
                  font=(self.ui_font_family, 9)).pack(anchor="w", padx=16, pady=(0, 10))
         self.output = tk.Text(
             self.details_panel, height=24, wrap="word", state="disabled", relief="flat",
-            background="#FFFFFF", foreground="#444444", borderwidth=0,
+            background="#FBFBFC", foreground="#444444", borderwidth=0,
             highlightthickness=1, highlightbackground="#E5E5E5",
             font=(self.mono_font_family, 9), padx=10, pady=10
         )
         self.output.pack(fill="both", expand=True, padx=12)
         self._enable_readonly_copy(self.output)
-        actions = tk.Frame(self.details_panel, bg="#F7F7F8")
+        actions = tk.Frame(self.details_panel, bg="#F4F5F7")
         actions.pack(fill="x", padx=12, pady=12)
         ttk.Button(actions, text="公開前チェック", style="Secondary.TButton",
                    command=self.show_release_risk).pack(fill="x", pady=2)
@@ -428,32 +445,32 @@ class MainWindow(tk.Tk):
         win.grab_set()
         win.geometry("520x390")
         win.minsize(460, 350)
-        body = tk.Frame(win, bg="#FFFFFF")
+        body = tk.Frame(win, bg="#FBFBFC")
         body.pack(fill="both", expand=True, padx=24, pady=22)
 
-        tk.Label(body, text="AIモデルを接続", bg="#FFFFFF", fg="#111827",
+        tk.Label(body, text="AIモデルを接続", bg="#FBFBFC", fg="#111827",
                  font=(self.ui_font_semibold, 16, "bold")).pack(anchor="w")
         tk.Label(
             body,
             text="OpenAI または Gemini を接続すると、雑談・相談・要件整理を本物のLLMで行えます。\nAPIキーはWindows上ではDPAPIで暗号化して保存します。",
-            bg="#FFFFFF", fg="#6B7280", justify="left", wraplength=455,
+            bg="#FBFBFC", fg="#6B7280", justify="left", wraplength=455,
             font=(self.ui_font_family, 9)
         ).pack(anchor="w", pady=(6, 16))
 
-        tk.Label(body, text="プロバイダー", bg="#FFFFFF", fg="#374151",
+        tk.Label(body, text="プロバイダー", bg="#FBFBFC", fg="#374151",
                  font=(self.ui_font_semibold, 9, "bold")).pack(anchor="w")
         provider_var = tk.StringVar(value=cfg["provider"])
         provider = ttk.Combobox(body, textvariable=provider_var, state="readonly",
                                 values=["none", "openai", "gemini"])
         provider.pack(fill="x", pady=(5, 12))
 
-        tk.Label(body, text="モデル", bg="#FFFFFF", fg="#374151",
+        tk.Label(body, text="モデル", bg="#FBFBFC", fg="#374151",
                  font=(self.ui_font_semibold, 9, "bold")).pack(anchor="w")
         model_var = tk.StringVar(value=cfg["model"])
         model = ttk.Entry(body, textvariable=model_var)
         model.pack(fill="x", pady=(5, 12))
 
-        tk.Label(body, text="APIキー", bg="#FFFFFF", fg="#374151",
+        tk.Label(body, text="APIキー", bg="#FBFBFC", fg="#374151",
                  font=(self.ui_font_semibold, 9, "bold")).pack(anchor="w")
         key_var = tk.StringVar()
         key = ttk.Entry(body, textvariable=key_var, show="●")
@@ -462,14 +479,14 @@ class MainWindow(tk.Tk):
             body,
             text=("接続済み。変更しない場合は空欄のままでOK。" if status.connected else
                   "ChatGPT/Geminiの通常契約とは別に、各APIのキーが必要です。"),
-            bg="#FFFFFF", fg="#8A8F98", font=(self.ui_font_family, 8)
+            bg="#FBFBFC", fg="#8A8F98", font=(self.ui_font_family, 8)
         ).pack(anchor="w", pady=(0, 14))
 
         remember_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(body, text="このWindowsユーザーに暗号化して保存",
                         variable=remember_var).pack(anchor="w")
 
-        buttons = tk.Frame(body, bg="#FFFFFF")
+        buttons = tk.Frame(body, bg="#FBFBFC")
         buttons.pack(fill="x", pady=(20, 0))
 
         def save():
@@ -614,11 +631,7 @@ class MainWindow(tk.Tk):
             self.chat_history.tag_configure("assistant_label", lmargin1=12, rmargin=155)
             self.chat_history.tag_configure("assistant", lmargin1=12, lmargin2=12, rmargin=155)
 
-        if low_height or very_compact:
-            if self.starter_frame.winfo_manager():
-                self.starter_frame.grid_remove()
-        else:
-            self._sync_starter_visibility()
+        self._sync_welcome_visibility()
 
         # At very small heights, trim labels before reducing the actual input field.
         if very_low:
@@ -676,86 +689,26 @@ class MainWindow(tk.Tk):
         self._update_placeholder()
         self.run_ai()
 
-    def _make_prompt_card(self, parent, title: str, subtitle: str, prompt: str):
-        card = tk.Frame(
-            parent, bg="#F7F7F8", highlightbackground="#E5E5E8",
-            highlightthickness=1, cursor="hand2"
-        )
-        inner = tk.Frame(card, bg="#F7F7F8", cursor="hand2")
-        inner.pack(fill="both", expand=True, padx=14, pady=12)
-        title_label = tk.Label(
-            inner, text=title, bg="#F7F7F8", fg="#202123",
-            font=(self.ui_font_semibold, 10, "bold"), cursor="hand2"
-        )
-        title_label.pack(anchor="w")
-        subtitle_label = tk.Label(
-            inner, text=subtitle, bg="#F7F7F8", fg="#77777D",
-            font=(self.ui_font_family, 9), cursor="hand2"
-        )
-        subtitle_label.pack(anchor="w", pady=(4, 0))
-
-        def start(_event=None):
-            self._use_suggestion(prompt)
-            return "break"
-
-        def enter(_event=None):
-            for widget in (card, inner, title_label, subtitle_label):
-                widget.configure(bg="#EEEEF0")
-
-        def leave(_event=None):
-            for widget in (card, inner, title_label, subtitle_label):
-                widget.configure(bg="#F7F7F8")
-
-        for widget in (card, inner, title_label, subtitle_label):
-            widget.bind("<Button-1>", start)
-            widget.bind("<Enter>", enter)
-            widget.bind("<Leave>", leave)
-        return card
-
-    def _update_placeholder(self, _event=None):
-        if not hasattr(self, "placeholder_label"):
-            return
-        has_text = bool(self.instruction.get("1.0", "end-1c").strip())
-        focused = self.focus_get() is self.instruction
-        if has_text or focused or self._busy:
-            self.placeholder_label.place_forget()
-        else:
-            self.placeholder_label.place(x=18, y=15)
-
-    def _use_suggestion(self, prompt: str):
-        if self._busy:
-            return
-        self.instruction.delete("1.0", "end")
-        self.instruction.insert("1.0", prompt)
-        self._update_placeholder()
-        self.instruction.focus_force()
-        # Starter cards are actions, not passive examples: one click starts the conversation.
-        self.after(80, self.run_ai)
-
     def _show_empty_chat(self):
         self.chat_history.configure(state="normal")
         if not self.chat_history.get("1.0", "end-1c").strip():
-            self.chat_history.insert("end", "何を一緒に作りますか？\n", "welcome_title")
-            self.chat_history.insert(
-                "end",
-                "アプリの内容が決まっていなくても大丈夫です。\n"
-                "作りたいこと・困っていることを、そのまま話してください。\n",
-                "welcome"
-            )
             self._showing_welcome = True
+            if hasattr(self, "welcome_panel"):
+                self.welcome_panel.place(relx=0.5, rely=0.48, anchor="center")
         self.chat_history.configure(state="disabled")
 
-    def _sync_starter_visibility(self):
-        if not hasattr(self, "starter_frame"):
-            return
+    def _sync_welcome_visibility(self):
         has_history = False
         if self.current_slug:
-            path = WORKSPACE_DIR / self.current_slug
-            has_history = bool(self.chat_partner.history(path))
-        if has_history or not self._showing_welcome:
-            self.starter_frame.grid_remove()
-        elif not self.starter_frame.winfo_manager():
-            self.starter_frame.grid(row=1, column=0, sticky="ew", padx=72, pady=(0, 12))
+            has_history = bool(self.chat_partner.history(WORKSPACE_DIR / self.current_slug))
+        else:
+            has_history = bool(self._blank_chat_history)
+        self._showing_welcome = not has_history
+        if hasattr(self, "welcome_panel"):
+            if self._showing_welcome:
+                self.welcome_panel.place(relx=0.5, rely=0.48, anchor="center")
+            else:
+                self.welcome_panel.place_forget()
 
     def _composer_submit(self, _event=None):
         if self._busy:
@@ -1103,7 +1056,7 @@ class MainWindow(tk.Tk):
         self.current_slug = row["slug"]
         self.project_label.configure(text=row["name"])
         self._load_chat_history()
-        self._sync_starter_visibility()
+        self._sync_welcome_visibility()
         state = self.chat_partner.state(WORKSPACE_DIR / self.current_slug)
         self._set_build_confirmation(bool(state.get("awaiting_confirmation")))
         if state.get("awaiting_confirmation"):
@@ -1123,10 +1076,11 @@ class MainWindow(tk.Tk):
         self.chat_history.delete("1.0", "end")
         self.chat_history.configure(state="disabled")
         self._show_empty_chat()
+        self._sync_welcome_visibility()
         self._set_build_confirmation(False)
         self.instruction.configure(state="normal")
         self.instruction.delete("1.0", "end")
-        self._sync_starter_visibility()
+        self._sync_welcome_visibility()
         self._set_progress("idle", "準備完了", "何を作りたいか、そのまま話してください")
         self.instruction.focus_force()
 
@@ -1177,8 +1131,8 @@ class MainWindow(tk.Tk):
         if self._showing_welcome:
             self.chat_history.delete("1.0", "end")
             self._showing_welcome = False
-            if hasattr(self, "starter_frame"):
-                self.starter_frame.grid_remove()
+            if hasattr(self, "welcome_panel"):
+                self.welcome_panel.place_forget()
         if role == "user":
             self.chat_history.insert("end", "あなた\n", "user_label")
             self.chat_history.insert("end", f"{text}\n", "user")
@@ -1208,7 +1162,7 @@ class MainWindow(tk.Tk):
         if not rows:
             self._show_empty_chat()
         self.chat_history.see("end")
-        self._sync_starter_visibility()
+        self._sync_welcome_visibility()
 
     def _ensure_chat_project(self, first_message: str):
         if self.current_slug:
