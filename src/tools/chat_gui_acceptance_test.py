@@ -25,6 +25,20 @@ def main() -> int:
         try:
             app.deiconify(); app.update()
 
+            # Compact windows must preserve the actual chat and composer.
+            app.geometry("720x540"); app.update()
+            app._apply_responsive_layout(720, 540); app.update()
+            if not app.chat_history.winfo_manager():
+                raise AssertionError("chat history disappeared in compact layout")
+            if not app.instruction.winfo_manager():
+                raise AssertionError("composer disappeared in compact layout")
+            if app.instruction.cget("foreground") == app.instruction.cget("background"):
+                raise AssertionError("composer text is not visually distinguishable")
+            if app.sidebar.winfo_manager():
+                raise AssertionError("sidebar did not collapse in compact layout")
+            app.geometry("1280x820"); app.update()
+            app._apply_responsive_layout(1280, 820); app.update()
+
             # A normal greeting must start a real conversation without forcing project setup.
             app.instruction.insert("1.0", "こんにちは")
             app.run_ai(); app.update()
