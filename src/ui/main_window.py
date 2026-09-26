@@ -328,15 +328,18 @@ class MainWindow(tk.Tk):
             highlightcolor="#111827", highlightthickness=1, bd=0
         )
         composer.pack(fill="x")
+        composer.grid_columnconfigure(0, weight=1)
+        composer.grid_columnconfigure(1, weight=0)
+        composer.grid_rowconfigure(0, weight=1)
         self.composer = composer
         self.instruction = tk.Text(
-            composer, height=4, wrap="word", undo=True, autoseparators=True, maxundo=-1,
+            composer, width=1, height=4, wrap="word", undo=True, autoseparators=True, maxundo=-1,
             relief="flat", borderwidth=0, highlightthickness=0, background="#FFFFFF",
             foreground="#111827", insertbackground="#111827", insertwidth=2,
             selectbackground="#DCE7FF", selectforeground="#111827",
             font=(self.ui_font_family, 12), padx=18, pady=14
         )
-        self.instruction.pack(side="left", fill="both", expand=True)
+        self.instruction.grid(row=0, column=0, sticky="nsew")
         self._enable_text_editing(self.instruction)
         self.instruction.bind("<Return>", self._composer_submit, add=False)
         self.instruction.bind("<KP_Enter>", self._composer_submit, add=False)
@@ -346,7 +349,8 @@ class MainWindow(tk.Tk):
         self.instruction.bind("<FocusOut>", lambda _e: self.composer.configure(highlightbackground="#C9CDD4"), add=True)
 
         send_wrap = tk.Frame(composer, bg="#FFFFFF")
-        send_wrap.pack(side="right", fill="y", padx=(8, 12), pady=12)
+        self.send_wrap = send_wrap
+        send_wrap.grid(row=0, column=1, sticky="se", padx=(8, 12), pady=10)
         self.send_button = ttk.Button(
             send_wrap, text="送信  ↑", style="Primary.TButton", command=self.run_ai
         )
