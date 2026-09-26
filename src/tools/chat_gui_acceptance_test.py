@@ -34,6 +34,8 @@ def main() -> int:
             if "こんにちは" not in greeting_text or "作りたい" not in greeting_text:
                 raise AssertionError("natural opening conversation was not rendered")
 
+            # Direct creation from a fresh blank chat must also work and preserve the user's message.
+            app.new_project(); app.update()
             app.instruction.insert("1.0", "WebでおしゃれなToDoアプリを作って。ログインとデータ保存も必要")
             app.instruction.focus_force(); app.update()
             if not app.instruction.bind("<Return>"):
