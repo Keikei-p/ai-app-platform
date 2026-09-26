@@ -26,3 +26,11 @@ v0.5.2 usability update:
 - Instant new chat without naming dialog
 - Clearer action names and simplified advanced controls
 - Background generation keeps the interface responsive
+
+
+v0.6.1 chat update:
+- High-contrast visible message composer
+- Responsive compact-window layout that keeps chat visible
+- Optional OpenAI / Gemini real LLM conversation
+- Explicit AI未接続 state until a provider key is configured
+- Approval-first generation from v0.6.0 remains enforced
