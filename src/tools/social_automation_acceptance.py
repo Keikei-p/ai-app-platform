@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import http.client
+import urllib.request
 import importlib.util
 import json
 import tempfile
@@ -14,21 +14,26 @@ from src.core.social_generator import SocialAutomationGenerator
 
 
 def request(port: int, method: str, path: str, payload=None, csrf: str = ""):
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     headers = {}
     body = None
     if payload is not None:
-        body = json.dumps(payload)
+        body = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
     if csrf:
         headers["X-CSRF-Token"] = csrf
-    conn.request(method, path, body=body, headers=headers)
-    response = conn.getresponse()
-    raw = response.read()
-    data = json.loads(raw or b"{}")
-    status = response.status
-    conn.close()
-    return status, data
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        data=body,
+        headers=headers,
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            raw = response.read()
+            return response.status, json.loads(raw or b"{}")
+    except urllib.error.HTTPError as exc:
+        raw = exc.read()
+        return exc.code, json.loads(raw or b"{}")
 
 
 def load_module(path: Path, name: str):
