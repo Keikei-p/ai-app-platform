@@ -453,6 +453,20 @@ class AICore:
                 if ios_source_result.manifest is not None:
                     files.append(ios_source_result.manifest)
 
+            if ios_source_result.built or (
+                ios_simulator_build_info is not None
+                and bool(ios_simulator_build_info.get("built"))
+            ):
+                gaps = self.capability.assess(plan.spec, project_dir)
+                self.capability.save(project_dir, gaps)
+                pipeline_report = self.pipeline.evaluate(
+                    project_dir=project_dir,
+                    test_results=test_results,
+                    design_passed=design_review.passed,
+                    capability_gaps=gaps,
+                    risk_items=risk_items,
+                )
+
         web_build_info: dict | None = None
         if pipeline_report.preview_ready and "web" in plan.spec.targets:
             emit("package", "Web配布用ZIPとチェックサムを作成しています")
