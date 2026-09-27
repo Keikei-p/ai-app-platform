@@ -1,0 +1,120 @@
+const state={csrf:'',view:'home',conversations:[],projects:[],currentThread:null};
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+const api=async(path,options={})=>{
+  options.headers={'Content-Type':'application/json',...(options.headers||{})};
+  if(state.csrf)options.headers['X-CSRF-Token']=state.csrf;
+  const r=await fetch(path,options);let data={};try{data=await r.json();}catch{}
+  if(!r.ok)throw new Error(data.error||'request_failed');return data;
+};
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmt(v){if(!v)return '—';try{return new Date(v).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});}catch{return v;}}
+function openSidebar(){ $('#sidebar').classList.add('open');$('#overlay').classList.add('show');}
+function closeSidebar(){ $('#sidebar').classList.remove('open');$('#overlay').classList.remove('show');}
+function setView(name){
+  state.view=name;
+  $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
+  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+  const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'作成したアプリ',downloads:'ダウンロード',settings:'設定'};
+  $('#topbarTitle').textContent=titles[name]||'AI App Platform';
+  closeSidebar();
+  if(name==='conversations')loadConversations();
+  if(name==='projects')loadProjects();
+  if(name==='downloads')loadDownloads();
+}
+function message(role,text){
+  $('#welcome').hidden=true;
+  const wrap=document.createElement('div');wrap.className='message '+role;
+  const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=text;
+  wrap.append(bubble);$('#messages').append(wrap);wrap.scrollIntoView({behavior:'smooth',block:'end'});
+}
+function renderRecent(){
+  $('#recentChats').innerHTML=state.conversations.slice(0,8).map(x=>`<button class="recent-item" data-thread="${esc(x.thread_id)}">${x.pinned?'★ ':''}${esc(x.title)}</button>`).join('')||'<div class="empty">まだ会話はありません。</div>';
+  $$('#recentChats [data-thread]').forEach(b=>b.onclick=()=>openConversation(b.dataset.thread));
+}
+async function loadConversations(query=''){
+  const data=await api('/api/v1/conversations'+(query?'?q='+encodeURIComponent(query):''));
+  state.conversations=data.conversations||[];renderRecent();
+  $('#conversationGrid').innerHTML=state.conversations.map(x=>`
+    <article class="data-card" data-thread="${esc(x.thread_id)}">
+      <h3>${x.pinned?'★ ':''}${esc(x.title)}</h3>
+      <div class="meta"><span>${x.project_slug?'アプリ: '+esc(x.project_slug):'会話のみ'}</span><span>${x.message_count} messages</span><span>${fmt(x.updated_at)}</span></div>
+    </article>`).join('')||'<div class="empty">該当する会話はありません。</div>';
+  $$('#conversationGrid [data-thread]').forEach(c=>c.onclick=()=>openConversation(c.dataset.thread));
+}
+async function openConversation(id){
+  const row=state.conversations.find(x=>x.thread_id===id)||{thread_id:id,title:'会話'};
+  state.currentThread=row;$('#messages').innerHTML='';$('#welcome').hidden=true;
+  const data=await api('/api/v1/conversations/'+encodeURIComponent(id)+'/messages');
+  (data.messages||[]).forEach(x=>message(x.role,x.content));
+  setView('home');$('#topbarTitle').textContent=row.title;
+}
+async function loadProjects(){
+  const data=await api('/api/v1/projects');state.projects=data.projects||[];
+  $('#projectGrid').innerHTML=state.projects.map(x=>`
+   <article class="project-card" data-slug="${esc(x.slug)}">
+    <div class="project-top"><div><h3>${esc(x.name)}</h3><div class="meta"><span class="chip">${esc(x.app_type)}</span>${(x.targets||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></div><strong class="${x.quality==='PASS'?'quality-pass':'quality-blocked'}">${esc(x.quality)}</strong></div>
+    <div class="meta" style="margin-top:14px"><span>${esc(x.status)}</span><span>${fmt(x.updated_at)}</span><span>${x.artifact_count} artifacts</span></div>
+   </article>`).join('')||'<div class="empty">まだアプリはありません。</div>';
+  $$('#projectGrid [data-slug]').forEach(c=>c.onclick=()=>showProject(c.dataset.slug));
+}
+async function showProject(slug){
+  const data=await api('/api/v1/projects/'+encodeURIComponent(slug));
+  const card=data.card||{};const readiness=data.readiness||{};const gaps=(data.gaps||{}).items||[];
+  $('#agentPlan').innerHTML=`
+    <div class="data-card"><h3>${esc(card.name||slug)}</h3><div class="meta"><span>${esc(card.status)}</span><span>${esc(card.quality)}</span></div></div>
+    <div class="plan-step"><div class="step-no">✓</div><div><strong>プレビュー</strong><p>${readiness.preview_ready?'可能':'まだ準備が必要'}</p></div></div>
+    <div class="plan-step"><div class="step-no">!</div><div><strong>未完了</strong><p>${gaps.length?gaps.map(x=>esc(x.reason||'')).join('<br>'):'大きな未完了項目なし'}</p></div></div>`;
+  $('#inspector').classList.add('open');
+}
+async function loadDownloads(){
+  if(!state.projects.length)await loadProjects();
+  const all=[];
+  for(const p of state.projects){
+    try{const d=await api('/api/v1/projects/'+encodeURIComponent(p.slug)+'/deliveries');(d.deliveries||[]).forEach(x=>all.push({...x,project_name:p.name}));}catch{}
+  }
+  $('#downloadList').innerHTML=all.map(x=>`
+    <div class="download-row ${x.available?'':'pending'}">
+      <div><strong>${esc(x.project_name)}</strong><div class="meta">${esc(x.label)}</div></div>
+      <div>${esc(x.target)}</div>
+      <div class="download-status">${esc(x.status)}</div>
+      <div class="meta">${esc(x.guide)}</div>
+    </div>`).join('')||'<div class="empty">まだ配布対象の成果物はありません。</div>';
+}
+async function newChat(){
+  const row=await api('/api/v1/conversations',{method:'POST',body:JSON.stringify({title:'新しいチャット'})});
+  state.currentThread=row;$('#messages').innerHTML='';$('#welcome').hidden=false;$('#topbarTitle').textContent='新しいチャット';setView('home');await loadConversations();
+}
+async function planGoal(text){
+  const plan=await api('/api/v1/agent/plan',{method:'POST',body:JSON.stringify({goal:text,project_slug:state.currentThread?.project_slug||null})});
+  $('#agentPlan').innerHTML=(plan.steps||[]).map((x,i)=>`<div class="plan-step"><div class="step-no">${i+1}</div><div><strong>${esc(x.title)}</strong><p>${esc(x.purpose)}${x.requires_human_approval?' · 人の承認が必要':''}</p></div></div>`).join('');
+  $('#inspector').classList.add('open');
+  return plan;
+}
+async function send(text){
+  text=text.trim();if(!text)return;
+  if(!state.currentThread)await newChat();
+  message('user',text);$('#prompt').value='';autoGrow();
+  try{
+    const plan=await planGoal(text);
+    message('assistant',`目的を${plan.steps.length}段階の安全な作業計画に整理しました。現段階のWeb UIは計画・履歴・アプリ管理まで接続済みです。実生成は既存の明示承認フローを通して実行します。`);
+  }catch(e){message('assistant','計画の作成に失敗しました: '+e.message);}
+}
+function autoGrow(){const p=$('#prompt');p.style.height='auto';p.style.height=Math.min(p.scrollHeight,160)+'px';}
+async function boot(){
+  try{
+    const status=await api('/api/v1/status');state.csrf=status.csrf||'';
+    $('#coreStatus').innerHTML='<i></i>Core接続';$('#coreStatus').classList.add('success');
+    await loadConversations();await loadProjects();
+  }catch(e){$('#coreStatus').textContent='Core未接続';}
+}
+$('#composer').addEventListener('submit',e=>{e.preventDefault();send($('#prompt').value);});
+$('#prompt').addEventListener('input',autoGrow);
+$('#prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send(e.currentTarget.value);}});
+$$('[data-prompt]').forEach(b=>b.onclick=()=>send(b.dataset.prompt));
+$$('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+$('#newChat').onclick=newChat;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
+$('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;localStorage.setItem('ui-theme',next);};
+document.documentElement.dataset.theme=localStorage.getItem('ui-theme')||'system';
+boot();
