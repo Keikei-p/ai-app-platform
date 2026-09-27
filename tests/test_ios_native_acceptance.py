@@ -32,6 +32,13 @@ class IOSNativeAcceptanceHelpersTests(unittest.TestCase):
                 / "Demo.app"
             )
             product.mkdir(parents=True)
+            (product / "Info.plist").write_bytes(
+                plistlib.dumps({
+                    "CFBundleExecutable": "Demo",
+                    "CFBundleIdentifier": "com.example.demo",
+                })
+            )
+            (product / "Demo").write_bytes(b"binary")
             self.assertEqual(IOSSimulatorPackager.discover_app(root), product)
 
     def test_simulator_app_requires_valid_info_and_executable(self):
