@@ -488,6 +488,23 @@ class PlatformService:
         meta = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
         project_name = str(meta.get("name") or slug)
 
+        def emit_platform(stage: str, message: str) -> None:
+            if progress is None:
+                return
+            try:
+                progress(stage, message)
+            except Exception:
+                pass
+
+        def core_progress(stage: str, message: str) -> None:
+            if stage == "done":
+                emit_platform(
+                    "core_checked",
+                    "AICore内部確認が完了しました。独立Postflightへ進みます",
+                )
+                return
+            emit_platform(stage, message)
+
         plan = self.agent.plan(instruction, slug)
         ledger = EvidenceLedger(project_dir)
         ledger.record(
@@ -498,6 +515,10 @@ class PlatformService:
             source="agent-orchestrator",
         )
 
+        emit_platform(
+            "preflight",
+            "既存状態とVerified Knowledgeを安全に確認しています",
+        )
         preflight = self.agent_plan_runner.run_preflight(
             plan,
             project_dir=project_dir,
@@ -510,7 +531,17 @@ class PlatformService:
             source="agent-plan-runner",
         )
 
-        result = self.core.execute(project_name, slug, project_dir, instruction, progress)
+        result = self.core.execute(
+            project_name,
+            slug,
+            project_dir,
+            instruction,
+            core_progress,
+        )
+        emit_platform(
+            "postflight",
+            "別経路のTool ExecutorでTests・Design・Securityを再検証しています",
+        )
         preflight_pipeline = dict(result.pipeline_report or {})
         preflight_pipeline["agent_preflight"] = preflight.to_dict()
         result.pipeline_report = preflight_pipeline
@@ -534,6 +565,10 @@ class PlatformService:
                 "再検証に失敗したため、完成扱いを停止しました。"
             )
 
+        emit_platform(
+            "trace",
+            "実行結果とAgent PlanのEvidenceを照合しています",
+        )
         trace = self.build_execution_tracer.create(plan, result, project_dir)
         pipeline_report = dict(result.pipeline_report or {})
         pipeline_report["agent_execution_trace"] = trace.to_dict()
@@ -587,6 +622,10 @@ class PlatformService:
                 f" 不足: {missing}"
             )
 
+        emit_platform(
+            "certificate",
+            "Preflight・Postflight・成果物hashからDevelopment Certificateを作成しています",
+        )
         certificate = self.development_certificates.create(
             project_dir,
             run_id=plan.run_id,
@@ -609,6 +648,11 @@ class PlatformService:
                 "Development Certificateの独立Evidenceが不足しているため、"
                 "完成扱いを停止しました。"
             )
+
+        emit_platform(
+            "done" if result.ok else "issue",
+            "全Evidenceの確認が完了しました" if result.ok else "確認が必要なEvidenceがあります",
+        )
 
         if thread_id:
             self.conversations.append(thread_id, "assistant", result.message)
