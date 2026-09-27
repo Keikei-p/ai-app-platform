@@ -303,6 +303,21 @@ class PlatformAPI:
                         )
                         self._json(200, row)
                         return
+                    if path == "/api/v1/agent/council/execute":
+                        goal = str(data.get("goal") or "").strip()
+                        project_slug = str(data.get("project_slug") or "").strip()
+                        context = data.get("context")
+                        if not goal or not project_slug:
+                            raise ValueError("goal and project_slug are required")
+                        if context is not None and not isinstance(context, dict):
+                            raise ValueError("context must be an object")
+                        row = api.service.run_specialist_execution_council(
+                            goal,
+                            project_slug,
+                            context=context or {},
+                        )
+                        self._json(200, row)
+                        return
                     if path == "/api/v1/research/fetch":
                         url = str(data.get("url") or "").strip()
                         if not url:
