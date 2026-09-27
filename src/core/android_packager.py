@@ -11,6 +11,7 @@ import subprocess
 
 from .app_spec import AppSpec
 from .database import log_event
+from .artifact_verifier import ArtifactVerifier
 
 
 @dataclass(frozen=True)
@@ -41,9 +42,11 @@ class AndroidPackager:
         *,
         which: Callable[[str], str | None] | None = None,
         runner: Callable[[list[str], Path, int], Any] | None = None,
+        verifier: ArtifactVerifier | None = None,
     ):
         self.which = which or shutil.which
         self.runner = runner or self._run
+        self.verifier = verifier or ArtifactVerifier()
 
     def build_debug_apk(
         self,
@@ -127,6 +130,23 @@ class AndroidPackager:
             ),
             encoding="utf-8",
         )
+        verification = self.verifier.verify_android_apk(artifact, manifest)
+        if not verification.valid:
+            failures = "; ".join(verification.failures[:8]) or "unknown APK verification failure"
+            detail = "Android debug APK verification failed: " + failures
+            log_event(
+                "packager.android.debug_verification_failed",
+                detail,
+                spec.slug,
+                "android-packager",
+            )
+            try:
+                artifact.unlink(missing_ok=True)
+                manifest.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return AndroidBuildResult(True, False, None, "", detail, None)
+
         log_event(
             "packager.android.debug_built",
             f"{artifact.name} sha256={digest}",
@@ -138,7 +158,7 @@ class AndroidPackager:
             True,
             artifact,
             digest,
-            "Android debug APK built. Production AAB/signing/store submission remain approval-gated.",
+            "Android debug APK built and structurally verified. Production AAB/signing/store submission remain approval-gated.",
             manifest,
         )
 
