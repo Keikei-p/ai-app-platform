@@ -29,6 +29,7 @@ from .evolution_experiments import EvolutionExperimentStore
 from .build_jobs import BuildJobManager
 from .agent_tool_executor import AgentToolExecutor
 from .agent_execution import AgentExecutionLoop
+from .agent_evidence_review import AgentEvidenceReviewer
 from .project_health import ProjectHealthCheck
 from .agent_plan_runner import AgentPlanRunner
 from .agent_execution_trace import BuildExecutionTracer
@@ -121,6 +122,7 @@ class PlatformService:
                 "reviewed_tool_executor": True,
                 "project_health_check": True,
                 "agent_safe_tool_execution": True,
+                "agent_evidence_review": True,
                 "agent_safe_execution": True,
                 "evidence_backed_knowledge_promotion": True,
                 "development_certificate": True,
@@ -318,9 +320,15 @@ class PlatformService:
             project_slug=project_slug,
             context=combined,
         )
+        evidence_review = self.agent_evidence_review.review(
+            goal,
+            council,
+            execution,
+        )
         return {
             "council": council.to_dict(),
             "execution": execution.to_dict(),
+            "evidence_review": evidence_review.to_dict(),
             "rule": "Only reviewed, non-approval-gated executor bindings may run. Code generation, package, export, publish, store submission and main merge are not auto-executed.",
         }
 
