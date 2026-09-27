@@ -6,12 +6,14 @@ on:
     branches: [main, develop]
     paths:
       - "src/core/mobile_generator.py"
+      - "src/core/android_packager.py"
       - "src/tools/android_native_acceptance.py"
       - ".github/workflows/android-generated-apk.yml"
   pull_request:
     branches: [main, develop]
     paths:
       - "src/core/mobile_generator.py"
+      - "src/core/android_packager.py"
       - "src/tools/android_native_acceptance.py"
       - ".github/workflows/android-generated-apk.yml"
 
