@@ -51,6 +51,8 @@ def main() -> int:
             raise RuntimeError("specialist council capability is missing")
         if not data.get("capabilities", {}).get("guarded_web_research"):
             raise RuntimeError("guarded web research capability is missing")
+        if not data.get("capabilities", {}).get("evolution_experiment_history"):
+            raise RuntimeError("evolution experiment history capability is missing")
         if not data.get("capabilities", {}).get("observable_build_jobs"):
             raise RuntimeError("observable build jobs capability is missing")
         if (data.get("identity") or {}).get("name") != "Aivy":
@@ -254,6 +256,49 @@ def main() -> int:
         )
         if status != 200 or verified_lookup.get("knowledge"):
             raise RuntimeError("unverified research leaked into verified knowledge results")
+
+        status, policy = request(port, "GET", "/api/v1/evolution/policy")
+        if status != 200 or (policy.get("policy") or {}).get("auto_merge_main") is not False:
+            raise RuntimeError("evolution policy does not forbid automatic main merge")
+
+        baseline = {
+            "score": 90, "tests_passed": True, "test_pass_ratio": 1.0,
+            "design_passed": True, "design_score": 92, "security_passed": True,
+            "preview_ready": True, "release_ready": False, "artifact_count": 1,
+            "learning_eligible": True, "regressions": [], "created_at": "2026-09-27T00:00:00Z"
+        }
+        candidate = dict(baseline)
+        candidate["score"] = 95
+        candidate["design_score"] = 96
+        status, experiment = request(
+            port,
+            "POST",
+            "/api/v1/evolution/experiments",
+            {
+                "title": "acceptance improvement",
+                "baseline_label": "stable",
+                "candidate_label": "candidate",
+                "baseline": baseline,
+                "candidate": candidate,
+                "changed_paths": ["src/core/generator.py"],
+                "evidence_refs": ["ci:acceptance"],
+                "requested_actions": [],
+            },
+            csrf,
+        )
+        if status != 201 or experiment.get("status") != "human_review_required":
+            raise RuntimeError("eligible evolution candidate did not stop at human review")
+        status, reviewed = request(
+            port,
+            "POST",
+            f"/api/v1/evolution/experiments/{experiment['experiment_id']}/review",
+            {"approved": True, "note": "acceptance review only"},
+            csrf,
+        )
+        if status != 200 or reviewed.get("status") != "human_approved":
+            raise RuntimeError("evolution human review record failed")
+        if (reviewed.get("decision") or {}).get("policy", {}).get("auto_apply") is not False:
+            raise RuntimeError("human review unexpectedly enabled automatic evolution apply")
 
         print("PLATFORM API ACCEPTANCE PASS: Web UI + specialists + guarded research + verified knowledge + CSRF")
     finally:
