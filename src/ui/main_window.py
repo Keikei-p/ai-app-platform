@@ -278,6 +278,7 @@ class MainWindow(tk.Tk):
             self._progress_segments.append(bar)
             self._progress_labels.append(label)
 
+        self._next_actions_ready = False
         self.next_actions = tk.Frame(main, bg="#F5F3FF", highlightbackground="#E4E0FF", highlightthickness=1)
         tk.Label(
             self.next_actions, text="アプリの確認ができます",
@@ -683,6 +684,8 @@ class MainWindow(tk.Tk):
             self.project_label.pack_configure(pady=(13, 0))
 
         if compact:
+            if hasattr(self, "next_actions") and self.next_actions.winfo_manager():
+                self.next_actions.pack_forget()
             self.history_wrap.grid_configure(padx=(14, 8), pady=(4, 0))
             self.chat_history.tag_configure("user_label", lmargin1=70, rmargin=8)
             self.chat_history.tag_configure("user", lmargin1=70, lmargin2=70, rmargin=8)
@@ -694,6 +697,8 @@ class MainWindow(tk.Tk):
                 self.details_visible = False
                 self.details_button.configure(text="テスト結果")
         else:
+            if getattr(self, "_next_actions_ready", False) and not self.next_actions.winfo_manager():
+                self.next_actions.pack(fill="x", padx=24, pady=(8, 0), before=self.workspace)
             self.history_wrap.grid_configure(padx=(56, 34), pady=(8, 0))
             self.composer_area.grid_configure(padx=(72, 54), pady=(4, 18))
             self.chat_history.tag_configure("user_label", lmargin1=155, rmargin=12)
@@ -1209,6 +1214,7 @@ class MainWindow(tk.Tk):
         self.projects.selection_clear(0, "end")
         self.project_label.configure(text="新しいチャット")
         self._set_project_actions_visible(False)
+        self._next_actions_ready = False
         if hasattr(self, "next_actions") and self.next_actions.winfo_manager():
             self.next_actions.pack_forget()
         self.chat_history.configure(state="normal")
@@ -1579,10 +1585,12 @@ class MainWindow(tk.Tk):
         self._set_build_confirmation(False)
         self._set_project_actions_visible(True)
         if result.ok:
+            self._next_actions_ready = True
             self._set_progress("done", "作成とテストが完了", "次にプレビュー・修正・ダウンロードへ進めます")
-            if not self.next_actions.winfo_manager():
+            if not self._compact_layout and not self.next_actions.winfo_manager():
                 self.next_actions.pack(fill="x", padx=24, pady=(8, 0), before=self.workspace)
         else:
+            self._next_actions_ready = False
             if self.next_actions.winfo_manager():
                 self.next_actions.pack_forget()
             self._set_progress("issue", "確認が必要です", "「テスト結果」を開くと原因を確認できます")
@@ -1592,6 +1600,7 @@ class MainWindow(tk.Tk):
     def _handle_build_error(self, exc: Exception):
         message = f"処理中にエラーが起きました。\n{type(exc).__name__}: {exc}"
         self._set_build_confirmation(False)
+        self._next_actions_ready = False
         if hasattr(self, "next_actions") and self.next_actions.winfo_manager():
             self.next_actions.pack_forget()
         self._append_chat("assistant", message)
