@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.tools.ios_native_acceptance import discover_app, discover_workspace, verify_simulator_app
+from src.core.ios_simulator_packager import IOSSimulatorPackager
 
 
 class IOSNativeAcceptanceHelpersTests(unittest.TestCase):
@@ -11,19 +11,28 @@ class IOSNativeAcceptanceHelpersTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             with self.assertRaises(RuntimeError):
-                discover_workspace(root)
+                IOSSimulatorPackager.discover_workspace(root)
             (root / "Demo.xcworkspace").mkdir()
-            self.assertEqual(discover_workspace(root).name, "Demo.xcworkspace")
+            self.assertEqual(
+                IOSSimulatorPackager.discover_workspace(root).name,
+                "Demo.xcworkspace",
+            )
             (root / "Other.xcworkspace").mkdir()
             with self.assertRaises(RuntimeError):
-                discover_workspace(root)
+                IOSSimulatorPackager.discover_workspace(root)
 
     def test_app_discovery_requires_debug_simulator_product(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            product = root / "Build" / "Products" / "Debug-iphonesimulator" / "Demo.app"
+            product = (
+                root
+                / "Build"
+                / "Products"
+                / "Debug-iphonesimulator"
+                / "Demo.app"
+            )
             product.mkdir(parents=True)
-            self.assertEqual(discover_app(root), product)
+            self.assertEqual(IOSSimulatorPackager.discover_app(root), product)
 
     def test_simulator_app_requires_valid_info_and_executable(self):
         with tempfile.TemporaryDirectory() as td:
@@ -36,8 +45,9 @@ class IOSNativeAcceptanceHelpersTests(unittest.TestCase):
                 })
             )
             (app / "Demo").write_bytes(b"mach-o-placeholder")
-            bundle_id, size = verify_simulator_app(app)
+            bundle_id, executable, size = IOSSimulatorPackager.verify_app(app)
             self.assertEqual(bundle_id, "com.example.demo")
+            self.assertEqual(executable, "Demo")
             self.assertGreater(size, 0)
 
 
