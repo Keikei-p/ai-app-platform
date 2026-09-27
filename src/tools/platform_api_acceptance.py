@@ -43,6 +43,11 @@ def main() -> int:
             html = response.read().decode("utf-8")
         if "Aivy" not in html or "何を作りたいですか？" not in html or "/ui/app.js" not in html:
             raise RuntimeError("Aivy v0.9 Web UI shell was not served")
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/ui/app.js", method="GET")
+        with urllib.request.urlopen(req, timeout=5) as response:
+            web_js = response.read().decode("utf-8")
+        if "専門AIで検討" not in web_js or "/api/v1/agent/council" not in web_js:
+            raise RuntimeError("user-triggered specialist council control is missing")
 
         status, data = request(port, "GET", "/api/v1/status")
         if status != 200 or not data.get("capabilities", {}).get("agent_planning"):
