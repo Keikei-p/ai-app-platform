@@ -1132,6 +1132,7 @@ class MainWindow(tk.Tk):
             on_open_thread=self._open_thread_from_library,
             on_open_project=self._open_project_slug,
             on_preview_project=self._preview_project_from_library,
+            on_restore_project=self._restore_project_from_library,
             initial_tab=initial_tab,
         )
 
@@ -1157,6 +1158,10 @@ class MainWindow(tk.Tk):
     def _preview_project_from_library(self, slug: str):
         self._open_project_slug(slug)
         self.preview()
+
+    def _restore_project_from_library(self, slug: str):
+        self._open_project_slug(slug)
+        self.vault_history()
 
     def refresh_projects(self):
         self.project_rows = list_projects()
