@@ -27,6 +27,7 @@ from .evolution_engine import VerifiedEvolutionEngine
 from .evolution_experiments import EvolutionExperimentStore
 from .build_jobs import BuildJobManager
 from .agent_tool_executor import AgentToolExecutor
+from .project_health import ProjectHealthCheck
 
 
 class PlatformService:
@@ -60,6 +61,7 @@ class PlatformService:
             projects=self.projects,
             evolution=self.evolution,
         )
+        self.project_health_checker = ProjectHealthCheck(self.tool_executor)
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -96,6 +98,7 @@ class PlatformService:
                 "release_manager": True,
                 "observable_build_jobs": True,
                 "reviewed_tool_executor": True,
+                "project_health_check": True,
             },
         }
 
@@ -290,6 +293,10 @@ class PlatformService:
 
     def project_detail(self, slug: str) -> dict[str, Any]:
         return self.catalog.detail(slug)
+
+    def project_health(self, slug: str) -> dict[str, Any]:
+        report = self.project_health_checker.run(slug)
+        return report.to_dict()
 
     def list_conversations(self, query: str = "") -> list[dict[str, Any]]:
         return [asdict(x) for x in self.conversations.list_threads(query)]
