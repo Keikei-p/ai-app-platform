@@ -50,3 +50,8 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .council-turn summary{cursor:pointer;font-size:12px;font-weight:700}.council-turn p,.council-final p,.council-note{font-size:12px;line-height:1.55;color:var(--muted);margin:7px 0 0}
 .council-final{padding:10px;border-radius:10px;background:var(--panel)}.council-note.error{color:#b42318}
 @media(max-width:560px){.agent-action-grid{grid-template-columns:1fr}}
+
+
+.health-actions{display:flex;align-items:center;gap:10px;margin:12px 0;flex-wrap:wrap}
+.health-actions .agent-action{width:auto;min-width:130px;padding:0 14px}
+.health-actions .meta{font-size:12px;color:var(--muted)}
