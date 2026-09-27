@@ -125,6 +125,9 @@ class PlatformAPI:
                     if path == "/api/v1/agents":
                         self._json(200, {"agents": api.service.specialist_agents()})
                         return
+                    if path == "/api/v1/agent/tools":
+                        self._json(200, {"tools": api.service.agent_tools()})
+                        return
                     if path == "/api/v1/models/routes":
                         self._json(200, api.service.model_routes())
                         return
