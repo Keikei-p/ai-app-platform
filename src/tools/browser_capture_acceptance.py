@@ -5,11 +5,11 @@ import json
 import shutil
 
 from src.core.browser_capture import BrowserScreenshotCapture
-from src.core.config import ROOT_DIR
+from src.core.config import ROOT_DIR, WORKSPACE_DIR
 
 
 def main() -> int:
-    root = ROOT_DIR / "ci_artifacts" / "browser-capture-smoke"
+    root = WORKSPACE_DIR / "browser-capture-smoke"
     if root.exists():
         shutil.rmtree(root)
     root.mkdir(parents=True)
