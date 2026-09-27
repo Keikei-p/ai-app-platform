@@ -9,7 +9,47 @@ from src.core.artifact_verifier import ArtifactVerifier
 from src.core.ios_simulator_packager import IOSSimulatorPackager
 
 
+class FakeCompleted:
+    def __init__(self, stdout: str):
+        self.stdout = stdout
+
+
 class IOSSimulatorPackagerTests(unittest.TestCase):
+    def test_scheme_discovery_prefers_generated_app_project(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            ios = root / "ios"
+            workspace = ios / "Demo.xcworkspace"
+            workspace.mkdir(parents=True)
+            (ios / "Demo.xcodeproj").mkdir()
+            (ios / "Pods.xcodeproj").mkdir()
+
+            def runner(command, cwd, timeout):
+                return FakeCompleted(json.dumps({
+                    "workspace": {
+                        "schemes": ["ExpoModulesCore", "Pods-Demo", "Demo"]
+                    }
+                }))
+
+            packager = IOSSimulatorPackager(runner=runner)
+            self.assertEqual(packager.discover_scheme(workspace, root), "Demo")
+
+    def test_scheme_discovery_refuses_ambiguous_non_app_schemes(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            ios = root / "ios"
+            workspace = ios / "Demo.xcworkspace"
+            workspace.mkdir(parents=True)
+            (ios / "Demo.xcodeproj").mkdir()
+
+            def runner(command, cwd, timeout):
+                return FakeCompleted(json.dumps({
+                    "workspace": {"schemes": ["ExpoModulesCore", "Pods-Demo"]}
+                }))
+
+            with self.assertRaises(RuntimeError):
+                IOSSimulatorPackager(runner=runner).discover_scheme(workspace, root)
+
     def test_discovery_and_app_validation_helpers(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
