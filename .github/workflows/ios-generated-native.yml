@@ -1,0 +1,56 @@
+name: Generated iOS Native Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/core/mobile_generator.py"
+      - "src/core/ios_source_packager.py"
+      - "src/core/ai_core.py"
+      - "src/core/platform_service.py"
+      - "src/core/agent_execution_trace.py"
+      - "src/core/agent_runtime.py"
+      - "src/core/generation_pipeline.py"
+      - "src/core/release_manager.py"
+      - "src/core/test_runner.py"
+      - "src/tools/ios_native_acceptance.py"
+      - "tests/test_ios_native_acceptance.py"
+      - ".github/workflows/ios-generated-native.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/core/mobile_generator.py"
+      - "src/core/ios_source_packager.py"
+      - "src/core/ai_core.py"
+      - "src/core/platform_service.py"
+      - "src/core/agent_execution_trace.py"
+      - "src/core/agent_runtime.py"
+      - "src/core/generation_pipeline.py"
+      - "src/core/release_manager.py"
+      - "src/core/test_runner.py"
+      - "src/tools/ios_native_acceptance.py"
+      - "tests/test_ios_native_acceptance.py"
+      - ".github/workflows/ios-generated-native.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios-simulator:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Show Xcode environment
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+      - name: Compile generated iOS app for Simulator
+        run: python -m src.tools.ios_native_acceptance
