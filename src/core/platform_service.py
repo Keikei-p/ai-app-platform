@@ -24,6 +24,7 @@ from .specialist_council import SpecialistCouncil
 from .llm_chat import AIChatEngine
 from .aivy_identity import AIVY
 from .evolution_engine import VerifiedEvolutionEngine
+from .build_jobs import BuildJobManager
 
 
 class PlatformService:
@@ -47,6 +48,7 @@ class PlatformService:
         self.research = ResearchIntake(self.knowledge)
         self.research_provider = GuardedResearchProvider()
         self.evolution = VerifiedEvolutionEngine()
+        self.build_jobs = BuildJobManager()
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -80,6 +82,7 @@ class PlatformService:
                 "specialist_council": True,
                 "verified_evolution_engine": True,
                 "release_manager": True,
+                "observable_build_jobs": True,
             },
         }
 
@@ -302,6 +305,40 @@ class PlatformService:
 
     def agent_plan(self, goal: str, project_slug: str | None = None) -> dict[str, Any]:
         return self.agent.plan(goal, project_slug).to_dict()
+
+    def start_build_job(
+        self,
+        slug: str,
+        instruction: str,
+        *,
+        approved: bool,
+        thread_id: str | None = None,
+    ) -> dict[str, Any]:
+        if not approved:
+            raise PermissionError("explicit user approval is required before build job creation")
+        clean = instruction.strip()
+        if not clean:
+            raise ValueError("instruction is required")
+        project_dir = safe_child(WORKSPACE_DIR, slug)
+        if not project_dir.is_dir():
+            raise FileNotFoundError(slug)
+
+        job = self.build_jobs.submit(
+            slug,
+            lambda progress: self.core_result_dict(
+                self.build_project(
+                    slug,
+                    clean,
+                    approved=True,
+                    progress=progress,
+                    thread_id=thread_id,
+                )
+            ),
+        )
+        return job.to_dict()
+
+    def build_job(self, job_id: str) -> dict[str, Any]:
+        return self.build_jobs.get(job_id).to_dict()
 
     def build_project(
         self,
