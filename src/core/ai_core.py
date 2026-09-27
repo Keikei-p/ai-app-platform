@@ -22,6 +22,7 @@ from .windows_packager import WindowsPackager
 from .web_packager import WebPackager
 from .android_packager import AndroidPackager
 from .ios_source_packager import IOSSourcePackager
+from .ios_simulator_packager import IOSSimulatorPackager
 from .release_manager import ReleaseManager
 from .social_generator import SocialAutomationGenerator
 from .knowledge_store import VerifiedKnowledgeStore
@@ -49,6 +50,7 @@ class CoreResult:
     android_build: dict | None = None
     ios_source_build: dict | None = None
     release_report: dict | None = None
+    ios_simulator_build: dict | None = None
 
 class AICore:
     """Local-first orchestration core. Models cannot bypass safety, permissions, tests, approval, or audit."""
@@ -71,6 +73,7 @@ class AICore:
         self.web_packager = WebPackager()
         self.android_packager = AndroidPackager()
         self.ios_source_packager = IOSSourcePackager()
+        self.ios_simulator_packager = IOSSimulatorPackager()
         self.release_manager = ReleaseManager()
         self.social = SocialAutomationGenerator()
         self.knowledge = VerifiedKnowledgeStore()
@@ -413,6 +416,26 @@ class AICore:
                     risk_items=risk_items,
                 )
 
+        ios_simulator_build_info: dict | None = None
+        if pipeline_report.preview_ready and "ios" in plan.spec.targets:
+            emit("package", "macOS環境ではiOS Simulator実ビルドを確認しています")
+            ios_simulator_result = self.ios_simulator_packager.build(
+                project_dir,
+                plan.spec,
+            )
+            ios_simulator_build_info = ios_simulator_result.to_dict()
+            log_event(
+                "packager.ios.simulator_result",
+                json.dumps(ios_simulator_build_info, ensure_ascii=False),
+                slug,
+                "ios-simulator-packager",
+            )
+            if ios_simulator_result.built:
+                if ios_simulator_result.artifact is not None:
+                    files.append(ios_simulator_result.artifact)
+                if ios_simulator_result.manifest is not None:
+                    files.append(ios_simulator_result.manifest)
+
         ios_source_build_info: dict | None = None
         if pipeline_report.preview_ready and "ios" in plan.spec.targets:
             emit("package", "iOSソースZIPとチェックサムを作成しています")
@@ -484,6 +507,8 @@ class AICore:
             pipeline_dict["android_build"] = android_build_info
         if ios_source_build_info is not None:
             pipeline_dict["ios_source_build"] = ios_source_build_info
+        if ios_simulator_build_info is not None:
+            pipeline_dict["ios_simulator_build"] = ios_simulator_build_info
         pipeline_dict["release_manager"] = release_report.to_dict()
         final_ok = pipeline_report.preview_ready
         if final_ok:
@@ -559,4 +584,5 @@ class AICore:
             android_build_info,
             ios_source_build_info,
             release_report.to_dict(),
+            ios_simulator_build_info,
         )
