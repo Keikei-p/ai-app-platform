@@ -62,6 +62,7 @@ class ProjectCard:
     updated_at: str
     version_count: int
     artifact_count: int
+    evaluation_score: int | None = None
 
 
 class ConversationStore:
@@ -345,6 +346,7 @@ class ProjectCatalog:
         meta = self._json(project_dir / "project.json")
         spec = self._json(project_dir / "app_spec.json")
         readiness = self._json(project_dir / ".aiapp" / "reports" / "build_readiness.json")
+        evaluation = self._json(project_dir / ".aiapp" / "reports" / "agent_evaluation.json")
         versions_dir = project_dir / ".vault" / "versions"
         version_count = len([x for x in versions_dir.iterdir() if x.is_dir()]) if versions_dir.is_dir() else 0
         artifacts = self.artifacts(slug)
@@ -360,6 +362,7 @@ class ProjectCatalog:
             updated_at=updated,
             version_count=version_count,
             artifact_count=len(artifacts),
+            evaluation_score=int(evaluation["score"]) if isinstance(evaluation.get("score"), (int, float)) else None,
         )
 
     def detail(self, slug: str) -> dict[str, Any]:
@@ -370,6 +373,7 @@ class ProjectCatalog:
         readiness = self._json(project_dir / ".aiapp" / "reports" / "build_readiness.json")
         spec = self._json(project_dir / "app_spec.json")
         approval = self._json(project_dir / ".aiapp" / "approval_state.json")
+        evaluation = self._json(project_dir / ".aiapp" / "reports" / "agent_evaluation.json")
         try:
             from .code_vault import CodeVault
             versions = [asdict(x) for x in CodeVault().list_versions(slug)[:30]]
@@ -387,6 +391,7 @@ class ProjectCatalog:
             "security": security,
             "readiness": readiness,
             "approval": approval,
+            "evaluation": evaluation,
             "gaps": self._json(project_dir / "implementation_gaps.json"),
             "versions": versions,
             "audit": [dict(x) for x in audit],
