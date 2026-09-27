@@ -38,6 +38,12 @@ def main() -> int:
     thread.start()
     port = int(server.server_address[1])
     try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/", method="GET")
+        with urllib.request.urlopen(req, timeout=5) as response:
+            html = response.read().decode("utf-8")
+        if "何を作りたいですか？" not in html or "/ui/app.js" not in html:
+            raise RuntimeError("v0.9 Web UI shell was not served")
+
         status, data = request(port, "GET", "/api/v1/status")
         if status != 200 or not data.get("capabilities", {}).get("agent_planning"):
             raise RuntimeError("status endpoint did not expose platform capabilities")
@@ -63,7 +69,7 @@ def main() -> int:
         if status != 200 or not isinstance(projects.get("projects"), list):
             raise RuntimeError("projects endpoint failed")
 
-        print("PLATFORM API ACCEPTANCE PASS: loopback API + CSRF + agent plan + project catalog")
+        print("PLATFORM API ACCEPTANCE PASS: v0.9 Web UI + loopback API + CSRF + agent plan + project catalog")
     finally:
         server.shutdown()
         server.server_close()
