@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 import json
 
 from .agent_runtime import EvidenceLedger
@@ -64,6 +64,7 @@ class AgentToolExecutor:
         design: DesignAI | None = None,
         security: GeneratedArtifactSecurityScanner | None = None,
         evolution: VerifiedEvolutionEngine | None = None,
+        project_resolver: Callable[[str], Path] | None = None,
     ):
         self.registry = registry or AgentToolRegistry()
         self.catalog = catalog or ProjectCatalog()
@@ -74,6 +75,7 @@ class AgentToolExecutor:
         self.design = design or DesignAI()
         self.security = security or GeneratedArtifactSecurityScanner()
         self.evolution = evolution or VerifiedEvolutionEngine()
+        self.project_resolver = project_resolver or self._default_project_dir
         self._handlers = {
             "project.inspect": self._project_inspect,
             "knowledge.search": self._knowledge_search,
@@ -159,18 +161,38 @@ class AgentToolExecutor:
             return "pass" if bool((result.get("security") or {}).get("passed")) else "fail"
         return "pass"
 
-    @staticmethod
-    def _project_dir(slug: str) -> Path:
-        path = safe_child(WORKSPACE_DIR, slug)
+    def _project_dir(self, slug: str) -> Path:
+        path = Path(self.project_resolver(slug))
         if not path.is_dir():
             raise FileNotFoundError(slug)
         return path
+
+    @staticmethod
+    def _default_project_dir(slug: str) -> Path:
+        return safe_child(WORKSPACE_DIR, slug)
 
     def _project_inspect(self, args: dict[str, Any]) -> dict[str, Any]:
         slug = str(args.get("project_slug") or "").strip()
         if not slug:
             raise ValueError("project_slug is required")
-        return self.catalog.detail(slug)
+        project_dir = self._project_dir(slug)
+        return {
+            "project": self._read_json(project_dir / "project.json"),
+            "spec": self._read_json(project_dir / "app_spec.json"),
+            "readiness": self._read_json(project_dir / ".aiapp" / "reports" / "build_readiness.json"),
+            "evaluation": self._read_json(project_dir / ".aiapp" / "reports" / "agent_evaluation.json"),
+            "release": self._read_json(project_dir / ".aiapp" / "reports" / "release_manager.json"),
+        }
+
+    @staticmethod
+    def _read_json(path: Path) -> dict[str, Any]:
+        if not path.is_file() or path.is_symlink():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return data if isinstance(data, dict) else {}
 
     def _knowledge_search(self, args: dict[str, Any]) -> dict[str, Any]:
         query = str(args.get("query") or "").strip()
