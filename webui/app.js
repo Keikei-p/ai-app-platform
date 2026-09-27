@@ -116,15 +116,43 @@ async function newChat(){
   state.currentThread=row;$('#messages').innerHTML='';$('#welcome').hidden=false;$('#topbarTitle').textContent='新しいチャット';setView('home');await loadConversations();
 }
 async function planGoal(text){
-  const plan=await api('/api/v1/agent/plan',{method:'POST',body:JSON.stringify({goal:text,project_slug:state.currentThread?.project_slug||null})});
+  const projectSlug=state.currentThread?.project_slug||null;
+  const plan=await api('/api/v1/agent/plan',{method:'POST',body:JSON.stringify({goal:text,project_slug:projectSlug})});
   $('#agentPlan').innerHTML=(plan.steps||[]).map((x,i)=>{
     const team=(x.specialists||[]).length?' · '+(x.specialists||[]).map(s=>({
       coordinator:'司令塔',research:'Research',architect:'Architect',coding:'Coding',design:'Design',test:'Test',security:'Security',build:'Build',release:'Release'
     }[s]||s)).join(' / '):'';
     return `<div class="plan-step"><div class="step-no">${i+1}</div><div><strong>${esc(x.title)}</strong><p>${esc(x.purpose)}${esc(team)}${x.requires_human_approval?' · 人の承認が必要':''}</p></div></div>`;
   }).join('');
+  if(projectSlug){
+    const holder=document.createElement('div');
+    holder.className='safe-agent-wrap';
+    holder.innerHTML='<button class="agent-action secondary" id="runSafeAgent" type="button">Aivy自律点検</button><p>現在のアプリをInspect → Tests → Design → Securityまで安全Toolだけで確認します。コード変更・公開はしません。</p><div id="safeAgentResult"></div>';
+    $('#agentPlan').append(holder);
+    $('#runSafeAgent').onclick=()=>runSafeAgent(text,projectSlug);
+  }
   $('#inspector').classList.add('open');
   return plan;
+}
+async function runSafeAgent(goal,projectSlug){
+  const button=$('#runSafeAgent');const target=$('#safeAgentResult');
+  if(!button||!target)return;
+  button.disabled=true;button.textContent='Aivy点検中…';
+  target.innerHTML='<div class="safe-agent-note">Evidenceを集めています…</div>';
+  try{
+    const report=await api('/api/v1/agent/run-safe',{
+      method:'POST',
+      body:JSON.stringify({goal,project_slug:projectSlug})
+    });
+    const labels={executed:'実行済み',delegated:'既存パイプラインへ委譲',approval_required:'人の承認待ち',failed:'NG',error:'エラー',planned:'計画'};
+    target.innerHTML='<div class="safe-agent-report"><div class="safe-agent-head"><strong>Aivy Agent Run</strong><span>'+esc(report.status||'')+'</span></div>'+
+      (report.steps||[]).map(x=>'<div class="safe-agent-step '+esc(x.status||'')+'"><b>'+esc(x.step_id||x.action||'step')+'</b><span>'+esc(labels[x.status]||x.status||'')+'</span><p>'+esc(x.summary||'')+'</p></div>').join('')+
+      '<div class="safe-agent-foot">任意shell: '+(report.arbitrary_shell?'有効':'無効')+' · 実行Tool: '+esc((report.executed_tools||[]).join(', ')||'なし')+'</div></div>';
+  }catch(e){
+    target.innerHTML='<div class="safe-agent-note error">自律点検を完了できませんでした: '+esc(e.message)+'</div>';
+  }finally{
+    button.disabled=false;button.textContent='Aivy自律点検';
+  }
 }
 function setBusy(value){
   state.busy=value;
