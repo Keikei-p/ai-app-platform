@@ -526,6 +526,23 @@ class PlatformService:
                 summary="generation completed with execution trace and platform quality gates satisfied",
                 source="agent-execution-trace",
             )
+
+        run_evidence = [
+            row for row in ledger.recent(300)
+            if row.run_id == plan.run_id
+        ]
+        completion = self.agent.completion_check(run_evidence)
+        pipeline_report = dict(result.pipeline_report or {})
+        pipeline_report["agent_completion"] = completion
+        result.pipeline_report = pipeline_report
+        if result.ok and not completion.get("complete"):
+            result.ok = False
+            missing = ", ".join(completion.get("missing_evidence") or []) or "unknown"
+            result.message = (
+                "Agent completion Evidenceが不足しているため完成扱いを停止しました。"
+                f" 不足: {missing}"
+            )
+
         if thread_id:
             self.conversations.append(thread_id, "assistant", result.message)
             try:
