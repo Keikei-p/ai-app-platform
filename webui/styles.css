@@ -22,3 +22,13 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .download-action{margin-top:8px}
 .download-link{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 13px;border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);font-weight:700;background:var(--panel)}
 .download-link:hover{transform:translateY(-1px)}
+
+
+.model-router-card{align-items:start;flex-wrap:wrap}
+.model-router-card .settings-copy{flex:1;min-width:220px}
+.route-controls{width:100%;display:grid;gap:8px;margin-top:12px}
+.route-row{display:grid;grid-template-columns:minmax(100px,1fr) 120px minmax(150px,1.5fr) auto;gap:8px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
+.route-row>div{display:flex;flex-direction:column;gap:2px}.route-row small{color:var(--muted)}
+.route-row select,.route-row input{min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);padding:0 10px}
+.route-save{min-height:40px;border:0;border-radius:10px;background:var(--text);color:var(--bg);padding:0 14px;font-weight:700;cursor:pointer}
+@media(max-width:720px){.route-row{grid-template-columns:1fr 1fr}.route-row .route-model{grid-column:1/3}.route-save{grid-column:1/3}}
