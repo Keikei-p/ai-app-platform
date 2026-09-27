@@ -54,15 +54,15 @@ async function loadProjects(){
   $('#projectGrid').innerHTML=state.projects.map(x=>`
    <article class="project-card" data-slug="${esc(x.slug)}">
     <div class="project-top"><div><h3>${esc(x.name)}</h3><div class="meta"><span class="chip">${esc(x.app_type)}</span>${(x.targets||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></div><strong class="${x.quality==='PASS'?'quality-pass':'quality-blocked'}">${esc(x.quality)}</strong></div>
-    <div class="meta" style="margin-top:14px"><span>${esc(x.status)}</span><span>${fmt(x.updated_at)}</span><span>${x.artifact_count} artifacts</span></div>
+    <div class="meta" style="margin-top:14px"><span>${esc(x.status)}</span><span>${fmt(x.updated_at)}</span><span>${x.artifact_count} artifacts</span>${x.evaluation_score!=null?`<span>AI評価 ${x.evaluation_score}/100</span>`:''}</div>
    </article>`).join('')||'<div class="empty">まだアプリはありません。</div>';
   $$('#projectGrid [data-slug]').forEach(c=>c.onclick=()=>showProject(c.dataset.slug));
 }
 async function showProject(slug){
   const data=await api('/api/v1/projects/'+encodeURIComponent(slug));
-  const card=data.card||{};const readiness=data.readiness||{};const gaps=(data.gaps||{}).items||[];
+  const card=data.card||{};const readiness=data.readiness||{};const gaps=(data.gaps||{}).items||[];const evaluation=data.evaluation||{};
   $('#agentPlan').innerHTML=`
-    <div class="data-card"><h3>${esc(card.name||slug)}</h3><div class="meta"><span>${esc(card.status)}</span><span>${esc(card.quality)}</span></div></div>
+    <div class="data-card"><h3>${esc(card.name||slug)}</h3><div class="meta"><span>${esc(card.status)}</span><span>${esc(card.quality)}</span>${evaluation.score!=null?`<span>AI評価 ${evaluation.score}/100</span>`:''}</div></div>
     <div class="plan-step"><div class="step-no">✓</div><div><strong>プレビュー</strong><p>${readiness.preview_ready?'可能':'まだ準備が必要'}</p></div></div>
     <div class="plan-step"><div class="step-no">!</div><div><strong>未完了</strong><p>${gaps.length?gaps.map(x=>esc(x.reason||'')).join('<br>'):'大きな未完了項目なし'}</p></div></div>`;
   $('#inspector').classList.add('open');
