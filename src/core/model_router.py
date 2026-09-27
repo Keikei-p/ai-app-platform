@@ -44,6 +44,31 @@ class ModelRouter:
     def route(self, task: str) -> ModelRoute:
         task = task.strip().lower()
         capability = self.TASK_CAPABILITY.get(task, "reasoning")
+
+        configured = None
+        if hasattr(self.engine, "route_config"):
+            try:
+                configured = self.engine.route_config(capability)
+            except Exception:
+                configured = None
+
+        if configured:
+            provider = str(configured.get("provider") or "")
+            model = str(configured.get("model") or "")
+            try:
+                status = self.engine.status(provider, model)
+            except TypeError:
+                status = self.engine.status()
+            if status.connected:
+                return ModelRoute(
+                    task=task,
+                    mode="capability_route",
+                    provider=provider,
+                    model=model,
+                    capability=capability,
+                    reason=f"Capability '{capability}' is explicitly routed to {provider}/{model}.",
+                )
+
         status = self.engine.status()
         settings = self.engine.settings()
         if not status.connected:
@@ -61,8 +86,5 @@ class ModelRouter:
             provider=str(settings.get("provider") or ""),
             model=str(settings.get("model") or ""),
             capability=capability,
-            reason=(
-                "v0.9 routes the specialist task through the currently configured provider/model. "
-                "Per-task overrides are reserved for a later model-router milestone."
-            ),
+            reason="No capability-specific route is active, so Aivy uses the configured default provider/model.",
         )
