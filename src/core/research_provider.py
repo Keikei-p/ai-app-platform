@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -58,6 +59,9 @@ class ResearchFetchResult:
     quarantine_indicators: tuple[str, ...]
     content: str
     content_hash: str
+    retrieved_at: str = ""
+    last_modified: str = ""
+    etag: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -107,6 +111,12 @@ class GuardedResearchProvider:
             raw = response.read(MAX_RESEARCH_BYTES + 1)
             if len(raw) > MAX_RESEARCH_BYTES:
                 raise ValueError("research source exceeds size limit")
+            last_modified = redact_sensitive(
+                str(response.headers.get("Last-Modified") or "").strip()
+            )[:240]
+            etag = redact_sensitive(
+                str(response.headers.get("ETag") or "").strip()
+            )[:240]
 
             charset = "utf-8"
             try:
@@ -138,6 +148,9 @@ class GuardedResearchProvider:
             quarantine_indicators=inspected.indicators,
             content=safe_content,
             content_hash=inspected.content_hash,
+            retrieved_at=datetime.now(timezone.utc).isoformat(),
+            last_modified=last_modified,
+            etag=etag,
         )
 
     def _validate_url(self, url: str) -> None:
