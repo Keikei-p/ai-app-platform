@@ -79,6 +79,7 @@ class PlatformService:
                 "automatic_screenshot_capture": True,
                 "specialist_council": True,
                 "verified_evolution_engine": True,
+                "release_manager": True,
             },
         }
 
@@ -372,6 +373,7 @@ class PlatformService:
             "windows_build": result.windows_build,
             "web_build": result.web_build,
             "android_build": result.android_build,
+            "release_report": result.release_report,
         }
 
     def delivery_options(self, slug: str) -> list[dict[str, Any]]:
