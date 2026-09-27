@@ -373,6 +373,7 @@ class PlatformService:
             "windows_build": result.windows_build,
             "web_build": result.web_build,
             "android_build": result.android_build,
+            "ios_source_build": result.ios_source_build,
             "release_report": result.release_report,
         }
 
