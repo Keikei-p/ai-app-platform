@@ -115,6 +115,55 @@ def main() -> int:
         if not {"coding", "vision", "research", "reasoning"}.issubset(capabilities):
             raise RuntimeError("required model routes are missing")
 
+        status, evolution_policy = request(port, "GET", "/api/v1/evolution/policy")
+        if status != 200 or evolution_policy.get("policy", {}).get("auto_merge_main") is not False:
+            raise RuntimeError("evolution policy does not protect main")
+        baseline = {
+            "score": 90,
+            "tests_passed": True,
+            "test_pass_ratio": 1.0,
+            "design_passed": True,
+            "design_score": 92,
+            "security_passed": True,
+            "preview_ready": True,
+            "release_ready": False,
+            "artifact_count": 1,
+            "learning_eligible": True,
+            "regressions": [],
+        }
+        candidate = {**baseline, "score": 94, "design_score": 96}
+        status, evolution = request(
+            port,
+            "POST",
+            "/api/v1/evolution/compare",
+            {
+                "baseline": baseline,
+                "candidate": candidate,
+                "changed_paths": ["src/core/generator.py"],
+                "evidence_refs": ["ci:acceptance"],
+            },
+            csrf,
+        )
+        if status != 200 or evolution.get("status") != "human_review_required":
+            raise RuntimeError("verified evolution candidate was not routed to human review")
+        if evolution.get("policy", {}).get("auto_apply") is not False:
+            raise RuntimeError("evolution engine unexpectedly gained auto-apply authority")
+
+        status, rejected_evolution = request(
+            port,
+            "POST",
+            "/api/v1/evolution/compare",
+            {
+                "baseline": baseline,
+                "candidate": {**candidate, "score": 99},
+                "changed_paths": ["src/core/safety.py"],
+                "evidence_refs": ["ci:acceptance"],
+            },
+            csrf,
+        )
+        if status != 200 or rejected_evolution.get("status") != "rejected":
+            raise RuntimeError("evolution engine accepted a root-policy mutation")
+
         status, agents = request(port, "GET", "/api/v1/agents")
         if status != 200 or len(agents.get("agents") or []) < 8:
             raise RuntimeError("specialist agent endpoint failed")
