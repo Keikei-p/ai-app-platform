@@ -137,6 +137,14 @@ class PlatformAPI:
                         row = api.service.create_conversation(str(data.get("title") or "新しいチャット"))
                         self._json(201, row)
                         return
+                    if path == "/api/v1/chat/turn":
+                        thread_id = str(data.get("thread_id") or "").strip()
+                        message = str(data.get("message") or "").strip()
+                        if not thread_id or not message:
+                            raise ValueError("thread_id and message are required")
+                        row = api.service.chat_turn(thread_id, message)
+                        self._json(200, row)
+                        return
                     if path == "/api/v1/projects":
                         name = str(data.get("name") or "").strip()
                         if not name:
@@ -186,6 +194,18 @@ class PlatformAPI:
                         self._json(202 if row.get("accepted") else 422, row)
                         return
                     parts = [x for x in path.split("/") if x]
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "build":
+                        instruction = str(data.get("instruction") or "").strip()
+                        if not instruction:
+                            raise ValueError("instruction is required")
+                        result = api.service.build_project(
+                            parts[3],
+                            instruction,
+                            approved=data.get("approved") is True,
+                            thread_id=str(data.get("thread_id") or "") or None,
+                        )
+                        self._json(200, api.service.core_result_dict(result))
+                        return
                     if len(parts) == 5 and parts[:3] == ["api", "v1", "agents"] and parts[4] == "consult":
                         specialist_name = parts[3]
                         task = str(data.get("task") or "").strip()
