@@ -41,6 +41,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="ai-app-platform-chat-gui-") as td:
         os.environ["AI_APP_PLATFORM_STATE_DIR"] = td
         from src.ui.main_window import MainWindow
+        from src.ui.workspace_center import WorkspaceCenter
         from src.core.config import WORKSPACE_DIR
 
         app = MainWindow()
@@ -179,6 +180,30 @@ def main() -> int:
             card = next((x for x in cards if x.slug == app.current_slug), None)
             if not card or card.quality != "PASS":
                 raise AssertionError("generated app was not surfaced with verified quality state")
+
+            center = WorkspaceCenter(
+                app,
+                app.conversations,
+                app.catalog,
+                on_open_thread=lambda _thread_id: None,
+                on_open_project=lambda _slug: None,
+                on_preview_project=lambda _slug: None,
+                on_restore_project=lambda _slug: None,
+                initial_tab="projects",
+            )
+            center.update()
+            try:
+                if len(center.tabs.tabs()) != 3:
+                    raise AssertionError("workspace center does not expose conversation/project/download tabs")
+                if not any(row.project_slug == app.current_slug for row in center._thread_rows):
+                    raise AssertionError("workspace center did not show the linked conversation")
+                if not any(row.slug == app.current_slug for row in center._project_rows):
+                    raise AssertionError("workspace center did not show the generated app")
+                if not any(row.project_slug == app.current_slug for row in center._artifact_rows):
+                    raise AssertionError("workspace center did not show the real generated artifact")
+            finally:
+                center.destroy()
+
             if not app.next_actions.winfo_manager():
                 raise AssertionError("post-build next-action bar was not shown")
             app.geometry("680x440"); app.update()
