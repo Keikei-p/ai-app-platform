@@ -763,6 +763,11 @@ if __name__ == "__main__":
     @staticmethod
     def _index(spec: AppSpec) -> str:
         title = spec.project_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        requested = (spec.design_style or "modern").strip().lower()
+        allowed = {"minimal", "premium", "modern", "friendly", "business", "soft", "finance", "youthful", "future", "dark"}
+        theme = requested if requested in allowed else "youthful"
+        if theme == "modern":
+            theme = "youthful"
         return f'''<!doctype html>
 <html lang="ja">
 <head>
@@ -772,8 +777,8 @@ if __name__ == "__main__":
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="social.css">
 </head>
-<body data-theme="modern">
-<header class="topbar"><div class="shell nav"><strong class="brand">{title}</strong><span class="status-badge"><span class="status-dot"></span>SNS Automation</span></div></header>
+<body data-theme="{theme}">
+<header class="topbar"><div class="shell nav"><strong class="brand">{title}</strong><div class="nav-actions"><span class="status-badge"><span class="status-dot"></span>SNS Automation</span><button class="icon-button" id="themeToggle" type="button" aria-label="表示テーマを切り替える" title="テーマ: システム">◐</button></div></div></header>
 <main class="shell">
 <section class="hero"><div class="hero-copy"><span class="eyebrow">SOCIAL AUTOMATION</span><h1>投稿を予約して、自動で届ける。</h1><p>初期状態はDRY RUNです。認証情報は環境変数からのみ読み込み、コードや投稿DBには保存しません。</p></div></section>
 <section class="stats-grid">
@@ -807,6 +812,8 @@ if __name__ == "__main__":
 </section>
 </section>
 </main>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<dialog id="confirmDialog" class="confirm-dialog"><form method="dialog"><div class="dialog-icon">?</div><h2>確認</h2><p id="confirmMessage">この操作を続けますか？</p><div class="dialog-actions"><button value="cancel" class="ghost">キャンセル</button><button value="ok">続ける</button></div></form></dialog>
 <script src="app.js"></script>
 </body>
 </html>'''
@@ -823,12 +830,46 @@ textarea:focus-visible{outline:3px solid #A5B4FC;outline-offset:2px}
     @staticmethod
     def _script() -> str:
         return r'''const statusNode=document.querySelector('#status');
+const toast=document.querySelector('#toast');
+const confirmDialog=document.querySelector('#confirmDialog');
+const confirmMessage=document.querySelector('#confirmMessage');
+const themeToggle=document.querySelector('#themeToggle');
 const list=document.querySelector('#itemList');
 const emptyState=document.querySelector('#emptyState');
 const modeDetail=document.querySelector('#modeDetail');
 const providerStatus=document.querySelector('#providerStatus');
 let csrf='';
 let autoMode=false;
+let toastTimer=null;
+
+function showToast(message,type='info'){
+  if(!toast)return;
+  toast.textContent=message;toast.dataset.type=type;toast.classList.add('show');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);
+}
+function confirmAction(message){
+  if(!confirmDialog||typeof confirmDialog.showModal!=='function')return Promise.resolve(window.confirm(message));
+  confirmMessage.textContent=message;
+  return new Promise(resolve=>{
+    const close=()=>{confirmDialog.removeEventListener('close',close);resolve(confirmDialog.returnValue==='ok');};
+    confirmDialog.addEventListener('close',close);confirmDialog.showModal();
+  });
+}
+function initTheme(){
+  const saved=localStorage.getItem('color-mode')||'system';
+  document.documentElement.dataset.colorMode=saved;
+  if(themeToggle)themeToggle.title='テーマ: '+({system:'システム',light:'ライト',dark:'ダーク'}[saved]||'システム');
+}
+function cycleTheme(){
+  const order=['system','light','dark'];
+  const current=document.documentElement.dataset.colorMode||'system';
+  const next=order[(order.indexOf(current)+1)%order.length];
+  document.documentElement.dataset.colorMode=next;localStorage.setItem('color-mode',next);
+  if(themeToggle)themeToggle.title='テーマ: '+({system:'システム',light:'ライト',dark:'ダーク'}[next]);
+  showToast('表示テーマ: '+({system:'システム',light:'ライト',dark:'ダーク'}[next]));
+}
+if(themeToggle)themeToggle.addEventListener('click',cycleTheme);
+initTheme();
 
 async function api(path,options={}){
   options.headers={'Content-Type':'application/json',...(options.headers||{})};
@@ -866,7 +907,7 @@ function render(posts){
     }
     if(['pending_approval','queued','retry'].includes(post.status)){
       const cancel=document.createElement('button');cancel.className='ghost';cancel.textContent='取消';
-      cancel.onclick=()=>act(post.id,'cancel');actions.append(cancel);
+      cancel.onclick=async()=>{if(await confirmAction('この予約投稿を取り消しますか？'))await act(post.id,'cancel');};actions.append(cancel);
     }
     if(post.status==='failed'){
       const retry=document.createElement('button');retry.className='secondary';retry.textContent='再実行';
@@ -897,8 +938,9 @@ async function act(id,action){
   try{
     await api('/api/social/posts/'+id+'/'+action,{method:'POST',body:'{}'});
     statusNode.textContent='更新しました';
+    showToast('更新しました','success');
     await load();
-  }catch(e){statusNode.textContent=e.message;}
+  }catch(e){statusNode.textContent=e.message;showToast(e.message,'error');}
 }
 
 document.querySelector('#toggleAuto').onclick=async()=>{
@@ -906,8 +948,9 @@ document.querySelector('#toggleAuto').onclick=async()=>{
     const data=await api('/api/social/settings',{method:'POST',body:JSON.stringify({auto_mode:!autoMode})});
     autoMode=!!data.auto_mode;
     modeDetail.textContent=(modeDetail.textContent.split('/')[0]||'')+'/ '+(autoMode?'自動モードON':'承認モード');
-    statusNode.textContent=autoMode?'自動投稿をONにしました':'承認モードに戻しました';
-  }catch(e){statusNode.textContent=e.message;}
+    const message=autoMode?'自動投稿をONにしました':'承認モードに戻しました';
+    statusNode.textContent=message;showToast(message,'success');
+  }catch(e){statusNode.textContent=e.message;showToast(e.message,'error');}
 };
 
 document.querySelector('#refresh').onclick=()=>load().catch(e=>statusNode.textContent=e.message);
@@ -928,12 +971,13 @@ document.querySelector('#queuePost').onclick=async()=>{
         metadata:{title,description:text,privacyStatus:'private'}
       })
     });
-    statusNode.textContent=autoMode?'予約しました':'承認待ちに追加しました';
+    const message=autoMode?'予約しました':'承認待ちに追加しました';
+    statusNode.textContent=message;showToast(message,'success');
     await load();
-  }catch(e){statusNode.textContent=e.message;}
+  }catch(e){statusNode.textContent=e.message;showToast(e.message,'error');}
 };
 
-bootstrap().catch(e=>statusNode.textContent=e.message);
+bootstrap().catch(e=>{statusNode.textContent=e.message;showToast(e.message,'error');});
 '''
 
     @staticmethod
