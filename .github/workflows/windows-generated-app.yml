@@ -8,6 +8,11 @@ on:
       - "src/core/windows_packager.py"
       - "src/core/ai_core.py"
       - "src/core/test_runner.py"
+      - "src/core/platform_service.py"
+      - "src/core/agent_execution_trace.py"
+      - "src/core/agent_runtime.py"
+      - "src/core/generation_pipeline.py"
+      - "src/core/release_manager.py"
       - "src/tools/windows_package_acceptance.py"
       - ".github/workflows/windows-generated-app.yml"
   pull_request:
@@ -16,6 +21,11 @@ on:
       - "src/core/windows_packager.py"
       - "src/core/ai_core.py"
       - "src/core/test_runner.py"
+      - "src/core/platform_service.py"
+      - "src/core/agent_execution_trace.py"
+      - "src/core/agent_runtime.py"
+      - "src/core/generation_pipeline.py"
+      - "src/core/release_manager.py"
       - "src/tools/windows_package_acceptance.py"
       - ".github/workflows/windows-generated-app.yml"
 
