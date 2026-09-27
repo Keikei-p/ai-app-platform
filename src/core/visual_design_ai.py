@@ -7,6 +7,7 @@ import json
 
 from .aivy_identity import AIVY
 from .llm_chat import AIChatEngine
+from .model_router import ModelRouter
 
 
 VIEWPORT_FILES = (
@@ -44,8 +45,9 @@ class VisualDesignAI:
     files or a multimodal model are unavailable.
     """
 
-    def __init__(self, engine: AIChatEngine | None = None):
+    def __init__(self, engine: AIChatEngine | None = None, router: ModelRouter | None = None):
         self.engine = engine or AIChatEngine()
+        self.router = router or ModelRouter(self.engine)
 
     def screenshot_paths(self, project_dir: Path) -> list[Path]:
         root = Path(project_dir) / ".aiapp" / "screenshots"
@@ -53,8 +55,12 @@ class VisualDesignAI:
 
     def review(self, project_dir: Path) -> VisualDesignReview:
         screenshots = self.screenshot_paths(project_dir)
+        route = self.router.route("visual")
         cfg = self.engine.settings()
-        status = self.engine.status()
+        try:
+            status = self.engine.status(route.provider, route.model) if route.provider != "none" else self.engine.status()
+        except TypeError:
+            status = self.engine.status()
         names = tuple(path.name for path in screenshots)
 
         if len(screenshots) != len(VIEWPORT_FILES):
@@ -97,7 +103,16 @@ class VisualDesignAI:
             "Base conclusions only on visible evidence in the screenshots. "
             "Do not claim a problem is fixed; report what is actually visible."
         )
-        raw = self.engine.vision_reply(screenshots, prompt, system)
+        if hasattr(self.engine, "vision_reply_routed") and route.provider != "none":
+            raw = self.engine.vision_reply_routed(
+                route.provider,
+                route.model,
+                screenshots,
+                prompt,
+                system,
+            )
+        else:
+            raw = self.engine.vision_reply(screenshots, prompt, system)
         data = self._parse(raw)
         score = max(0, min(100, int(data.get("score") or 0)))
         passed = bool(data.get("passed")) and score >= 90
