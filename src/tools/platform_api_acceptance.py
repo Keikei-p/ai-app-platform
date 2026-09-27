@@ -62,6 +62,8 @@ def main() -> int:
             raise RuntimeError("observable build jobs capability is missing")
         if not data.get("capabilities", {}).get("project_health_check"):
             raise RuntimeError("project health check capability is missing")
+        if not data.get("capabilities", {}).get("agent_safe_execution"):
+            raise RuntimeError("safe agent execution capability is missing")
         if (data.get("identity") or {}).get("name") != "Aivy":
             raise RuntimeError("Aivy identity was not exposed by platform core")
         csrf = str(data.get("csrf") or "")
@@ -128,6 +130,25 @@ def main() -> int:
         )
         if status != 400 or "approval" not in str(denied_job.get("error") or "").lower():
             raise RuntimeError("build job endpoint bypassed explicit approval")
+
+        status, safe_run = request(
+            port,
+            "POST",
+            "/api/v1/agent/run-safe",
+            {
+                "goal": "現在のプロジェクト状態を安全に確認する",
+                "project_slug": turn["project_slug"],
+            },
+            csrf,
+        )
+        if status != 200 or safe_run.get("arbitrary_shell") is not False:
+            raise RuntimeError("safe agent run endpoint failed")
+        if "project.inspect" not in (safe_run.get("executed_tools") or []):
+            raise RuntimeError("safe agent did not execute reviewed project inspection")
+        if "release.publish" in (safe_run.get("executed_tools") or []):
+            raise RuntimeError("safe agent unexpectedly executed release.publish")
+        if safe_run.get("status") not in {"blocked", "approval_required", "delegated_actions_pending", "completed"}:
+            raise RuntimeError("safe agent returned an invalid bounded status")
 
         status, health = request(
             port,
