@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from src.core.agent_tools import AgentToolRegistry
 from src.core.agent_tool_executor import AgentToolExecutor
+from src.core.test_runner import TestResult
 
 
 class FakeKnowledge:
@@ -35,6 +36,11 @@ class AgentToolExecutorTests(unittest.TestCase):
         executor = AgentToolExecutor(knowledge=FakeKnowledge())
         with self.assertRaises(ValueError):
             executor.execute("knowledge.search", {"query": "api", "command": "whoami"})
+
+    def test_unknown_tool_arguments_are_rejected(self):
+        executor = AgentToolExecutor(knowledge=FakeKnowledge())
+        with self.assertRaises(ValueError):
+            executor.execute("knowledge.search", {"query": "api", "unexpected": "value"})
 
     def test_verified_knowledge_search_is_forced(self):
         knowledge = FakeKnowledge()
@@ -68,6 +74,23 @@ class AgentToolExecutorTests(unittest.TestCase):
                 evidence = project / ".aiapp" / "agent" / "evidence.jsonl"
                 self.assertTrue(evidence.is_file())
 
+
+    def test_failed_validation_records_failed_evidence(self):
+        class FailingTests:
+            def run(self, project_dir):
+                return [TestResult("demo", False, "failed")]
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = root / "demo"
+            project.mkdir()
+            with patch("src.core.agent_tool_executor.WORKSPACE_DIR", root):
+                executor = AgentToolExecutor(tests=FailingTests())
+                result = executor.execute("tests.run", {"project_slug": "demo"}, run_id="run-fail")
+                self.assertFalse(result.result["passed"])
+                evidence = project / ".aiapp" / "agent" / "evidence.jsonl"
+                last = json.loads(evidence.read_text(encoding="utf-8").splitlines()[-1])
+                self.assertEqual(last["status"], "fail")
 
 if __name__ == "__main__":
     unittest.main()
