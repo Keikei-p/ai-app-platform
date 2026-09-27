@@ -489,10 +489,21 @@ class ProjectCatalog:
         spec = self._json(project_dir / "app_spec.json")
         requested = [str(x).lower() for x in spec.get("targets") or ["web"]]
         artifacts = self.artifacts(slug)
-        options = [
-            DeliveryOption(x.project_slug, x.target, x.label, "ダウンロード可能", True, x.artifact_id, x.size_bytes, x.guide)
-            for x in artifacts
-        ]
+        options = []
+        for artifact in artifacts:
+            allowed, reason = self._artifact_certificate_gate(project_dir, artifact.artifact_id)
+            options.append(
+                DeliveryOption(
+                    artifact.project_slug,
+                    artifact.target,
+                    artifact.label,
+                    "ダウンロード可能" if allowed else "Evidence確認待ち",
+                    allowed,
+                    artifact.artifact_id if allowed else None,
+                    artifact.size_bytes,
+                    artifact.guide if allowed else reason,
+                )
+            )
         available_targets = {x.target.lower() for x in artifacts}
         gaps = self._json(project_dir / "implementation_gaps.json").get("items") or []
         gaps_by_key = {str(x.get("key")): x for x in gaps if isinstance(x, dict)}
@@ -562,23 +573,52 @@ class ProjectCatalog:
             raise ValueError("artifact path escapes project") from exc
         if not path.is_file() or path.is_symlink():
             raise FileNotFoundError("artifact is not available")
+        allowed, reason = self._artifact_certificate_gate(project_dir, artifact_id)
+        if not allowed:
+            raise PermissionError(reason)
         return path
 
     def export_artifact(self, slug: str, artifact_id: str, destination: Path) -> Path:
-        choices = {x.artifact_id: x for x in self.artifacts(slug)}
-        record = choices.get(artifact_id)
-        if not record:
-            raise FileNotFoundError("artifact is not available")
-        src = Path(record.path)
-        if not src.is_file():
-            raise FileNotFoundError(src)
+        src = self.artifact_path(slug, artifact_id)
         destination = Path(destination)
         if destination.is_dir():
             destination = destination / src.name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, destination)
-        log_event("artifact.exported", f"{record.artifact_id} -> {destination}", slug)
+        log_event("artifact.exported", f"{artifact_id} -> {destination}", slug)
         return destination
+
+    def _artifact_certificate_gate(
+        self,
+        project_dir: Path,
+        artifact_id: str,
+    ) -> tuple[bool, str]:
+        certificate_path = project_dir / ".aiapp" / "reports" / "development_certificate.json"
+        if not certificate_path.is_file():
+            return True, "legacy artifact without Development Certificate"
+
+        from .completion_certificate import DevelopmentCertificateBuilder
+
+        integrity = DevelopmentCertificateBuilder().verify_saved(project_dir)
+        if not integrity.valid:
+            return False, (
+                "Development Certificate Integrityが無効です。"
+                "Aivy再点検または再生成後にダウンロードしてください。"
+            )
+
+        certificate = self._json(certificate_path)
+        certified = {
+            str(row.get("path") or "")
+            for row in certificate.get("evidence") or []
+            if isinstance(row, dict)
+            and str(row.get("kind") or "").startswith("artifact:")
+        }
+        if artifact_id not in certified:
+            return False, (
+                "この成果物は最新Development Certificateのhash対象ではありません。"
+                "古い残骸または未検証成果物としてダウンロードを停止しました。"
+            )
+        return True, "Development Certificate verified"
 
     @staticmethod
     def _json(path: Path) -> dict[str, Any]:
