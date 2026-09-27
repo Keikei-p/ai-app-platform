@@ -48,6 +48,8 @@ def main() -> int:
             web_js = response.read().decode("utf-8")
         if "専門AIで検討" not in web_js or "/api/v1/agent/council" not in web_js:
             raise RuntimeError("user-triggered specialist council control is missing")
+        if "Aivy Development Certificate" not in web_js:
+            raise RuntimeError("development certificate UI is missing")
         if "Aivy自律点検" not in web_js or "/api/v1/agent/run-safe" not in web_js:
             raise RuntimeError("safe agent execution control is missing from web UI")
         if "loadKnowledgeSummary" not in web_js or "/api/v1/knowledge/staged" not in web_js:
@@ -70,6 +72,8 @@ def main() -> int:
             raise RuntimeError("safe agent execution capability is missing")
         if not data.get("capabilities", {}).get("evidence_backed_knowledge_promotion"):
             raise RuntimeError("evidence-backed knowledge promotion capability is missing")
+        if not data.get("capabilities", {}).get("development_certificate"):
+            raise RuntimeError("development certificate capability is missing")
         if (data.get("identity") or {}).get("name") != "Aivy":
             raise RuntimeError("Aivy identity was not exposed by platform core")
         csrf = str(data.get("csrf") or "")
