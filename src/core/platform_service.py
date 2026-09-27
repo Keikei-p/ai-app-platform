@@ -74,13 +74,46 @@ class PlatformService:
                 "model_router": True,
                 "specialist_consultation": True,
                 "multimodal_design_review": True,
-                "automatic_screenshot_capture": False,
+                "automatic_screenshot_capture": True,
                 "specialist_council": True,
             },
         }
 
     def specialist_agents(self) -> list[dict[str, Any]]:
         return self.specialists.public_contract()
+
+    def model_routes(self) -> dict[str, Any]:
+        tasks = {
+            "fast": "classification",
+            "reasoning": "reasoning",
+            "coding": "coding",
+            "vision": "visual",
+            "research": "research",
+            "security": "security",
+        }
+        settings = self.ai_engine.settings()
+        default_status = self.ai_engine.status()
+        rows = []
+        for capability, task in tasks.items():
+            configured = self.ai_engine.route_config(capability)
+            effective = self.model_router.route(task)
+            rows.append({
+                "capability": capability,
+                "configured": configured,
+                "effective": effective.to_dict(),
+            })
+        return {
+            "default": {
+                "provider": str(settings.get("provider") or "none"),
+                "model": str(settings.get("model") or ""),
+                "connected": bool(default_status.connected),
+            },
+            "routes": rows,
+        }
+
+    def configure_model_route(self, capability: str, provider: str, model: str = "") -> dict[str, Any]:
+        self.ai_engine.configure_route(capability, provider, model)
+        return self.model_routes()
 
     def consult_specialist(
         self,
