@@ -177,6 +177,8 @@ class PlatformAPI:
                     self._json(404, {"error": "not_found"})
                 except FileNotFoundError:
                     self._json(404, {"error": "not_found"})
+                except PermissionError as exc:
+                    self._json(403, {"error": str(exc)})
                 except Exception as exc:
                     self._json(400, {"error": str(exc)})
 
