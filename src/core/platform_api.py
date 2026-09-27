@@ -165,6 +165,13 @@ class PlatformAPI:
                         )
                         self._json(200, row)
                         return
+                    if path == "/api/v1/research/fetch":
+                        url = str(data.get("url") or "").strip()
+                        if not url:
+                            raise ValueError("url is required")
+                        row = api.service.fetch_research_source(url)
+                        self._json(200 if row.get("safe_for_reasoning") else 422, row)
+                        return
                     if path == "/api/v1/research/intake":
                         topic = str(data.get("topic") or "").strip()
                         statement = str(data.get("statement") or "").strip()
