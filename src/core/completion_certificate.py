@@ -35,6 +35,7 @@ class DevelopmentCertificate:
     design_passed: bool
     security_passed: bool
     execution_trace_verified: bool
+    preflight_verified: bool | None
     agent_completion_verified: bool
     evidence: tuple[CertificateEvidence, ...]
     blockers: tuple[str, ...]
@@ -86,6 +87,7 @@ class DevelopmentCertificateBuilder:
         project_slug: str,
         execution_trace_path: str | None,
         agent_completion: dict[str, Any] | None,
+        preflight_path: str | None = None,
     ) -> DevelopmentCertificate:
         root = Path(project_dir)
         safe_run_id = self._safe_run_id(run_id)
@@ -111,6 +113,17 @@ class DevelopmentCertificateBuilder:
             trace_path = self._safe_relative(root, trace_rel)
             trace = self._json(trace_path) if trace_path else {}
             trace_verified = trace.get("status") == "verified"
+
+        preflight_verified: bool | None = None
+        preflight_rel = str(preflight_path or "").strip()
+        if preflight_rel:
+            preflight_file = self._safe_relative(root, preflight_rel)
+            preflight_data = self._json(preflight_file) if preflight_file else {}
+            executed = set(str(x) for x in preflight_data.get("executed_tools") or [])
+            preflight_verified = bool(
+                preflight_data.get("status") == "completed"
+                and {"project.inspect", "knowledge.search"}.issubset(executed)
+            )
 
         completion = dict(agent_completion or {})
         completion_verified = completion.get("complete") is True
@@ -140,6 +153,12 @@ class DevelopmentCertificateBuilder:
                 item = self._evidence(root, "execution_trace", trace_path)
                 if item:
                     evidence.append(item)
+        if preflight_rel:
+            preflight_file = self._safe_relative(root, preflight_rel)
+            if preflight_file:
+                item = self._evidence(root, "agent_preflight", preflight_file)
+                if item:
+                    evidence.append(item)
         item = self._evidence(root, "agent_completion", completion_path)
         if item:
             evidence.append(item)
@@ -156,6 +175,8 @@ class DevelopmentCertificateBuilder:
             blockers.append("preview readiness is not verified")
         if not trace_verified:
             blockers.append("execution trace is not verified")
+        if preflight_rel and preflight_verified is not True:
+            blockers.append("agent preflight evidence is missing or invalid")
         if not completion_verified:
             blockers.append("agent completion evidence is incomplete")
         if release.get("all_requested_artifacts_ready") is True and artifact_failures:
@@ -173,13 +194,19 @@ class DevelopmentCertificateBuilder:
             run_id=safe_run_id,
             project_slug=project_slug,
             status=status,
-            preview_verified=preview_verified and trace_verified and completion_verified,
+            preview_verified=bool(
+                preview_verified
+                and trace_verified
+                and completion_verified
+                and (preflight_verified is not False)
+            ),
             release_artifacts_verified=release_artifacts_verified and verified,
             external_actions="approval_required",
             tests_passed=tests_passed,
             design_passed=design_passed,
             security_passed=security_passed,
             execution_trace_verified=trace_verified,
+            preflight_verified=preflight_verified,
             agent_completion_verified=completion_verified,
             evidence=tuple(evidence),
             blockers=tuple(blockers),
