@@ -354,14 +354,14 @@ class MainWindow(tk.Tk):
         hero_mark.create_text(48, 48, text="AI", fill="#FFFFFF",
                               font=(self.ui_font_semibold, 11, "bold"))
         tk.Label(
-            self.welcome_panel, text="つくりたいものを、話すだけ。",
+            self.welcome_panel, text="何を作りたいですか？",
             bg="#FBFBFC", fg="#151618",
             font=(self.ui_font_semibold, 24, "bold")
         ).pack()
         tk.Label(
             self.welcome_panel,
-            text="アイデア整理から設計・実装・テストまで。\n"
-                 "難しい言葉やテンプレート選択は必要ありません。",
+            text="思いついたことを、そのまま話してください。\n"
+                 "設計・生成・テスト・ダウンロードまで、会話の続きで進められます。",
             bg="#FBFBFC", fg="#73767D", justify="center",
             font=(self.ui_font_family, 10)
         ).pack(pady=(10, 0))
