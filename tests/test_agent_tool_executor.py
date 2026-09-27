@@ -15,6 +15,27 @@ class FakeKnowledge:
         return []
 
 
+class FakeArtifacts:
+    def __init__(self, status="built"):
+        self.status = status
+        self.calls = []
+    class Row:
+        def __init__(self, status):
+            self.status = status
+        def to_dict(self):
+            return {
+                "status": self.status,
+                "project_slug": "demo",
+                "targets": ["web"],
+                "results": {"web": {"built": self.status == "built"}},
+                "release": {"external_release_requires_approval": True},
+                "external_release_performed": False,
+            }
+    def build(self, project_dir, target=None):
+        self.calls.append((Path(project_dir), target))
+        return self.Row(self.status)
+
+
 class FakeResearch:
     class Row:
         def to_dict(self):
@@ -74,6 +95,23 @@ class AgentToolExecutorTests(unittest.TestCase):
                 evidence = project / ".aiapp" / "agent" / "evidence.jsonl"
                 self.assertTrue(evidence.is_file())
 
+
+    def test_package_build_uses_reviewed_local_builder(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = root / "demo"
+            project.mkdir()
+            artifacts = FakeArtifacts()
+            with patch("src.core.agent_tool_executor.WORKSPACE_DIR", root):
+                executor = AgentToolExecutor(artifacts=artifacts)
+                result = executor.execute(
+                    "package.build",
+                    {"project_slug": "demo", "target": "web"},
+                    run_id="package-run",
+                )
+                self.assertEqual(result.result["status"], "built")
+                self.assertEqual(artifacts.calls[0][1], "web")
+                self.assertFalse(result.result["external_release_performed"])
 
     def test_failed_validation_records_failed_evidence(self):
         class FailingTests:
