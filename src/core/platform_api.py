@@ -164,6 +164,22 @@ class PlatformAPI:
                         )
                         self._json(202 if row.get("accepted") else 422, row)
                         return
+                    parts = [x for x in path.split("/") if x]
+                    if len(parts) == 6 and parts[:3] == ["api", "v1", "agents"] and parts[4] == "consult":
+                        specialist_name = parts[3]
+                        task = str(data.get("task") or "").strip()
+                        context = data.get("context")
+                        if not task:
+                            raise ValueError("task is required")
+                        if context is not None and not isinstance(context, dict):
+                            raise ValueError("context must be an object")
+                        row = api.service.consult_specialist(
+                            specialist_name,
+                            task,
+                            context or {},
+                        )
+                        self._json(200, row)
+                        return
                     self._json(404, {"error": "not_found"})
                 except Exception as exc:
                     self._json(400, {"error": str(exc)})
