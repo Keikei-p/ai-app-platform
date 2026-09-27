@@ -77,7 +77,7 @@ class ArtifactVerifier:
                 checks.append("unsigned_declared")
         return ArtifactVerification("windows_exe", not failures, digest, tuple(checks), tuple(failures))
 
-    def verify_android_apk(self, artifact: Path) -> ArtifactVerification:
+    def verify_android_apk(self, artifact: Path, manifest: Path | None) -> ArtifactVerification:
         checks: list[str] = []
         failures: list[str] = []
         digest = self._safe_sha(artifact, failures)
@@ -94,9 +94,23 @@ class ArtifactVerifier:
                 checks.append("safe_paths")
             else:
                 failures.append("APK contains unsafe path")
+        manifest_data = self._manifest_checksum(artifact, manifest, digest, checks, failures)
+        if manifest_data is not None:
+            if manifest_data.get("build_variant") == "debug":
+                checks.append("debug_variant")
+            else:
+                failures.append("APK manifest does not identify a debug build")
+            if manifest_data.get("store_ready") is False:
+                checks.append("not_store_ready")
+            else:
+                failures.append("debug APK must not be marked store-ready")
+            if manifest_data.get("production_signing_verified") is False:
+                checks.append("production_signing_not_claimed")
+            else:
+                failures.append("debug APK must not claim production signing")
         return ArtifactVerification("android_apk", not failures, digest, tuple(checks), tuple(failures))
 
-    def verify_android_aab(self, artifact: Path) -> ArtifactVerification:
+    def verify_android_aab(self, artifact: Path, manifest: Path | None) -> ArtifactVerification:
         checks: list[str] = []
         failures: list[str] = []
         digest = self._safe_sha(artifact, failures)
@@ -107,7 +121,7 @@ class ArtifactVerifier:
                 checks.append("base_manifest")
             else:
                 failures.append("base AndroidManifest.xml missing from AAB")
-            if any(name.endswith("/dex/classes.dex") or name == "base/dex/classes.dex" for name in names):
+            if "base/dex/classes.dex" in names:
                 checks.append("base_dex")
             else:
                 failures.append("base classes.dex missing from AAB")
@@ -115,6 +129,16 @@ class ArtifactVerifier:
                 checks.append("safe_paths")
             else:
                 failures.append("AAB contains unsafe path")
+        manifest_data = self._manifest_checksum(artifact, manifest, digest, checks, failures)
+        if manifest_data is not None:
+            if manifest_data.get("production_signing_verified") is True:
+                checks.append("production_signing_verified")
+            else:
+                failures.append("AAB production signing has not been verified")
+            if manifest_data.get("store_ready") is True:
+                checks.append("store_ready")
+            else:
+                failures.append("AAB is not marked store-ready")
         return ArtifactVerification("android_aab", not failures, digest, tuple(checks), tuple(failures))
 
     def verify_ios_source_zip(self, artifact: Path, manifest: Path | None) -> ArtifactVerification:
@@ -141,7 +165,7 @@ class ArtifactVerifier:
                 failures.append("iOS source manifest must explicitly state signed_ipa=false")
         return ArtifactVerification("ios_source_zip", not failures, digest, tuple(checks), tuple(failures))
 
-    def verify_ipa(self, artifact: Path) -> ArtifactVerification:
+    def verify_ipa(self, artifact: Path, manifest: Path | None) -> ArtifactVerification:
         checks: list[str] = []
         failures: list[str] = []
         digest = self._safe_sha(artifact, failures)
@@ -160,6 +184,16 @@ class ArtifactVerifier:
                 checks.append("safe_paths")
             else:
                 failures.append("IPA contains unsafe path")
+        manifest_data = self._manifest_checksum(artifact, manifest, digest, checks, failures)
+        if manifest_data is not None:
+            if manifest_data.get("apple_signing_verified") is True:
+                checks.append("apple_signing_verified")
+            else:
+                failures.append("Apple signing has not been verified")
+            if manifest_data.get("store_ready") is True:
+                checks.append("store_ready")
+            else:
+                failures.append("IPA is not marked store-ready")
         return ArtifactVerification("ios_ipa", not failures, digest, tuple(checks), tuple(failures))
 
     @staticmethod
