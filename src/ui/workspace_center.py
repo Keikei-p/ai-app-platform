@@ -6,7 +6,7 @@ from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
 from typing import Callable
 
-from ..core.workspace_catalog import ConversationStore, ProjectCatalog, ConversationThread, ArtifactRecord
+from ..core.workspace_catalog import ConversationStore, ProjectCatalog, ConversationThread, ArtifactRecord, DeliveryOption
 
 
 def _short_time(value: str) -> str:
@@ -53,7 +53,7 @@ class WorkspaceCenter(tk.Toplevel):
 
         self._thread_rows: list[ConversationThread] = []
         self._project_rows = []
-        self._artifact_rows: list[ArtifactRecord] = []
+        self._artifact_rows: list[DeliveryOption] = []
 
         outer = tk.Frame(self, bg="#F7F7F8")
         outer.pack(fill="both", expand=True, padx=22, pady=20)
@@ -170,7 +170,7 @@ class WorkspaceCenter(tk.Toplevel):
 
         self.download_tree = ttk.Treeview(
             self.download_tab,
-            columns=("project", "target", "label", "size"),
+            columns=("project", "target", "label", "status", "size"),
             show="headings",
             style="Center.Treeview",
             selectmode="browse",
@@ -178,13 +178,15 @@ class WorkspaceCenter(tk.Toplevel):
         for key, label in (
             ("project", "アプリ"),
             ("target", "形式"),
-            ("label", "ダウンロード"),
+            ("label", "形式"),
+            ("status", "状態"),
             ("size", "サイズ"),
         ):
             self.download_tree.heading(key, text=label)
         self.download_tree.column("project", width=300)
         self.download_tree.column("target", width=130, stretch=False)
-        self.download_tree.column("label", width=240)
+        self.download_tree.column("label", width=190)
+        self.download_tree.column("status", width=140, anchor="center", stretch=False)
         self.download_tree.column("size", width=100, anchor="e", stretch=False)
         self.download_tree.pack(fill="both", expand=True, padx=16)
         self.download_tree.bind("<Double-1>", lambda _e: self.save_selected_artifact())
@@ -227,15 +229,23 @@ class WorkspaceCenter(tk.Toplevel):
 
     def refresh_downloads(self):
         name_by_slug = {x.slug: x.name for x in self.catalog.list_cards()}
-        self._artifact_rows = self.catalog.all_artifacts()
+        self._artifact_rows = self.catalog.all_delivery_options()
         self.download_tree.delete(*self.download_tree.get_children())
         for i, row in enumerate(self._artifact_rows):
             self.download_tree.insert(
                 "", "end", iid=str(i),
-                values=(name_by_slug.get(row.project_slug, row.project_slug), row.target, row.label, _human_size(row.size_bytes)),
+                values=(
+                    name_by_slug.get(row.project_slug, row.project_slug),
+                    row.target,
+                    row.label,
+                    row.status,
+                    _human_size(row.size_bytes) if row.available else "—",
+                ),
+                tags=("available" if row.available else "pending",),
             )
+        self.download_tree.tag_configure("pending", foreground="#8A8F98")
         if not self._artifact_rows:
-            self.download_hint.set("まだダウンロードできる成果物はありません。アプリを生成・テスト・ビルドするとここに表示されます。")
+            self.download_hint.set("まだ配布対象のアプリはありません。アプリを生成すると、ここに準備状況が表示されます。")
 
     @staticmethod
     def _selected(tree, rows):
@@ -334,7 +344,17 @@ class WorkspaceCenter(tk.Toplevel):
         row = self._selected(self.download_tree, self._artifact_rows)
         if not row:
             return
-        source = Path(row.path)
+        if not row.available or not row.artifact_id:
+            messagebox.showinfo("ダウンロード", "この形式はまだダウンロードできません。\n\n" + row.guide, parent=self)
+            return
+        source_record = next(
+            (x for x in self.catalog.artifacts(row.project_slug) if x.artifact_id == row.artifact_id),
+            None,
+        )
+        if source_record is None:
+            messagebox.showerror("ダウンロード", "実際の成果物ファイルを確認できませんでした。", parent=self)
+            return
+        source = Path(source_record.path)
         destination = filedialog.asksaveasfilename(
             parent=self,
             title=f"{row.label}を保存",
@@ -428,6 +448,11 @@ class ProjectDetailWindow(tk.Toplevel):
         if findings:
             quality_text += "\n安全上の確認事項:\n" + "\n".join(
                 f"・{x.get('key')}: {x.get('detail')}" for x in findings[:10]
+            )
+        gaps = (self.data.get("gaps") or {}).get("items") or []
+        if gaps:
+            quality_text += "\n\nまだ準備が必要なもの:\n" + "\n".join(
+                f"・{x.get('reason','')}\n  次: {x.get('next_step','')}" for x in gaps[:10]
             )
         self._text_panel(quality, "品質チェック", quality_text)
 
