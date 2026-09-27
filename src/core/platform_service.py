@@ -322,7 +322,12 @@ class PlatformService:
         return [asdict(x) for x in self.catalog.list_cards()]
 
     def project_detail(self, slug: str) -> dict[str, Any]:
-        return self.catalog.detail(slug)
+        detail = self.catalog.detail(slug)
+        project_dir = safe_child(WORKSPACE_DIR, slug)
+        detail["certificate_integrity"] = self.development_certificates.verify_saved(
+            project_dir
+        ).to_dict()
+        return detail
 
     def project_health(self, slug: str) -> dict[str, Any]:
         report = self.project_health_checker.run(slug)
