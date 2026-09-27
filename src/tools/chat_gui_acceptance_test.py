@@ -73,6 +73,11 @@ def main() -> int:
                 raise AssertionError("preview action should be hidden before a project exists")
             if app.details_button.winfo_manager():
                 raise AssertionError("test-details action should be hidden before a project exists")
+            if app.download_button.winfo_manager():
+                raise AssertionError("download action should be hidden before a project exists")
+            for expected_nav in ("最近の会話", "作成したアプリ", "ダウンロード"):
+                if expected_nav not in visible_copy:
+                    raise AssertionError(f"workspace navigation is missing: {expected_nav}")
             if not app.ai_button.winfo_manager():
                 raise AssertionError("AI connection control should remain available on landing")
 
@@ -93,9 +98,14 @@ def main() -> int:
             app.run_ai(); app.update()
             if app.current_slug is not None:
                 raise AssertionError("greeting unexpectedly created a project")
+            if not app.current_thread_id:
+                raise AssertionError("standalone chat was not assigned a persistent thread")
             greeting_text = app.chat_history.get("1.0", "end-1c")
             if "こんにちは" not in greeting_text or "作りたい" not in greeting_text:
                 raise AssertionError("natural opening conversation was not rendered")
+            persisted = app.conversations.messages(app.current_thread_id)
+            if len(persisted) < 2 or persisted[0].get("role") != "user":
+                raise AssertionError("standalone chat was not persisted")
 
             # Direct creation from a fresh blank chat must gather/review requirements first.
             app.new_project(); app.update()
@@ -117,6 +127,13 @@ def main() -> int:
                 raise AssertionError("preview action did not appear after project creation")
             if not app.details_button.winfo_manager():
                 raise AssertionError("test-details action did not appear after project creation")
+            if not app.download_button.winfo_manager():
+                raise AssertionError("download action did not appear after project creation")
+            if not app.current_thread_id:
+                raise AssertionError("project chat is not linked to a persistent conversation")
+            linked = app.conversations.find_for_project(app.current_slug)
+            if not linked or linked.thread_id != app.current_thread_id:
+                raise AssertionError("conversation/project link is missing")
             project = WORKSPACE_DIR / app.current_slug
             if (project / "app_spec.json").exists():
                 raise AssertionError("app generated before explicit approval")
@@ -152,6 +169,16 @@ def main() -> int:
                 raise AssertionError("final progress state was not surfaced")
             if app.send_button.instate(["disabled"]):
                 raise AssertionError("send button did not recover after background build")
+            artifacts = app.catalog.artifacts(app.current_slug)
+            if not any(row.target == "Web" and row.path.endswith(".zip") for row in artifacts):
+                raise AssertionError("verified Web artifact was not exposed in download catalog")
+            for row in artifacts:
+                if not Path(row.path).is_file():
+                    raise AssertionError("download catalog exposed a missing artifact")
+            cards = app.catalog.list_cards()
+            card = next((x for x in cards if x.slug == app.current_slug), None)
+            if not card or card.quality != "PASS":
+                raise AssertionError("generated app was not surfaced with verified quality state")
 
             app.instruction.delete("1.0", "end")
             app.instruction.insert("1.0", "1行目")
