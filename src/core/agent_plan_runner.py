@@ -66,6 +66,41 @@ class AgentPlanRunner:
         self.executor = executor
         self.registry = registry or executor.registry
 
+    def run_preflight(
+        self,
+        plan: AgentPlan,
+        *,
+        project_dir: Path,
+    ) -> AgentRunReport:
+        allowed = {"project.inspect", "knowledge.search"}
+        steps = [
+            step for step in plan.steps
+            if step.tool_name in allowed
+        ]
+        found = {step.tool_name for step in steps}
+        missing = sorted(allowed - found)
+        if missing:
+            raise RuntimeError(
+                "agent preflight plan is missing required tools: " + ", ".join(missing)
+            )
+        bounded = AgentPlan(
+            run_id=plan.run_id,
+            goal=plan.goal,
+            project_slug=plan.project_slug,
+            created_at=plan.created_at,
+            steps=steps,
+            max_repair_attempts=0,
+        )
+        report = self.run(
+            bounded,
+            project_dir=Path(project_dir),
+        )
+        if report.status != "completed":
+            raise RuntimeError(
+                "agent preflight did not complete safely: " + report.status
+            )
+        return report
+
     def run(
         self,
         plan: AgentPlan,
