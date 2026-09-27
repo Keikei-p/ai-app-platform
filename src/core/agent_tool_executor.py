@@ -12,6 +12,7 @@ from .design_ai import DesignAI
 from .evolution_engine import VerifiedEvolutionEngine
 from .generation_pipeline import GeneratedArtifactSecurityScanner
 from .knowledge_store import VerifiedKnowledgeStore
+from .local_artifact_builder import LocalArtifactBuilder
 from .path_security import safe_child
 from .project_manager import ProjectManager
 from .research_provider import GuardedResearchProvider
@@ -47,6 +48,7 @@ class AgentToolExecutor:
         "tests.run": {"project_slug"},
         "design.review": {"project_slug"},
         "security.scan": {"project_slug"},
+        "package.build": {"project_slug", "target"},
         "evolution.compare": {
             "baseline", "candidate", "changed_paths", "evidence_refs", "requested_actions",
         },
@@ -64,6 +66,7 @@ class AgentToolExecutor:
         design: DesignAI | None = None,
         security: GeneratedArtifactSecurityScanner | None = None,
         evolution: VerifiedEvolutionEngine | None = None,
+        artifacts: LocalArtifactBuilder | None = None,
         project_resolver: Callable[[str], Path] | None = None,
     ):
         self.registry = registry or AgentToolRegistry()
@@ -75,6 +78,7 @@ class AgentToolExecutor:
         self.design = design or DesignAI()
         self.security = security or GeneratedArtifactSecurityScanner()
         self.evolution = evolution or VerifiedEvolutionEngine()
+        self.artifacts = artifacts or LocalArtifactBuilder()
         self.project_resolver = project_resolver or self._default_project_dir
         self._handlers = {
             "project.inspect": self._project_inspect,
@@ -84,6 +88,7 @@ class AgentToolExecutor:
             "tests.run": self._tests_run,
             "design.review": self._design_review,
             "security.scan": self._security_scan,
+            "package.build": self._package_build,
             "evolution.compare": self._evolution_compare,
         }
 
@@ -159,6 +164,8 @@ class AgentToolExecutor:
             return "pass" if bool((result.get("review") or {}).get("passed")) else "fail"
         if tool_name == "security.scan":
             return "pass" if bool((result.get("security") or {}).get("passed")) else "fail"
+        if tool_name == "package.build":
+            return "pass" if str(result.get("status") or "") in {"built", "partial"} else "fail"
         return "pass"
 
     def _project_dir(self, slug: str) -> Path:
@@ -240,6 +247,14 @@ class AgentToolExecutor:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
         return {"security": report.to_dict(), "report": str(path)}
+
+    def _package_build(self, args: dict[str, Any]) -> dict[str, Any]:
+        slug = str(args.get("project_slug") or "").strip()
+        if not slug:
+            raise ValueError("project_slug is required")
+        project_dir = self._project_dir(slug)
+        target = str(args.get("target") or "").strip() or None
+        return self.artifacts.build(project_dir, target).to_dict()
 
     def _evolution_compare(self, args: dict[str, Any]) -> dict[str, Any]:
         baseline = args.get("baseline")
