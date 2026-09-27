@@ -376,6 +376,7 @@ class ProjectCatalog:
         evaluation = self._json(project_dir / ".aiapp" / "reports" / "agent_evaluation.json")
         visual_design = self._json(project_dir / ".aiapp" / "reports" / "visual_design_review.json")
         release_manager = self._json(project_dir / ".aiapp" / "reports" / "release_manager.json")
+        agent_runs = self._agent_runs(project_dir)
         try:
             from .code_vault import CodeVault
             versions = [asdict(x) for x in CodeVault().list_versions(slug)[:30]]
@@ -396,11 +397,50 @@ class ProjectCatalog:
             "evaluation": evaluation,
             "visual_design": visual_design,
             "release_manager": release_manager,
+            "agent_runs": agent_runs,
             "gaps": self._json(project_dir / "implementation_gaps.json"),
             "versions": versions,
             "audit": [dict(x) for x in audit],
             "artifacts": [asdict(x) for x in self.artifacts(slug)],
         }
+
+    def _agent_runs(self, project_dir: Path, limit: int = 10) -> list[dict[str, Any]]:
+        root = project_dir / ".aiapp" / "agent" / "runs"
+        if not root.is_dir():
+            return []
+        rows: list[tuple[float, dict[str, Any]]] = []
+        for path in root.glob("*.json"):
+            if not path.is_file() or path.is_symlink():
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    continue
+                safe = {
+                    "run_id": str(data.get("run_id") or ""),
+                    "status": str(data.get("status") or ""),
+                    "created_at": str(data.get("created_at") or ""),
+                    "history_path": str(data.get("history_path") or path.relative_to(project_dir).as_posix()),
+                    "executed_tools": [str(x) for x in data.get("executed_tools") or []],
+                    "delegated_tools": [str(x) for x in data.get("delegated_tools") or []],
+                    "approval_required": [str(x) for x in data.get("approval_required") or []],
+                    "steps": [
+                        {
+                            "step_id": str(x.get("step_id") or ""),
+                            "action": str(x.get("action") or ""),
+                            "tool_name": x.get("tool_name"),
+                            "status": str(x.get("status") or ""),
+                            "summary": str(x.get("summary") or "")[:1200],
+                        }
+                        for x in data.get("steps") or []
+                        if isinstance(x, dict)
+                    ],
+                }
+                rows.append((path.stat().st_mtime, safe))
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+        rows.sort(key=lambda x: x[0], reverse=True)
+        return [row for _, row in rows[:max(1, min(limit, 20))]]
 
     def artifacts(self, slug: str) -> list[ArtifactRecord]:
         project_dir = safe_child(WORKSPACE_DIR, slug)
