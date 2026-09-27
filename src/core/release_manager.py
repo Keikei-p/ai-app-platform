@@ -115,13 +115,18 @@ class ReleaseManager:
         if target == "windows":
             candidates = self._files(root / "artifacts" / "windows", {".exe"})
             blockers: list[str] = []
-            verified = tuple(x for x in candidates if self.verifier.verify_windows_exe(x).valid)
+            verified_rows: list[Path] = []
+            for artifact in candidates:
+                manifest = artifact.with_name(artifact.stem + ".manifest.json")
+                if self.verifier.verify_windows_exe(artifact, manifest).valid:
+                    verified_rows.append(artifact)
+            verified = tuple(verified_rows)
             if not quality:
                 blockers.append("quality gates have not verified preview readiness")
             if not candidates:
                 blockers.append("Windows EXE does not exist")
             elif not verified:
-                blockers.append("Windows EXE failed PE format verification")
+                blockers.append("Windows EXE failed structure, checksum, or self-test evidence verification")
             ready = quality and bool(verified)
             return self._state(
                 target, quality,
