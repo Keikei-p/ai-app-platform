@@ -89,11 +89,20 @@ class SpecialistRuntime:
             "allowed_tools": list(specialist.allowed_tools),
             "required_evidence": list(specialist.completion_evidence),
         }
-        raw = self.engine.reply(
-            [],
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            system,
-        )
+        if hasattr(self.engine, "reply_routed"):
+            raw = self.engine.reply_routed(
+                route.provider,
+                route.model,
+                [],
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                system,
+            )
+        else:
+            raw = self.engine.reply(
+                [],
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                system,
+            )
         data = self._parse(raw)
         allowed = set(specialist.allowed_tools)
         requested = tuple(dict.fromkeys(self._string_list(data.get("requested_tools"))))
