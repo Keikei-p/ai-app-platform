@@ -232,7 +232,38 @@ class IOSSimulatorPackager:
         clean = [str(x).strip() for x in schemes or [] if str(x).strip()]
         if not clean:
             raise RuntimeError("generated iOS workspace has no build scheme")
-        return clean[0]
+
+        ios_dir = workspace.parent
+        projects = sorted(
+            path for path in ios_dir.glob("*.xcodeproj")
+            if path.is_dir()
+            and not path.is_symlink()
+            and path.name.lower() != "pods.xcodeproj"
+        )
+        preferred = [path.stem for path in projects]
+        for name in preferred:
+            if name in clean:
+                return name
+
+        normalized = {
+            self._normalize_scheme(name): name
+            for name in clean
+        }
+        for name in preferred:
+            match = normalized.get(self._normalize_scheme(name))
+            if match:
+                return match
+
+        if len(clean) == 1:
+            return clean[0]
+        raise RuntimeError(
+            "could not identify the generated app scheme; "
+            f"projects={preferred}, schemes={clean}"
+        )
+
+    @staticmethod
+    def _normalize_scheme(value: str) -> str:
+        return "".join(ch.lower() for ch in str(value) if ch.isalnum())
 
     @staticmethod
     def discover_workspace(ios_dir: Path) -> Path:
@@ -246,21 +277,28 @@ class IOSSimulatorPackager:
             )
         return rows[0]
 
-    @staticmethod
-    def discover_app(derived_data: Path) -> Path:
-        products = (
-            Path(derived_data)
-            / "Build"
-            / "Products"
-            / "Debug-iphonesimulator"
-        )
-        rows = sorted(
-            path for path in products.glob("*.app")
-            if path.is_dir() and not path.is_symlink()
-        )
+    @classmethod
+    def discover_app(cls, derived_data: Path) -> Path:
+        root = Path(derived_data)
+        rows: list[Path] = []
+        for path in sorted(root.rglob("*.app")):
+            if not path.is_dir() or path.is_symlink():
+                continue
+            if any(part in {"Index.noindex", "ModuleCache.noindex"} for part in path.parts):
+                continue
+            try:
+                cls.verify_app(path)
+            except RuntimeError:
+                continue
+            rows.append(path)
         if len(rows) != 1:
+            relative = [
+                path.relative_to(root).as_posix()
+                for path in rows[:12]
+            ]
             raise RuntimeError(
-                f"expected exactly one iOS Simulator .app, found {len(rows)}"
+                "expected exactly one structurally valid iOS Simulator .app, "
+                f"found {len(rows)}: {relative}"
             )
         return rows[0]
 
