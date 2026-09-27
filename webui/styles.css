@@ -85,3 +85,7 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .certificate-card.verified_preview_candidate,.certificate-card.verified_release_candidate{box-shadow:inset 3px 0 0 currentColor}
 .certificate-card p{margin:7px 0 0;font-size:12px;line-height:1.6;color:var(--muted)}
 .certificate-blockers{font-weight:700}
+
+
+.council-tools{padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
+.council-tools p{font-size:12px;line-height:1.6;color:var(--muted);margin:7px 0 0}
