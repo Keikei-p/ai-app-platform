@@ -98,6 +98,13 @@ class PlatformAPI:
                     if path == "/api/v1/projects":
                         self._json(200, {"projects": api.service.list_project_cards()})
                         return
+                    if path == "/api/v1/agents":
+                        self._json(200, {"agents": api.service.specialist_agents()})
+                        return
+                    if path == "/api/v1/knowledge":
+                        query = parse_qs(parsed.query).get("q", [""])[0]
+                        self._json(200, {"knowledge": api.service.verified_knowledge(query)})
+                        return
                     if path == "/api/v1/conversations":
                         query = parse_qs(parsed.query).get("q", [""])[0]
                         self._json(200, {"conversations": api.service.list_conversations(query)})
