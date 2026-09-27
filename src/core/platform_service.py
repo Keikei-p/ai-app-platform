@@ -19,6 +19,7 @@ from .model_router import ModelRouter
 from .knowledge_store import VerifiedKnowledgeStore
 from .research_guard import ResearchIntake
 from .specialist_runtime import SpecialistRuntime
+from .specialist_council import SpecialistCouncil
 from .llm_chat import AIChatEngine
 from .aivy_identity import AIVY
 
@@ -69,6 +70,7 @@ class PlatformService:
                 "verified_knowledge": True,
                 "model_router": True,
                 "specialist_consultation": True,
+                "specialist_council": True,
             },
         }
 
@@ -91,6 +93,29 @@ class PlatformService:
             task,
             context or {},
         ).to_dict()
+
+    def run_specialist_council(
+        self,
+        goal: str,
+        *,
+        project_slug: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        council = SpecialistCouncil(
+            engine=self.ai_engine,
+            tools=self.tools,
+            specialists=self.specialists,
+            router=self.model_router,
+        )
+        combined = dict(context or {})
+        combined["verified_agent_context"] = self.agent.context(goal)
+        if project_slug:
+            combined["project_slug"] = project_slug
+            try:
+                combined["project_detail"] = self.project_detail(project_slug)
+            except FileNotFoundError:
+                combined["project_detail"] = {"status": "not_found"}
+        return council.run(goal, context=combined).to_dict()
 
     def agent_context(self, goal: str) -> dict[str, Any]:
         return self.agent.context(goal)
