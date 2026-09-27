@@ -310,6 +310,10 @@ class PlatformAPI:
                         self._json(202 if row.get("accepted") else 422, row)
                         return
                     parts = [x for x in path.split("/") if x]
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "health-check":
+                        row = api.service.project_health(parts[3])
+                        self._json(200, row)
+                        return
                     if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4:] == ["build", "jobs"]:
                         instruction = str(data.get("instruction") or "").strip()
                         if not instruction:
