@@ -6,33 +6,21 @@ on:
     branches: [main, develop]
     paths:
       - "src/core/mobile_generator.py"
-      - "src/core/ios_source_packager.py"
       - "src/core/ios_simulator_packager.py"
       - "src/core/artifact_verifier.py"
-      - "src/core/ai_core.py"
-      - "src/core/platform_service.py"
-      - "src/core/agent_execution_trace.py"
-      - "src/core/agent_runtime.py"
-      - "src/core/generation_pipeline.py"
-      - "src/core/release_manager.py"
-      - "src/core/test_runner.py"
       - "src/tools/ios_native_acceptance.py"
       - "tests/test_ios_native_acceptance.py"
+      - "tests/test_ios_simulator_packager.py"
       - ".github/workflows/ios-generated-native.yml"
   pull_request:
     branches: [main, develop]
     paths:
       - "src/core/mobile_generator.py"
-      - "src/core/ios_source_packager.py"
-      - "src/core/ai_core.py"
-      - "src/core/platform_service.py"
-      - "src/core/agent_execution_trace.py"
-      - "src/core/agent_runtime.py"
-      - "src/core/generation_pipeline.py"
-      - "src/core/release_manager.py"
-      - "src/core/test_runner.py"
+      - "src/core/ios_simulator_packager.py"
+      - "src/core/artifact_verifier.py"
       - "src/tools/ios_native_acceptance.py"
       - "tests/test_ios_native_acceptance.py"
+      - "tests/test_ios_simulator_packager.py"
       - ".github/workflows/ios-generated-native.yml"
 
 permissions:
