@@ -12,13 +12,14 @@ class FakeExecutor:
         self.calls = []
         self.values = {
             "project.inspect": {"card": {"name": "Demo"}},
+            "knowledge.search": {"knowledge": []},
             "tests.run": {"passed": tests, "results": []},
             "design.review": {"review": {"passed": design, "score": 95}},
             "security.scan": {"security": {"passed": security, "findings": []}},
         }
 
     def executable_tools(self):
-        return ("project.inspect", "tests.run", "design.review", "security.scan")
+        return ("project.inspect", "knowledge.search", "tests.run", "design.review", "security.scan")
 
     class Row:
         def __init__(self, result):
@@ -36,6 +37,7 @@ class AgentPlanRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             report = AgentPlanRunner(executor).run(plan, project_dir=Path(td))
         self.assertIn("project.inspect", report.executed_tools)
+        self.assertIn("knowledge.search", report.executed_tools)
         self.assertIn("tests.run", report.executed_tools)
         self.assertIn("design.review", report.executed_tools)
         self.assertIn("security.scan", report.executed_tools)
