@@ -20,6 +20,7 @@ from .generation_pipeline import GenerationPipeline
 from .coding_brain import CodingBrain
 from .windows_packager import WindowsPackager
 from .web_packager import WebPackager
+from .android_packager import AndroidPackager
 from .social_generator import SocialAutomationGenerator
 from .knowledge_store import VerifiedKnowledgeStore
 from .evaluation_engine import EvaluationEngine
@@ -43,6 +44,7 @@ class CoreResult:
     repair_attempts: list[dict] | None = None
     windows_build: dict | None = None
     web_build: dict | None = None
+    android_build: dict | None = None
 
 class AICore:
     """Local-first orchestration core. Models cannot bypass safety, permissions, tests, approval, or audit."""
@@ -63,6 +65,7 @@ class AICore:
         self.coding_brain = CodingBrain()
         self.windows_packager = WindowsPackager()
         self.web_packager = WebPackager()
+        self.android_packager = AndroidPackager()
         self.social = SocialAutomationGenerator()
         self.knowledge = VerifiedKnowledgeStore()
         self.evaluation = EvaluationEngine()
@@ -381,6 +384,29 @@ class AICore:
                     risk_items=risk_items,
                 )
 
+        android_build_info: dict | None = None
+        if pipeline_report.preview_ready and "android" in plan.spec.targets:
+            emit("package", "Android debug APKをビルドできる環境か確認しています")
+            android_result = self.android_packager.build_debug_apk(project_dir, plan.spec)
+            android_build_info = android_result.to_dict()
+            log_event(
+                "packager.android.build_result",
+                json.dumps(android_build_info, ensure_ascii=False),
+                slug,
+                "android-packager",
+            )
+            if android_result.built and android_result.artifact is not None:
+                files.append(android_result.artifact)
+                gaps = self.capability.assess(plan.spec, project_dir)
+                self.capability.save(project_dir, gaps)
+                pipeline_report = self.pipeline.evaluate(
+                    project_dir=project_dir,
+                    test_results=test_results,
+                    design_passed=design_review.passed,
+                    capability_gaps=gaps,
+                    risk_items=risk_items,
+                )
+
         web_build_info: dict | None = None
         if pipeline_report.preview_ready and "web" in plan.spec.targets:
             emit("package", "Web配布用ZIPとチェックサムを作成しています")
@@ -421,6 +447,8 @@ class AICore:
             pipeline_dict["screenshot_capture"] = screenshot_capture_info
         if visual_review_result is not None:
             pipeline_dict["visual_design"] = visual_review_result.to_dict()
+        if android_build_info is not None:
+            pipeline_dict["android_build"] = android_build_info
         final_ok = pipeline_report.preview_ready
         if final_ok:
             self.vault.save(slug, "AI変更後", actor="ai-core", reason=instruction, kind="auto-after-ai")
@@ -492,4 +520,5 @@ class AICore:
             repair_attempts,
             windows_build_info,
             web_build_info,
+            android_build_info,
         )
