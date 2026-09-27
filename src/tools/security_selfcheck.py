@@ -6,7 +6,11 @@ from src.core.worker_executor import WorkerExecutor
 from src.core.remote import RemoteCommandGate
 
 NETWORK_MODULES = {"socket", "http", "flask", "fastapi", "aiohttp", "websockets", "paramiko", "asyncssh"}
-APPROVED_NETWORK_FILES = {Path("src/core/remote_server.py")}
+APPROVED_NETWORK_FILES = {
+    Path("src/core/remote_server.py"),
+    Path("src/core/platform_api.py"),
+    Path("src/tools/platform_api_acceptance.py"),
+}
 FORBIDDEN_REMOTE_NETWORK_TERMS = (
     "miniupnpc", "addportmapping", "natpmp", "cloudflared", "ngrok", "serveo", "tailscale", "public_tunnel"
 )
@@ -56,6 +60,21 @@ def main() -> int:
                     if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
                         failures.append(f"shell_true: {rel}")
 
+    platform_api_path = ROOT_DIR / "src" / "core" / "platform_api.py"
+    if not platform_api_path.is_file():
+        failures.append("platform_api.py missing")
+    else:
+        platform_api_text = platform_api_path.read_text(encoding="utf-8").lower()
+        if "threadinghttpserver" not in platform_api_text:
+            failures.append("platform_api is not using reviewed stdlib HTTP server")
+        if '127.0.0.1' not in platform_api_text or 'localhost' not in platform_api_text:
+            failures.append("platform_api loopback binding guard missing")
+        if 'host not in {"127.0.0.1", "localhost"}' not in platform_api_text:
+            failures.append("platform_api does not explicitly reject non-loopback host binding")
+        for term in FORBIDDEN_REMOTE_NETWORK_TERMS:
+            if term in platform_api_text:
+                failures.append(f"platform_api contains forbidden public-exposure mechanism: {term}")
+
     remote_path = ROOT_DIR / "src" / "core" / "remote_server.py"
     if not remote_path.is_file():
         failures.append("remote_server.py missing")
@@ -88,7 +107,7 @@ def main() -> int:
     print("SECURITY SELF-CHECK PASSED")
     print("- AST scan found no dynamic eval/exec/os.system/shell=True/Popen/pickle load in runtime code")
     print("- generated-code templates are not mistaken for executable platform source")
-    print("- inbound LAN listener remains isolated to reviewed Remote module")
+    print("- inbound listeners are limited to reviewed Remote LAN module and loopback-only Platform API")
     print("- preview runtime exposes no generic shell/process action")
     print("- remote/local worker privileged actions remain blocked")
     return 0
