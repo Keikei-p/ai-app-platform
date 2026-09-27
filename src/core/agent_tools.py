@@ -51,6 +51,15 @@ class AgentToolRegistry:
                     "inspect",
                 ),
                 AgentToolDefinition(
+                    "research.fetch",
+                    "Fetch a public HTTPS research source through SSRF and prompt-injection guards.",
+                    "medium",
+                    False,
+                    ("public_https",),
+                    ("research_buffer",),
+                    "inspect",
+                ),
+                AgentToolDefinition(
                     "research.intake",
                     "Inspect externally supplied research text and quarantine prompt-injection indicators before knowledge ingestion.",
                     "medium",
