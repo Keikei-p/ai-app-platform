@@ -101,6 +101,9 @@ class PlatformAPI:
                     if path == "/api/v1/agents":
                         self._json(200, {"agents": api.service.specialist_agents()})
                         return
+                    if path == "/api/v1/models/routes":
+                        self._json(200, api.service.model_routes())
+                        return
                     if path == "/api/v1/knowledge":
                         query = parse_qs(parsed.query).get("q", [""])[0]
                         self._json(200, {"knowledge": api.service.verified_knowledge(query)})
@@ -151,6 +154,15 @@ class PlatformAPI:
                             raise ValueError("project name is required")
                         row = api.service.create_project(name, str(data.get("thread_id") or "") or None)
                         self._json(201, row)
+                        return
+                    if path == "/api/v1/models/routes":
+                        capability = str(data.get("capability") or "").strip()
+                        provider = str(data.get("provider") or "").strip()
+                        model = str(data.get("model") or "").strip()
+                        if not capability or not provider:
+                            raise ValueError("capability and provider are required")
+                        row = api.service.configure_model_route(capability, provider, model)
+                        self._json(200, row)
                         return
                     if path == "/api/v1/agent/plan":
                         goal = str(data.get("goal") or "").strip()
