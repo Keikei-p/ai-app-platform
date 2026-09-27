@@ -117,9 +117,16 @@ class DevelopmentCertificateBuilder:
         completion_path = self._save_completion_snapshot(root, safe_run_id, completion)
 
         requested_targets = list(release.get("targets") or [])
+        artifact_evidence, artifact_failures = self._release_artifact_evidence(
+            root,
+            release,
+        )
         release_artifacts_verified = bool(
             release.get("all_requested_artifacts_ready") is True
             and requested_targets
+            and any(x.kind.startswith("artifact:") for x in artifact_evidence)
+            and not artifact_failures
+            and self._release_candidate_targets(requested_targets)
         )
 
         evidence: list[CertificateEvidence] = []
@@ -136,6 +143,7 @@ class DevelopmentCertificateBuilder:
         item = self._evidence(root, "agent_completion", completion_path)
         if item:
             evidence.append(item)
+        evidence.extend(artifact_evidence)
 
         blockers: list[str] = []
         if not tests_passed:
@@ -150,6 +158,8 @@ class DevelopmentCertificateBuilder:
             blockers.append("execution trace is not verified")
         if not completion_verified:
             blockers.append("agent completion evidence is incomplete")
+        if release.get("all_requested_artifacts_ready") is True and artifact_failures:
+            blockers.extend(artifact_failures)
 
         verified = not blockers
         if verified and release_artifacts_verified:
@@ -228,6 +238,94 @@ class DevelopmentCertificateBuilder:
             tuple(missing),
             tuple(mismatched),
         )
+
+    def _release_artifact_evidence(
+        self,
+        root: Path,
+        release: dict[str, Any],
+    ) -> tuple[list[CertificateEvidence], list[str]]:
+        rows: list[CertificateEvidence] = []
+        failures: list[str] = []
+        targets = release.get("targets")
+        if not isinstance(targets, list):
+            return rows, failures
+
+        for state in targets:
+            if not isinstance(state, dict):
+                continue
+            target = str(state.get("target") or "unknown").strip().lower() or "unknown"
+            artifacts = state.get("artifacts")
+            checksums = state.get("checksums")
+            artifact_rows = artifacts if isinstance(artifacts, list) else []
+            checksum_rows = checksums if isinstance(checksums, list) else []
+
+            for index, raw in enumerate(artifact_rows):
+                raw_path = str(raw or "").strip()
+                resolved = self._safe_project_path(root, raw_path)
+                label = f"{target}:{Path(raw_path).name or 'artifact'}"
+                if resolved is None or not resolved.is_file() or resolved.is_symlink():
+                    failures.append(f"release artifact missing or outside project: {label}")
+                    continue
+
+                item = self._evidence(root, f"artifact:{target}", resolved)
+                if item is None:
+                    failures.append(f"release artifact unreadable: {label}")
+                    continue
+                rows.append(item)
+
+                if index < len(checksum_rows):
+                    expected = str(checksum_rows[index] or "").strip().lower()
+                    if expected and expected != item.sha256:
+                        failures.append(f"release checksum mismatch: {label}")
+
+                manifest = resolved.with_name(resolved.stem + ".manifest.json")
+                manifest_item = self._evidence(
+                    root,
+                    f"artifact_manifest:{target}",
+                    manifest,
+                )
+                if manifest_item is None:
+                    failures.append(f"release artifact manifest missing: {label}")
+                else:
+                    rows.append(manifest_item)
+
+        if release.get("all_requested_artifacts_ready") is True and not any(
+            x.kind.startswith("artifact:") for x in rows
+        ):
+            failures.append("release manager claimed ready artifacts without hashable project artifacts")
+        return rows, list(dict.fromkeys(failures))
+
+    @staticmethod
+    def _release_candidate_targets(targets: list[Any]) -> bool:
+        if not targets:
+            return False
+        allowed_statuses = {
+            "portable_bundle",
+            "local_executable",
+            "store_bundle",
+            "signed_ipa",
+        }
+        for row in targets:
+            if not isinstance(row, dict):
+                return False
+            if str(row.get("artifact_status") or "") not in allowed_statuses:
+                return False
+        return True
+
+    @staticmethod
+    def _safe_project_path(root: Path, value: str) -> Path | None:
+        raw = str(value).strip()
+        if not raw:
+            return None
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = Path(root) / candidate
+        try:
+            resolved = candidate.resolve()
+            resolved.relative_to(Path(root).resolve())
+        except (OSError, ValueError):
+            return None
+        return resolved
 
     def _save_completion_snapshot(
         self,
