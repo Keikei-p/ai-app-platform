@@ -21,6 +21,7 @@ function setView(name){
   if(name==='conversations')loadConversations();
   if(name==='projects')loadProjects();
   if(name==='downloads')loadDownloads();
+  if(name==='settings')loadModelRoutes();
 }
 function message(role,text){
   $('#welcome').hidden=true;
@@ -182,11 +183,22 @@ async function send(text){
   }
 }
 function autoGrow(){const p=$('#prompt');p.style.height='auto';p.style.height=Math.min(p.scrollHeight,160)+'px';}
+async function loadModelRoutes(){
+  const target=$('#modelRouteSummary');if(!target)return;
+  try{
+    const data=await api('/api/v1/models/routes');
+    const rows=(data.routes||[]).filter(x=>['coding','vision','research','reasoning'].includes(x.capability));
+    target.textContent=rows.map(x=>{
+      const r=x.effective||{};
+      return x.capability+' → '+(r.provider||'none')+(r.model?' / '+r.model:'');
+    }).join(' · ')||'ルート未設定';
+  }catch(e){target.textContent='Model Router情報を取得できませんでした';}
+}
 async function boot(){
   try{
     const status=await api('/api/v1/status');state.csrf=status.csrf||'';
     $('#coreStatus').innerHTML='<i></i>Core接続';$('#coreStatus').classList.add('success');
-    await loadConversations();await loadProjects();
+    await loadConversations();await loadProjects();await loadModelRoutes();
   }catch(e){$('#coreStatus').textContent='Core未接続';}
 }
 $('#composer').addEventListener('submit',e=>{e.preventDefault();send($('#prompt').value);});
