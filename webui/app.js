@@ -210,7 +210,7 @@ async function send(text){
 }
 function autoGrow(){const p=$('#prompt');p.style.height='auto';p.style.height=Math.min(p.scrollHeight,160)+'px';}
 async function loadModelRoutes(){
-  const target=$('#modelRouteSummary');if(!target)return;
+  const target=$('#modelRouteSummary');const controls=$('#modelRouteControls');if(!target)return;
   try{
     const data=await api('/api/v1/models/routes');
     const rows=(data.routes||[]).filter(x=>['coding','vision','research','reasoning'].includes(x.capability));
@@ -218,6 +218,46 @@ async function loadModelRoutes(){
       const r=x.effective||{};
       return x.capability+' → '+(r.provider||'none')+(r.model?' / '+r.model:'');
     }).join(' · ')||'ルート未設定';
+    if(controls){
+      controls.innerHTML=rows.map(x=>{
+        const configured=x.configured||{};
+        const effective=x.effective||{};
+        const provider=configured.provider||effective.provider||'none';
+        const model=configured.model||effective.model||'';
+        return `<div class="route-row" data-capability="${esc(x.capability)}">
+          <div><strong>${esc(x.capability)}</strong><small>${esc(effective.capability||'')}</small></div>
+          <select class="route-provider" aria-label="${esc(x.capability)} provider">
+            <option value="none"${provider==='none'?' selected':''}>Default</option>
+            <option value="openai"${provider==='openai'?' selected':''}>OpenAI</option>
+            <option value="gemini"${provider==='gemini'?' selected':''}>Gemini</option>
+          </select>
+          <input class="route-model" value="${esc(model)}" placeholder="model name" aria-label="${esc(x.capability)} model">
+          <button class="route-save" type="button">保存</button>
+        </div>`;
+      }).join('');
+      $('#modelRouteControls .route-save').forEach(button=>{
+        button.onclick=async()=>{
+          const row=button.closest('.route-row');
+          const capability=row.dataset.capability;
+          const provider=row.querySelector('.route-provider').value;
+          const model=row.querySelector('.route-model').value.trim();
+          button.disabled=true;button.textContent='保存中';
+          try{
+            await api('/api/v1/models/routes',{
+              method:'POST',
+              body:JSON.stringify({capability,provider,model})
+            });
+            button.textContent='保存済み';
+            await loadModelRoutes();
+          }catch(e){
+            button.textContent='失敗';
+            target.textContent='Model Router保存に失敗: '+e.message;
+          }finally{
+            button.disabled=false;
+          }
+        };
+      });
+    }
   }catch(e){target.textContent='Model Router情報を取得できませんでした';}
 }
 async function loadEvolutionSummary(){
