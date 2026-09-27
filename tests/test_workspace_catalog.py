@@ -120,5 +120,22 @@ class ProjectCatalogTests(unittest.TestCase):
                     ProjectCatalog().export_artifact("demo", "artifacts/windows/nope.exe", root / "out.exe")
 
 
+    def test_screenshot_path_only_allows_fixed_verified_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            from unittest.mock import patch
+            root = Path(td)
+            project = root / "demo"
+            shots = project / ".aiapp" / "screenshots"
+            shots.mkdir(parents=True)
+            (shots / "mobile.png").write_bytes(b"png")
+            catalog = ProjectCatalog()
+            with patch("src.core.workspace_catalog.WORKSPACE_DIR", root):
+                path = catalog.screenshot_path("demo", "mobile.png")
+                self.assertEqual(path.name, "mobile.png")
+                with self.assertRaises(FileNotFoundError):
+                    catalog.screenshot_path("demo", "../secret.png")
+                with self.assertRaises(FileNotFoundError):
+                    catalog.screenshot_path("demo", "other.png")
+
 if __name__ == "__main__":
     unittest.main()
