@@ -104,6 +104,9 @@ class PlatformAPI:
                     if path == "/api/v1/models/routes":
                         self._json(200, api.service.model_routes())
                         return
+                    if path == "/api/v1/evolution/policy":
+                        self._json(200, api.service.evolution_policy())
+                        return
                     if path == "/api/v1/knowledge":
                         query = parse_qs(parsed.query).get("q", [""])[0]
                         self._json(200, {"knowledge": api.service.verified_knowledge(query)})
@@ -162,6 +165,27 @@ class PlatformAPI:
                         if not capability or not provider:
                             raise ValueError("capability and provider are required")
                         row = api.service.configure_model_route(capability, provider, model)
+                        self._json(200, row)
+                        return
+                    if path == "/api/v1/evolution/compare":
+                        baseline = data.get("baseline")
+                        candidate = data.get("candidate")
+                        changed_paths = data.get("changed_paths")
+                        evidence_refs = data.get("evidence_refs")
+                        requested_actions = data.get("requested_actions") or []
+                        if not isinstance(baseline, dict) or not isinstance(candidate, dict):
+                            raise ValueError("baseline and candidate reports are required")
+                        if not isinstance(changed_paths, list) or not isinstance(evidence_refs, list):
+                            raise ValueError("changed_paths and evidence_refs must be arrays")
+                        if not isinstance(requested_actions, list):
+                            raise ValueError("requested_actions must be an array")
+                        row = api.service.compare_evolution_candidate(
+                            baseline=baseline,
+                            candidate=candidate,
+                            changed_paths=[str(x) for x in changed_paths],
+                            evidence_refs=[str(x) for x in evidence_refs],
+                            requested_actions=[str(x) for x in requested_actions],
+                        )
                         self._json(200, row)
                         return
                     if path == "/api/v1/agent/plan":
