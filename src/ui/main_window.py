@@ -174,20 +174,8 @@ class MainWindow(tk.Tk):
 
         sidebar_bottom = tk.Frame(sidebar, bg="#F4F5F7")
         sidebar_bottom.pack(fill="x", padx=10, pady=12)
-        ttk.Checkbutton(
-            sidebar_bottom, text="学習モード  —  理由も説明", variable=self.learning_mode,
-            style="Sidebar.TCheckbutton"
-        ).pack(anchor="w", padx=4, pady=(0, 8))
-        ttk.Button(sidebar_bottom, text="履歴・復元", style="Sidebar.TButton",
-                   command=self.vault_history).pack(fill="x", pady=2)
-        ttk.Button(sidebar_bottom, text="プロジェクト名を変更", style="Sidebar.TButton",
-                   command=self.rename_project).pack(fill="x", pady=2)
-        ttk.Button(sidebar_bottom, text="設定・診断", style="Sidebar.TButton",
+        ttk.Button(sidebar_bottom, text="⚙  設定", style="Sidebar.TButton",
                    command=self._toggle_details).pack(fill="x", pady=2)
-        self.sidebar_ai_button = ttk.Button(
-            sidebar_bottom, text="AI接続", style="Sidebar.TButton", command=self._open_ai_settings
-        )
-        self.sidebar_ai_button.pack(fill="x", pady=2)
 
         main = tk.Frame(shell, bg="#FBFBFC")
         self.main_frame = main
@@ -440,6 +428,14 @@ class MainWindow(tk.Tk):
         self._enable_readonly_copy(self.output)
         actions = tk.Frame(self.details_panel, bg="#F4F5F7")
         actions.pack(fill="x", padx=12, pady=12)
+        ttk.Checkbutton(
+            actions, text="学習モード  —  理由も説明", variable=self.learning_mode,
+            style="Sidebar.TCheckbutton"
+        ).pack(anchor="w", padx=4, pady=(0, 8))
+        ttk.Button(actions, text="AI接続", style="Secondary.TButton",
+                   command=self._open_ai_settings).pack(fill="x", pady=2)
+        ttk.Button(actions, text="アプリ名を変更", style="Secondary.TButton",
+                   command=self.rename_project).pack(fill="x", pady=2)
         ttk.Button(actions, text="公開前チェック", style="Secondary.TButton",
                    command=self.show_release_risk).pack(fill="x", pady=2)
         ttk.Button(actions, text="準備状況を確認", style="Secondary.TButton",
