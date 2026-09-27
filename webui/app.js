@@ -16,7 +16,7 @@ function setView(name){
   $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
   $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'作成したアプリ',downloads:'ダウンロード',settings:'設定'};
-  $('#topbarTitle').textContent=titles[name]||'AI App Platform';
+  $('#topbarTitle').textContent=titles[name]||'Aivy';
   closeSidebar();
   if(name==='conversations')loadConversations();
   if(name==='projects')loadProjects();
@@ -102,7 +102,7 @@ async function send(text){
   message('user',text);$('#prompt').value='';autoGrow();
   try{
     const plan=await planGoal(text);
-    message('assistant',`目的を${plan.steps.length}段階の安全な作業計画に整理しました。現段階のWeb UIは計画・履歴・アプリ管理まで接続済みです。実生成は既存の明示承認フローを通して実行します。`);
+    message('assistant',`Aivyが目的を${plan.steps.length}段階の安全な作業計画に整理しました。専門AIと検証済みEvidenceを使い、実生成は既存の明示承認フローを通して進めます。`);
   }catch(e){message('assistant','計画の作成に失敗しました: '+e.message);}
 }
 function autoGrow(){const p=$('#prompt');p.style.height='auto';p.style.height=Math.min(p.scrollHeight,160)+'px';}
