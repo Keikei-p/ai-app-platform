@@ -34,5 +34,7 @@ jobs:
         run: python -m src.tools.social_automation_acceptance
       - name: Platform local API acceptance
         run: python -m src.tools.platform_api_acceptance
+      - name: Real browser screenshot acceptance
+        run: python -m src.tools.browser_capture_acceptance
       - name: Production smoke test
         run: python -m src.tools.smoke_test
