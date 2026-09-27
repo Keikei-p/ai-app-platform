@@ -53,11 +53,25 @@ class ArtifactVerifierTests(unittest.TestCase):
 
     def test_apk_requires_manifest_and_dex(self):
         with tempfile.TemporaryDirectory() as td:
-            apk = Path(td) / "demo.apk"
+            root = Path(td)
+            apk = root / "demo.apk"
+            manifest = root / "demo.manifest.json"
             self._zip(apk, {"AndroidManifest.xml": b"x", "classes.dex": b"y"})
-            self.assertTrue(ArtifactVerifier().verify_android_apk(apk).valid)
+            self._manifest(
+                apk, manifest,
+                build_variant="debug",
+                production_signing_verified=False,
+                store_ready=False,
+            )
+            self.assertTrue(ArtifactVerifier().verify_android_apk(apk, manifest).valid)
             self._zip(apk, {"AndroidManifest.xml": b"x"})
-            self.assertFalse(ArtifactVerifier().verify_android_apk(apk).valid)
+            self._manifest(
+                apk, manifest,
+                build_variant="debug",
+                production_signing_verified=False,
+                store_ready=False,
+            )
+            self.assertFalse(ArtifactVerifier().verify_android_apk(apk, manifest).valid)
 
     def test_ios_source_requires_expected_files_and_source_only_manifest(self):
         with tempfile.TemporaryDirectory() as td:
