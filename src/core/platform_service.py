@@ -17,6 +17,7 @@ from .agent_tools import AgentToolRegistry
 from .specialist_agents import SpecialistAgentRegistry
 from .model_router import ModelRouter
 from .knowledge_store import VerifiedKnowledgeStore
+from .research_guard import ResearchIntake
 
 
 class PlatformService:
@@ -36,6 +37,7 @@ class PlatformService:
         self.specialists = SpecialistAgentRegistry(self.tools)
         self.model_router = ModelRouter()
         self.knowledge = VerifiedKnowledgeStore()
+        self.research = ResearchIntake(self.knowledge)
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -73,6 +75,19 @@ class PlatformService:
     def verified_knowledge(self, query: str = "") -> list[dict[str, Any]]:
         rows = self.knowledge.search(query, verified_only=True) if query.strip() else self.knowledge.list("verified")
         return [x.to_dict() for x in rows]
+
+    def research_intake(
+        self,
+        *,
+        topic: str,
+        statement: str,
+        sources: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        return self.research.submit_claim(
+            topic=topic,
+            statement=statement,
+            sources=sources,
+        ).to_dict()
 
     def list_project_cards(self) -> list[dict[str, Any]]:
         return [asdict(x) for x in self.catalog.list_cards()]
