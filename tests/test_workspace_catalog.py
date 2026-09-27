@@ -79,6 +79,42 @@ class ProjectCatalogTests(unittest.TestCase):
                 with self.assertRaises(FileNotFoundError):
                     catalog.artifact_path(slug, "../../outside.zip")
 
+    def test_invalid_certificate_marks_project_card_blocked(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = root / "demo"
+            artifact = project / "artifacts" / "web" / "demo-web.zip"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_bytes(b"bundle")
+            (project / "project.json").write_text(
+                json.dumps({"name": "Demo", "slug": "demo", "targets": ["web"]}),
+                encoding="utf-8",
+            )
+            (project / "app_spec.json").write_text(
+                json.dumps({"project_name": "Demo", "targets": ["web"]}),
+                encoding="utf-8",
+            )
+            reports = project / ".aiapp" / "reports"
+            reports.mkdir(parents=True)
+            (reports / "build_readiness.json").write_text(
+                json.dumps({"preview_ready": True}),
+                encoding="utf-8",
+            )
+            (reports / "development_certificate.json").write_text(json.dumps({
+                "status": "verified_preview_candidate",
+                "external_actions": "approval_required",
+                "evidence": [{
+                    "kind": "artifact:web",
+                    "path": "artifacts/web/demo-web.zip",
+                    "sha256": "0" * 64,
+                }],
+            }), encoding="utf-8")
+
+            with patch("src.core.workspace_catalog.WORKSPACE_DIR", root):
+                card = ProjectCatalog().card("demo")
+            self.assertEqual(card.quality, "BLOCKED")
+            self.assertEqual(card.status, "Evidence要確認")
+
     def test_invalid_certificate_blocks_direct_artifact_download(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
