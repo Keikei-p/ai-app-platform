@@ -151,6 +151,20 @@ class PlatformAPI:
                         row = api.service.agent_plan(goal, str(data.get("project_slug") or "") or None)
                         self._json(200, row)
                         return
+                    if path == "/api/v1/agent/council":
+                        goal = str(data.get("goal") or "").strip()
+                        context = data.get("context")
+                        if not goal:
+                            raise ValueError("goal is required")
+                        if context is not None and not isinstance(context, dict):
+                            raise ValueError("context must be an object")
+                        row = api.service.run_specialist_council(
+                            goal,
+                            project_slug=str(data.get("project_slug") or "") or None,
+                            context=context or {},
+                        )
+                        self._json(200, row)
+                        return
                     if path == "/api/v1/research/intake":
                         topic = str(data.get("topic") or "").strip()
                         statement = str(data.get("statement") or "").strip()
