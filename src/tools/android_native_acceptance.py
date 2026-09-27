@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.core.app_spec import AppSpec
 from src.core.mobile_generator import MobileGenerator
+from src.core.android_packager import AndroidPackager
 
 
 def run(cmd: list[str], cwd: Path, timeout: int = 900) -> None:
@@ -48,20 +49,16 @@ def main() -> int:
     mobile = root / "mobile"
 
     run(["npm", "install", "--no-audit", "--no-fund"], mobile, timeout=600)
-    run(["npx", "expo", "prebuild", "--platform", "android", "--clean"], mobile, timeout=600)
+    result = AndroidPackager().build_debug_apk(root, spec, timeout=900)
+    if not result.built or result.artifact is None:
+        raise RuntimeError("AndroidPackager failed: " + result.detail)
+    if not result.artifact.is_file() or result.artifact.stat().st_size <= 0:
+        raise RuntimeError("AndroidPackager did not produce an artifact")
 
-    android = mobile / "android"
-    gradlew = android / "gradlew"
-    if not gradlew.is_file():
-        raise RuntimeError("Expo prebuild did not create android/gradlew")
-    gradlew.chmod(gradlew.stat().st_mode | 0o111)
-    run([str(gradlew), "assembleDebug", "--no-daemon"], android, timeout=900)
-
-    apk = android / "app" / "build" / "outputs" / "apk" / "debug" / "app-debug.apk"
-    if not apk.is_file() or apk.stat().st_size <= 0:
-        raise RuntimeError("Android debug APK was not produced")
-
-    print(f"ANDROID DEBUG APK ACCEPTANCE PASS: {apk} ({apk.stat().st_size} bytes)")
+    print(
+        f"ANDROID DEBUG APK ACCEPTANCE PASS: {result.artifact} "
+        f"({result.artifact.stat().st_size} bytes) sha256={result.sha256}"
+    )
     return 0
 
 
