@@ -51,6 +51,8 @@ def main() -> int:
             raise RuntimeError("specialist council capability is missing")
         if not data.get("capabilities", {}).get("guarded_web_research"):
             raise RuntimeError("guarded web research capability is missing")
+        if not data.get("capabilities", {}).get("observable_build_jobs"):
+            raise RuntimeError("observable build jobs capability is missing")
         if (data.get("identity") or {}).get("name") != "Aivy":
             raise RuntimeError("Aivy identity was not exposed by platform core")
         csrf = str(data.get("csrf") or "")
@@ -107,6 +109,16 @@ def main() -> int:
         )
         if status != 400 or "approval" not in str(denied_build.get("error") or "").lower():
             raise RuntimeError("Web build endpoint bypassed explicit approval")
+
+        status, denied_job = request(
+            port,
+            "POST",
+            f"/api/v1/projects/{turn['project_slug']}/build/jobs",
+            {"instruction": "demo build", "approved": False},
+            csrf,
+        )
+        if status != 400 or "approval" not in str(denied_job.get("error") or "").lower():
+            raise RuntimeError("build job endpoint bypassed explicit approval")
 
         status, routes = request(port, "GET", "/api/v1/models/routes")
         if status != 200 or len(routes.get("routes") or []) < 6:
