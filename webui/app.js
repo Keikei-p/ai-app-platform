@@ -1,4 +1,4 @@
-const state={csrf:'',view:'home',conversations:[],projects:[],currentThread:null};
+const state={csrf:'',view:'home',conversations:[],projects:[],currentThread:null,lastGoal:'',pendingInstruction:null,busy:false};
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
 const api=async(path,options={})=>{
@@ -96,14 +96,90 @@ async function planGoal(text){
   $('#inspector').classList.add('open');
   return plan;
 }
-async function send(text){
-  text=text.trim();if(!text)return;
-  if(!state.currentThread)await newChat();
-  message('user',text);$('#prompt').value='';autoGrow();
+function setBusy(value){
+  state.busy=value;
+  $('#sendButton').disabled=value;
+  $('#prompt').disabled=value;
+}
+function showBuildApproval(instruction){
+  state.pendingInstruction=instruction||state.lastGoal;
+  const holder=document.createElement('div');
+  holder.className='agent-action-wrap';
+  holder.innerHTML='<button class="agent-action" id="approveBuild">この内容で作る</button><p>押すまで生成は始まりません。</p>';
+  $('#agentPlan').append(holder);
+  $('#approveBuild').onclick=approveBuild;
+}
+async function executeBuild(slug,instruction){
+  setBusy(true);
+  message('assistant','Aivyが作成・デザイン確認・テスト・セキュリティ検査を開始しました。');
   try{
-    const plan=await planGoal(text);
-    message('assistant',`Aivyが目的を${plan.steps.length}段階の安全な作業計画に整理しました。専門AIと検証済みEvidenceを使い、実生成は既存の明示承認フローを通して進めます。`);
-  }catch(e){message('assistant','計画の作成に失敗しました: '+e.message);}
+    const result=await api('/api/v1/projects/'+encodeURIComponent(slug)+'/build',{
+      method:'POST',
+      body:JSON.stringify({
+        instruction,
+        approved:true,
+        thread_id:state.currentThread?.thread_id||null
+      })
+    });
+    message('assistant',result.message||'確認が完了しました。');
+    await loadProjects();
+    await loadConversations();
+    if(result.ok)await showProject(slug);
+  }catch(e){
+    message('assistant','生成を完了できませんでした: '+e.message);
+  }finally{
+    setBusy(false);
+  }
+}
+async function approveBuild(){
+  if(state.busy||!state.currentThread)return;
+  setBusy(true);
+  message('user','この内容で作る');
+  try{
+    const decision=await api('/api/v1/chat/turn',{
+      method:'POST',
+      body:JSON.stringify({thread_id:state.currentThread.thread_id,message:'この内容で作る'})
+    });
+    if(decision.thread)state.currentThread=decision.thread;
+    message('assistant',decision.message||'確認しました。');
+    if(decision.action!=='build'||!decision.project_slug||!decision.instruction){
+      throw new Error('生成承認状態を確認できませんでした');
+    }
+    setBusy(false);
+    await executeBuild(decision.project_slug,decision.instruction);
+  }catch(e){
+    setBusy(false);
+    message('assistant','生成開始を確認できませんでした: '+e.message);
+  }
+}
+async function send(text){
+  text=text.trim();if(!text||state.busy)return;
+  if(!state.currentThread)await newChat();
+  state.lastGoal=text;
+  message('user',text);$('#prompt').value='';autoGrow();setBusy(true);
+  try{
+    const decision=await api('/api/v1/chat/turn',{
+      method:'POST',
+      body:JSON.stringify({thread_id:state.currentThread.thread_id,message:text})
+    });
+    if(decision.thread)state.currentThread=decision.thread;
+    message('assistant',decision.message||'確認しました。');
+    if(decision.action==='review'){
+      await planGoal(decision.instruction||text);
+      showBuildApproval(decision.instruction||text);
+    }else if(decision.action==='build'&&decision.project_slug&&decision.instruction){
+      setBusy(false);
+      await executeBuild(decision.project_slug,decision.instruction);
+      return;
+    }else if(decision.project_slug){
+      await planGoal(decision.instruction||text);
+    }
+    await loadConversations();
+  }catch(e){
+    message('assistant','Aivyが会話を処理できませんでした: '+e.message);
+  }finally{
+    setBusy(false);
+  }
 }
 function autoGrow(){const p=$('#prompt');p.style.height='auto';p.style.height=Math.min(p.scrollHeight,160)+'px';}
 async function boot(){
