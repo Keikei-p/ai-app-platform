@@ -71,5 +71,19 @@ class AgentPlanRunnerTests(unittest.TestCase):
             AgentPlanRunner(FakeExecutor()).run(plan)
 
 
+    def test_run_history_persists_only_redacted_summary_not_tool_results(self):
+        plan = AgentOrchestrator().plan("password=super-secret-value を確認する", "demo")
+        executor = FakeExecutor()
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            report = AgentPlanRunner(executor).run(plan, project_dir=root)
+            self.assertTrue(report.history_path)
+            path = root / report.history_path
+            self.assertTrue(path.is_file())
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("super-secret-value", text)
+            self.assertNotIn('"result"', text)
+            self.assertIn("[REDACTED]", text)
+
 if __name__ == "__main__":
     unittest.main()
