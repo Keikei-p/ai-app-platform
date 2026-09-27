@@ -164,11 +164,16 @@ class VerifiedKnowledgeStore:
         item = next((x for x in rows if x.knowledge_id == knowledge_id), None)
         if item is None:
             raise KeyError(knowledge_id)
-        distinct_sources = {(x.get("kind", ""), x.get("locator", "")) for x in item.sources}
-        kinds = {x.get("kind", "").lower() for x in item.sources}
-        has_official = "official" in kinds or "official_docs" in kinds
-        if len(distinct_sources) < 2 and not has_official:
-            raise ValueError("candidate promotion requires corroboration or an identified official source")
+        distinct_locators = {
+            str(x.get("locator") or "").strip()
+            for x in item.sources
+            if str(x.get("locator") or "").strip()
+        }
+        if len(distinct_locators) < 2:
+            raise ValueError(
+                "candidate promotion requires at least two distinct source locators; "
+                "declared source kind is metadata, not proof of authority"
+            )
         updated = KnowledgeItem(
             item.knowledge_id,
             item.created_at,
