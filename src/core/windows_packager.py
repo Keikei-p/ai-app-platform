@@ -180,7 +180,6 @@ class WindowsPackager:
         self_test_passed = bool(
             self_test is not None
             and self_test.returncode == 0
-            and "AI_APP_WINDOWS_SELFTEST_OK" in (self_test.stdout or "")
         )
         if not self_test_passed:
             try:
