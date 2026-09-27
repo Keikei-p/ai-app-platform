@@ -2,7 +2,8 @@ import io
 import unittest
 from email.message import Message
 
-from src.core.research_provider import GuardedResearchProvider
+from src.core.research_provider import GuardedResearchProvider, _GuardedRedirectHandler
+import urllib.request
 
 
 class FakeResponse:
@@ -77,6 +78,15 @@ class GuardedResearchProviderTests(unittest.TestCase):
         provider = GuardedResearchProvider(resolver=resolver, opener=opener)
         with self.assertRaises(ValueError):
             provider.fetch("https://public.example.test/start")
+
+    def test_redirect_handler_validates_target_before_following(self):
+        provider = GuardedResearchProvider(resolver=lambda host: ["127.0.0.1"])
+        handler = _GuardedRedirectHandler(provider._validate_url)
+        req = urllib.request.Request("https://public.example.test/")
+        with self.assertRaises(ValueError):
+            handler.redirect_request(
+                req, None, 302, "Found", Message(), "https://internal.example.test/admin"
+            )
 
     def test_large_response_is_rejected(self):
         def opener(request, timeout):
