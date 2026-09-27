@@ -165,6 +165,7 @@ class AgentOrchestrator:
         steps = [
             AgentStep("understand", "understand", "目的を理解", "依頼内容・制約・成功条件を整理する", None, ("coordinator",)),
             AgentStep("inspect", "inspect", "現状を確認", "既存コード・履歴・テスト・過去の改善点を確認する", "project.inspect", ("research", "architect")),
+            AgentStep("inspect-knowledge", "inspect", "検証済み知識を確認", "Verified Knowledgeから今回の開発に再利用できる根拠だけを検索する", "knowledge.search", ("research", "architect")),
             AgentStep("plan", "plan", "実装計画", "変更範囲と検証方法を小さな単位へ分解する", None, ("coordinator", "architect")),
             AgentStep("generate", "generate", "実装", "既存機能を壊さない範囲でコードを生成・変更する", "code.generate", ("coding",)),
             AgentStep("validate-tests", "validate", "自動テスト", "承認済みTest Runnerで機能・構文・基本動作を検証する", "tests.run", ("test",)),
