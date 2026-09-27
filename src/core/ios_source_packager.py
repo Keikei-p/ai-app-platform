@@ -9,6 +9,7 @@ import zipfile
 
 from .app_spec import AppSpec
 from .database import log_event
+from .artifact_verifier import ArtifactVerifier
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,9 @@ class IOSSourceBuildResult:
 
 class IOSSourcePackager:
     """Package generated Expo iOS source without pretending it is a signed IPA."""
+
+    def __init__(self, verifier: ArtifactVerifier | None = None):
+        self.verifier = verifier or ArtifactVerifier()
 
     ALLOWED_NAMES = {
         "package.json",
@@ -84,6 +88,18 @@ class IOSSourcePackager:
             ),
             encoding="utf-8",
         )
+        verification = self.verifier.verify_ios_source_zip(artifact, manifest)
+        if not verification.valid:
+            failures = "; ".join(verification.failures[:8]) or "unknown iOS source verification failure"
+            detail = "iOS source ZIP verification failed: " + failures
+            log_event("packager.ios.source_verification_failed", detail, spec.slug, "ios-source-packager")
+            try:
+                artifact.unlink(missing_ok=True)
+                manifest.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return IOSSourceBuildResult(False, None, None, "", 0, detail)
+
         log_event("packager.ios.source_built", f"{artifact.name} sha256={digest}", spec.slug, "ios-source-packager")
         return IOSSourceBuildResult(
             True,
@@ -91,5 +107,5 @@ class IOSSourcePackager:
             manifest,
             digest,
             len(files),
-            "iOS source ZIP built. This is not a signed IPA and cannot be submitted to the App Store as-is.",
+            "iOS source ZIP built and artifact evidence verified. This is not a signed IPA and cannot be submitted to the App Store as-is.",
         )
