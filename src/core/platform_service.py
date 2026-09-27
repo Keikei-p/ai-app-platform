@@ -21,6 +21,7 @@ from .research_guard import ResearchIntake
 from .research_provider import GuardedResearchProvider
 from .specialist_runtime import SpecialistRuntime
 from .specialist_council import SpecialistCouncil
+from .specialist_execution_council import SpecialistExecutionCouncil
 from .llm_chat import AIChatEngine
 from .aivy_identity import AIVY
 from .evolution_engine import VerifiedEvolutionEngine
@@ -68,6 +69,13 @@ class PlatformService:
             project_resolver=lambda slug: safe_child(WORKSPACE_DIR, slug),
         )
         self.project_health_checker = ProjectHealthCheck(self.tool_executor)
+        self.execution_council = SpecialistExecutionCouncil(
+            engine=self.ai_engine,
+            tools=self.tools,
+            specialists=self.specialists,
+            router=self.model_router,
+            executor=self.tool_executor,
+        )
         self.agent_plan_runner = AgentPlanRunner(self.tool_executor, registry=self.tools)
         self.build_execution_tracer = BuildExecutionTracer()
         self.development_certificates = DevelopmentCertificateBuilder()
@@ -102,6 +110,7 @@ class PlatformService:
                 "multimodal_design_review": True,
                 "automatic_screenshot_capture": True,
                 "specialist_council": True,
+                "specialist_execution_council": True,
                 "verified_evolution_engine": True,
                 "evolution_experiment_history": True,
                 "release_manager": True,
@@ -276,6 +285,31 @@ class PlatformService:
             except FileNotFoundError:
                 combined["project_detail"] = {"status": "not_found"}
         return council.run(goal, context=combined).to_dict()
+
+    def run_specialist_execution_council(
+        self,
+        goal: str,
+        project_slug: str,
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        clean_goal = goal.strip()
+        slug = project_slug.strip()
+        if not clean_goal:
+            raise ValueError("goal is required")
+        if not slug:
+            raise ValueError("project_slug is required")
+        project_dir = safe_child(WORKSPACE_DIR, slug)
+        if not project_dir.is_dir():
+            raise FileNotFoundError(slug)
+        combined = dict(context or {})
+        combined["verified_agent_context"] = self.agent.context(clean_goal)
+        combined["project_slug"] = slug
+        return self.execution_council.run(
+            clean_goal,
+            slug,
+            context=combined,
+        ).to_dict()
 
     def agent_context(self, goal: str) -> dict[str, Any]:
         return self.agent.context(goal)
