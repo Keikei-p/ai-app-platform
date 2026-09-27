@@ -49,18 +49,27 @@ class VisualDesignAI:
         self.engine = engine or AIChatEngine()
         self.router = router or ModelRouter(self.engine)
 
+    def route_status(self):
+        route = self.router.route("visual")
+        if route.provider == "none":
+            return route, self.engine.status()
+        try:
+            return route, self.engine.status(route.provider, route.model)
+        except TypeError:
+            return route, self.engine.status()
+
+    def available(self) -> bool:
+        _, status = self.route_status()
+        return bool(status.connected)
+
     def screenshot_paths(self, project_dir: Path) -> list[Path]:
         root = Path(project_dir) / ".aiapp" / "screenshots"
         return [root / filename for _, filename in VIEWPORT_FILES if (root / filename).is_file()]
 
     def review(self, project_dir: Path) -> VisualDesignReview:
         screenshots = self.screenshot_paths(project_dir)
-        route = self.router.route("visual")
+        route, status = self.route_status()
         cfg = self.engine.settings()
-        try:
-            status = self.engine.status(route.provider, route.model) if route.provider != "none" else self.engine.status()
-        except TypeError:
-            status = self.engine.status()
         names = tuple(path.name for path in screenshots)
 
         if len(screenshots) != len(VIEWPORT_FILES):
