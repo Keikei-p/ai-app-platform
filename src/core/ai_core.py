@@ -21,6 +21,7 @@ from .coding_brain import CodingBrain
 from .windows_packager import WindowsPackager
 from .web_packager import WebPackager
 from .android_packager import AndroidPackager
+from .ios_source_packager import IOSSourcePackager
 from .release_manager import ReleaseManager
 from .social_generator import SocialAutomationGenerator
 from .knowledge_store import VerifiedKnowledgeStore
@@ -46,6 +47,7 @@ class CoreResult:
     windows_build: dict | None = None
     web_build: dict | None = None
     android_build: dict | None = None
+    ios_source_build: dict | None = None
     release_report: dict | None = None
 
 class AICore:
@@ -68,6 +70,7 @@ class AICore:
         self.windows_packager = WindowsPackager()
         self.web_packager = WebPackager()
         self.android_packager = AndroidPackager()
+        self.ios_source_packager = IOSSourcePackager()
         self.release_manager = ReleaseManager()
         self.social = SocialAutomationGenerator()
         self.knowledge = VerifiedKnowledgeStore()
@@ -410,6 +413,23 @@ class AICore:
                     risk_items=risk_items,
                 )
 
+        ios_source_build_info: dict | None = None
+        if pipeline_report.preview_ready and "ios" in plan.spec.targets:
+            emit("package", "iOSソースZIPとチェックサムを作成しています")
+            ios_source_result = self.ios_source_packager.build(project_dir, plan.spec)
+            ios_source_build_info = ios_source_result.to_dict()
+            log_event(
+                "packager.ios.source_result",
+                json.dumps(ios_source_build_info, ensure_ascii=False),
+                slug,
+                "ios-source-packager",
+            )
+            if ios_source_result.built:
+                if ios_source_result.artifact is not None:
+                    files.append(ios_source_result.artifact)
+                if ios_source_result.manifest is not None:
+                    files.append(ios_source_result.manifest)
+
         web_build_info: dict | None = None
         if pipeline_report.preview_ready and "web" in plan.spec.targets:
             emit("package", "Web配布用ZIPとチェックサムを作成しています")
@@ -462,6 +482,8 @@ class AICore:
             pipeline_dict["visual_design"] = visual_review_result.to_dict()
         if android_build_info is not None:
             pipeline_dict["android_build"] = android_build_info
+        if ios_source_build_info is not None:
+            pipeline_dict["ios_source_build"] = ios_source_build_info
         pipeline_dict["release_manager"] = release_report.to_dict()
         final_ok = pipeline_report.preview_ready
         if final_ok:
@@ -535,5 +557,6 @@ class AICore:
             windows_build_info,
             web_build_info,
             android_build_info,
+            ios_source_build_info,
             release_report.to_dict(),
         )
