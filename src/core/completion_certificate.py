@@ -36,6 +36,7 @@ class DevelopmentCertificate:
     security_passed: bool
     execution_trace_verified: bool
     preflight_verified: bool | None
+    postflight_verified: bool | None
     agent_completion_verified: bool
     evidence: tuple[CertificateEvidence, ...]
     blockers: tuple[str, ...]
@@ -88,6 +89,7 @@ class DevelopmentCertificateBuilder:
         execution_trace_path: str | None,
         agent_completion: dict[str, Any] | None,
         preflight_path: str | None = None,
+        postflight_path: str | None = None,
     ) -> DevelopmentCertificate:
         root = Path(project_dir)
         safe_run_id = self._safe_run_id(run_id)
@@ -125,6 +127,18 @@ class DevelopmentCertificateBuilder:
                 and {"project.inspect", "knowledge.search"}.issubset(executed)
             )
 
+        postflight_verified: bool | None = None
+        postflight_rel = str(postflight_path or "").strip()
+        if postflight_rel:
+            postflight_file = self._safe_relative(root, postflight_rel)
+            postflight_data = self._json(postflight_file) if postflight_file else {}
+            postflight_verified = bool(
+                postflight_data.get("status") == "pass"
+                and postflight_data.get("tests_passed") is True
+                and postflight_data.get("design_passed") is True
+                and postflight_data.get("security_passed") is True
+            )
+
         completion = dict(agent_completion or {})
         completion_verified = completion.get("complete") is True
         completion_path = self._save_completion_snapshot(root, safe_run_id, completion)
@@ -159,6 +173,12 @@ class DevelopmentCertificateBuilder:
                 item = self._evidence(root, "agent_preflight", preflight_file)
                 if item:
                     evidence.append(item)
+        if postflight_rel:
+            postflight_file = self._safe_relative(root, postflight_rel)
+            if postflight_file:
+                item = self._evidence(root, "agent_postflight", postflight_file)
+                if item:
+                    evidence.append(item)
         item = self._evidence(root, "agent_completion", completion_path)
         if item:
             evidence.append(item)
@@ -177,6 +197,8 @@ class DevelopmentCertificateBuilder:
             blockers.append("execution trace is not verified")
         if preflight_rel and preflight_verified is not True:
             blockers.append("agent preflight evidence is missing or invalid")
+        if postflight_rel and postflight_verified is not True:
+            blockers.append("agent postflight evidence is missing or invalid")
         if not completion_verified:
             blockers.append("agent completion evidence is incomplete")
         if release.get("all_requested_artifacts_ready") is True and artifact_failures:
@@ -199,6 +221,7 @@ class DevelopmentCertificateBuilder:
                 and trace_verified
                 and completion_verified
                 and (preflight_verified is not False)
+                and (postflight_verified is not False)
             ),
             release_artifacts_verified=release_artifacts_verified and verified,
             external_actions="approval_required",
@@ -207,6 +230,7 @@ class DevelopmentCertificateBuilder:
             security_passed=security_passed,
             execution_trace_verified=trace_verified,
             preflight_verified=preflight_verified,
+            postflight_verified=postflight_verified,
             agent_completion_verified=completion_verified,
             evidence=tuple(evidence),
             blockers=tuple(blockers),
