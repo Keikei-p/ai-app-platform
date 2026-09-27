@@ -30,6 +30,7 @@ from .agent_tool_executor import AgentToolExecutor
 from .project_health import ProjectHealthCheck
 from .agent_plan_runner import AgentPlanRunner
 from .agent_execution_trace import BuildExecutionTracer
+from .knowledge_verifier import ProjectKnowledgeVerifier
 
 
 class PlatformService:
@@ -54,6 +55,7 @@ class PlatformService:
         self.research_provider = GuardedResearchProvider()
         self.evolution = VerifiedEvolutionEngine()
         self.evolution_experiments = EvolutionExperimentStore()
+        self.knowledge_verifier = ProjectKnowledgeVerifier(self.knowledge)
         self.build_jobs = BuildJobManager()
         self.tool_executor = AgentToolExecutor(
             registry=self.tools,
@@ -104,6 +106,7 @@ class PlatformService:
                 "reviewed_tool_executor": True,
                 "project_health_check": True,
                 "agent_safe_execution": True,
+                "evidence_backed_knowledge_promotion": True,
             },
         }
 
@@ -276,6 +279,25 @@ class PlatformService:
     def verified_knowledge(self, query: str = "") -> list[dict[str, Any]]:
         rows = self.knowledge.search(query, verified_only=True) if query.strip() else self.knowledge.list("verified")
         return [x.to_dict() for x in rows]
+
+    def staged_knowledge(self, trust_level: str | None = None) -> list[dict[str, Any]]:
+        return [x.to_dict() for x in self.knowledge.list(trust_level)]
+
+    def promote_knowledge_candidate(self, knowledge_id: str) -> dict[str, Any]:
+        return self.knowledge.promote_candidate(knowledge_id).to_dict()
+
+    def verify_knowledge_from_project(
+        self,
+        knowledge_id: str,
+        *,
+        project_slug: str,
+        verifier_types: list[str],
+    ) -> dict[str, Any]:
+        return self.knowledge_verifier.verify(
+            knowledge_id,
+            project_slug=project_slug,
+            verifier_types=verifier_types,
+        ).to_dict()
 
     def research_intake(
         self,
