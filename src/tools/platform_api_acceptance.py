@@ -78,6 +78,8 @@ def main() -> int:
             raise RuntimeError("project health check capability is missing")
         if not data.get("capabilities", {}).get("agent_safe_tool_execution"):
             raise RuntimeError("safe agent tool execution capability is missing")
+        if not data.get("capabilities", {}).get("agent_evidence_review"):
+            raise RuntimeError("agent evidence review capability is missing")
         if not data.get("capabilities", {}).get("agent_safe_execution"):
             raise RuntimeError("safe agent execution capability is missing")
         if not data.get("capabilities", {}).get("evidence_backed_knowledge_promotion"):
@@ -299,6 +301,11 @@ def main() -> int:
             raise RuntimeError("safe agent council returned unexpected status")
         if safe_execution.get("external_actions_blocked") is not True:
             raise RuntimeError("safe agent run did not keep external actions blocked")
+        evidence_review = safe_run.get("evidence_review") or {}
+        if evidence_review.get("evidence_state") not in {"verified", "partial", "failed"}:
+            raise RuntimeError("safe agent run did not expose deterministic evidence state")
+        if evidence_review.get("advisory_only") is not True:
+            raise RuntimeError("evidence reviewer unexpectedly gained execution authority")
         auto_tools = {x.get("tool_name") for x in safe_execution.get("executed") or []}
         if auto_tools & {"code.generate", "code.repair", "package.build", "artifact.export", "release.publish", "store.submit"}:
             raise RuntimeError("safe agent run executed a consequential or unbound tool")
