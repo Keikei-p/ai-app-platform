@@ -44,9 +44,12 @@ class ArtifactVerifierTests(unittest.TestCase):
             struct.pack_into("<I", data, 0x3C, 0x80)
             data[0x80:0x84] = b"PE\x00\x00"
             exe.write_bytes(data)
-            self.assertTrue(ArtifactVerifier().verify_windows_exe(exe).valid)
+            manifest = root / "demo.manifest.json"
+            self._manifest(exe, manifest, self_test_passed=True, signed=False)
+            self.assertTrue(ArtifactVerifier().verify_windows_exe(exe, manifest).valid)
             exe.write_bytes(b"MZbad")
-            self.assertFalse(ArtifactVerifier().verify_windows_exe(exe).valid)
+            self._manifest(exe, manifest, self_test_passed=True, signed=False)
+            self.assertFalse(ArtifactVerifier().verify_windows_exe(exe, manifest).valid)
 
     def test_apk_requires_manifest_and_dex(self):
         with tempfile.TemporaryDirectory() as td:
