@@ -159,6 +159,35 @@ class VerifiedEvolutionEngine:
             created_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    def compare_verified_trees(
+        self,
+        baseline: EvaluationReport,
+        candidate: EvaluationReport,
+        *,
+        baseline_root: Path,
+        candidate_root: Path,
+        changed_paths: list[str] | tuple[str, ...],
+        evidence_refs: list[str] | tuple[str, ...],
+        requested_actions: list[str] | tuple[str, ...] = (),
+    ) -> EvolutionDecision:
+        from .root_policy_guard import RootPolicyGuard
+
+        root_diff = RootPolicyGuard().compare(
+            Path(baseline_root),
+            Path(candidate_root),
+        )
+        actual_paths = list(dict.fromkeys([
+            *(str(x) for x in changed_paths),
+            *root_diff.changed_paths,
+        ]))
+        return self.compare(
+            baseline,
+            candidate,
+            changed_paths=actual_paths,
+            evidence_refs=evidence_refs,
+            requested_actions=requested_actions,
+        )
+
     def compare_project_reports(
         self,
         baseline_project_dir: Path,
