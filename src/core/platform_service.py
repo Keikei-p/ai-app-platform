@@ -28,6 +28,7 @@ from .evolution_experiments import EvolutionExperimentStore
 from .build_jobs import BuildJobManager
 from .agent_tool_executor import AgentToolExecutor
 from .project_health import ProjectHealthCheck
+from .agent_plan_runner import AgentPlanRunner
 
 
 class PlatformService:
@@ -62,6 +63,7 @@ class PlatformService:
             evolution=self.evolution,
         )
         self.project_health_checker = ProjectHealthCheck(self.tool_executor)
+        self.agent_plan_runner = AgentPlanRunner(self.tool_executor, registry=self.tools)
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -99,6 +101,7 @@ class PlatformService:
                 "observable_build_jobs": True,
                 "reviewed_tool_executor": True,
                 "project_health_check": True,
+                "agent_safe_execution": True,
             },
         }
 
@@ -379,6 +382,27 @@ class PlatformService:
 
     def agent_plan(self, goal: str, project_slug: str | None = None) -> dict[str, Any]:
         return self.agent.plan(goal, project_slug).to_dict()
+
+    def run_safe_agent(
+        self,
+        goal: str,
+        project_slug: str,
+    ) -> dict[str, Any]:
+        clean_goal = goal.strip()
+        slug = project_slug.strip()
+        if not clean_goal:
+            raise ValueError("goal is required")
+        if not slug:
+            raise ValueError("project_slug is required")
+        project_dir = safe_child(WORKSPACE_DIR, slug)
+        if not project_dir.is_dir():
+            raise FileNotFoundError(slug)
+        plan = self.agent.plan(clean_goal, slug)
+        report = self.agent_plan_runner.run(
+            plan,
+            project_dir=project_dir,
+        )
+        return report.to_dict()
 
     def start_build_job(
         self,
