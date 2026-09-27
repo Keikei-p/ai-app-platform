@@ -1,4 +1,5 @@
 import tempfile
+import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,6 +46,22 @@ class AgentRuntimeTests(unittest.TestCase):
 
 
 class PlatformServiceTests(unittest.TestCase):
+    def _write_verified_reports(self, project: Path):
+        reports = project / ".aiapp" / "reports"
+        reports.mkdir(parents=True, exist_ok=True)
+        (reports / "test_report.json").write_text(json.dumps({"passed": True}), encoding="utf-8")
+        (reports / "security_report.json").write_text(json.dumps({"passed": True}), encoding="utf-8")
+        (reports / "build_readiness.json").write_text(json.dumps({"preview_ready": True}), encoding="utf-8")
+        (reports / "agent_evaluation.json").write_text(json.dumps({"score": 95}), encoding="utf-8")
+        (reports / "release_manager.json").write_text(
+            json.dumps({"all_requested_artifacts_ready": False, "targets": [{"target": "web"}]}),
+            encoding="utf-8",
+        )
+        (project / "design_review.json").write_text(
+            json.dumps({"passed": True, "score": 95}),
+            encoding="utf-8",
+        )
+
     def test_service_exposes_headless_capabilities(self):
         status = PlatformService().status()
         self.assertEqual(status["architecture"], "local-first-core-service")
@@ -70,6 +87,7 @@ class PlatformServiceTests(unittest.TestCase):
             project = root / "demo"
             project.mkdir()
             (project / "project.json").write_text('{"name":"Demo","slug":"demo"}', encoding="utf-8")
+            self._write_verified_reports(project)
 
             service = PlatformService()
             service.core = SimpleNamespace(
