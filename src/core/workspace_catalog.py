@@ -581,7 +581,7 @@ class ProjectCatalog:
                     break
             guide = " ".join(x for x in (reason, next_step) if x).strip() or default_guide
             options.append(DeliveryOption(slug, display, label, "準備中", False, None, 0, guide))
-        order = {"Web": 0, "Windows": 1, "Android": 2, "iOS": 3}
+        order = {"Web": 0, "Windows": 1, "Android": 2, "iOS Simulator": 3, "iOS Source": 4, "iOS": 5}
         options.sort(key=lambda x: (order.get(x.target, 9), not x.available, x.label))
         return options
 
@@ -702,6 +702,12 @@ class ProjectCatalog:
     def _artifact_meta(path: Path) -> tuple[str, str, str]:
         suffix = path.suffix.lower()
         lower_parts = {x.lower() for x in path.parts}
+        if suffix == ".zip" and "ios" in lower_parts and "simulator.app" in path.name.lower():
+            return (
+                "iOS Simulator",
+                "iOS Simulator版",
+                "Xcodeで実コンパイルしたSimulator専用アプリです。iPhone実機用IPAやApp Store提出物ではありません。",
+            )
         if suffix == ".zip" and "ios" in lower_parts and "source" in path.stem.lower():
             return "iOS Source", "iOSソースZIP", "Expo/React NativeのiOS向けソースです。署名済みIPAではありません。"
         if suffix == ".exe":
