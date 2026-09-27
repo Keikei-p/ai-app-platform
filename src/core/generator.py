@@ -136,6 +136,8 @@ class StarterGenerator:
             "future": "future",
             "dark": "dark",
         }
+        if spec.app_type == "social_automation" and style in {"", "modern", "custom"}:
+            return "youthful"
         if style in direct:
             return direct[style]
         if any(word in style + context for word in ("美容", "サロン", "女性向け", "やわらか", "柔らか", "上品")):
@@ -150,8 +152,6 @@ class StarterGenerator:
             return "dark"
         if any(word in style + context for word in ("apple", "アップル")):
             return "minimal"
-        if spec.app_type == "social_automation":
-            return "youthful"
         return "modern"
 
     @staticmethod
