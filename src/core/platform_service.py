@@ -28,8 +28,6 @@ from .evolution_engine import VerifiedEvolutionEngine
 from .evolution_experiments import EvolutionExperimentStore
 from .build_jobs import BuildJobManager
 from .agent_tool_executor import AgentToolExecutor
-from .agent_execution import AgentExecutionLoop
-from .agent_evidence_review import AgentEvidenceReviewer
 from .project_health import ProjectHealthCheck
 from .agent_plan_runner import AgentPlanRunner
 from .agent_execution_trace import BuildExecutionTracer
@@ -299,38 +297,14 @@ class PlatformService:
         project_slug: str | None = None,
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        council_engine = SpecialistCouncil(
-            engine=self.ai_engine,
-            tools=self.tools,
-            specialists=self.specialists,
-            router=self.model_router,
-        )
-        combined = dict(context or {})
-        combined["verified_agent_context"] = self.agent.context(goal)
-        if project_slug:
-            combined["project_slug"] = project_slug
-            try:
-                combined["project_detail"] = self.project_detail(project_slug)
-            except FileNotFoundError:
-                combined["project_detail"] = {"status": "not_found"}
-
-        council = council_engine.run(goal, context=combined)
-        execution = self.agent_execution.run(
-            council,
-            project_slug=project_slug,
-            context=combined,
-        )
-        evidence_review = self.agent_evidence_review.review(
+        slug = str(project_slug or "").strip()
+        if not slug:
+            raise ValueError("project_slug is required for safe specialist execution")
+        return self.run_specialist_execution_council(
             goal,
-            council,
-            execution,
+            slug,
+            context=context or {},
         )
-        return {
-            "council": council.to_dict(),
-            "execution": execution.to_dict(),
-            "evidence_review": evidence_review.to_dict(),
-            "rule": "Only reviewed, non-approval-gated executor bindings may run. Code generation, package, export, publish, store submission and main merge are not auto-executed.",
-        }
 
     def run_specialist_execution_council(
         self,
