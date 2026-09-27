@@ -171,6 +171,52 @@ class AgentOrchestrator:
             },
         }
 
+    def completion_check(
+        self,
+        evidence: list[EvidenceRecord],
+        *,
+        require_package: bool = False,
+        require_human_review: bool = False,
+    ) -> dict[str, Any]:
+        by_stage: dict[str, list[EvidenceRecord]] = {}
+        for row in evidence:
+            by_stage.setdefault(row.stage, []).append(row)
+
+        blockers = [
+            row.summary
+            for row in evidence
+            if row.status.lower() in {"blocked", "fail", "failed", "error"}
+        ]
+        required = ["plan", "validate", "report"]
+        if require_package:
+            required.append("package")
+        if require_human_review:
+            required.append("review")
+
+        missing: list[str] = []
+        for stage in required:
+            rows = by_stage.get(stage, [])
+            if not rows:
+                missing.append(stage)
+                continue
+            if stage == "validate":
+                if not any(x.status.lower() in {"pass", "verified", "success"} for x in rows):
+                    missing.append(stage)
+            elif stage == "report":
+                if not any(x.status.lower() in {"verified", "success"} for x in rows):
+                    missing.append(stage)
+            elif stage == "review" and require_human_review:
+                if not any(x.status.lower() in {"approved", "verified"} for x in rows):
+                    missing.append(stage)
+
+        complete = not blockers and not missing
+        return {
+            "complete": complete,
+            "missing_evidence": missing,
+            "blocking_evidence": blockers,
+            "rule": "agent completion requires evidence; self-assertion alone is insufficient",
+        }
+
     def learn_from_verified_outcome(
         self,
         *,
