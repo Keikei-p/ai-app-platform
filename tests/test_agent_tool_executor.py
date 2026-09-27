@@ -61,7 +61,7 @@ class AgentToolExecutorTests(unittest.TestCase):
             project.mkdir()
             (project / "project.json").write_text(json.dumps({"name": "Demo", "slug": "demo"}), encoding="utf-8")
             (project / "app_spec.json").write_text(json.dumps({"project_name": "Demo", "targets": ["web"]}), encoding="utf-8")
-            with patch("src.core.agent_tool_executor.WORKSPACE_DIR", root), patch("src.core.agent_runtime.WORKSPACE_DIR", root):
+            with patch("src.core.agent_tool_executor.WORKSPACE_DIR", root):
                 executor = AgentToolExecutor()
                 result = executor.execute("tests.run", {"project_slug": "demo"}, run_id="run-1")
                 self.assertEqual(result.tool_name, "tests.run")
