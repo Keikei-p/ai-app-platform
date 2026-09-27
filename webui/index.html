@@ -118,9 +118,10 @@
             <div><strong>Agent安全ルール</strong><p>任意shell実行なし / 最大2回修正 / 外部公開は人の承認 / Evidence必須。</p></div>
             <span class="status-pill success"><i></i>有効</span>
           </div>
-          <div class="settings-card">
-            <div><strong>Model Router</strong><p id="modelRouteSummary">モデル振り分けを確認しています…</p></div>
+          <div class="settings-card model-router-card">
+            <div class="settings-copy"><strong>Model Router</strong><p id="modelRouteSummary">モデル振り分けを確認しています…</p></div>
             <span class="status-pill success"><i></i>task-aware</span>
+            <div id="modelRouteControls" class="route-controls" aria-label="Model Router設定"></div>
           </div>
           <div class="settings-card">
             <div><strong>Aivy Evolution</strong><p id="evolutionSummary">改善Experimentを確認しています…</p></div>
