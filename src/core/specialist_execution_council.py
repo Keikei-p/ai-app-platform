@@ -78,6 +78,9 @@ class ExecutionCouncilReport:
     tool_executions: tuple[CouncilToolExecution, ...]
     budget: dict[str, Any]
     summary: str
+    evidence_state: str
+    validation: dict[str, Any]
+    external_actions_blocked: bool = True
     history_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -94,6 +97,9 @@ class ExecutionCouncilReport:
             "tool_executions": [x.to_dict() for x in self.tool_executions],
             "budget": self.budget,
             "summary": self.summary,
+            "evidence_state": self.evidence_state,
+            "validation": self.validation,
+            "external_actions_blocked": self.external_actions_blocked,
             "history_path": self.history_path,
         }
 
@@ -393,6 +399,7 @@ class SpecialistExecutionCouncil:
             x.tool_name for x in executions if x.status == "executed"
         })
         budget["budget"]["max_tool_executions"] = self.MAX_TOOL_EXECUTIONS
+        validation = self._validation_state(executions)
         return ExecutionCouncilReport(
             run_id=run_id,
             goal=goal,
@@ -406,6 +413,9 @@ class SpecialistExecutionCouncil:
             tool_executions=tuple(executions),
             budget=budget,
             summary=summary,
+            evidence_state=str(validation["state"]),
+            validation=validation,
+            external_actions_blocked=True,
         )
 
     @staticmethod
@@ -424,6 +434,9 @@ class SpecialistExecutionCouncil:
             "approval_required_tools": list(report.approval_required_tools),
             "budget": report.budget,
             "summary": redact_sensitive(report.summary)[:3000],
+            "evidence_state": report.evidence_state,
+            "validation": report.validation,
+            "external_actions_blocked": report.external_actions_blocked,
             "turns": [
                 {
                     "order": turn.order,
@@ -447,6 +460,41 @@ class SpecialistExecutionCouncil:
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(target)
         return target
+
+    @staticmethod
+    def _validation_state(executions: list[CouncilToolExecution]) -> dict[str, Any]:
+        latest: dict[str, CouncilToolExecution] = {}
+        for row in executions:
+            if row.status in {"executed", "reused"} and row.result is not None:
+                latest[row.tool_name] = row
+
+        values: dict[str, bool | None] = {
+            "tests.run": None,
+            "design.review": None,
+            "security.scan": None,
+        }
+        tests = latest.get("tests.run")
+        if tests is not None and isinstance(tests.result, dict):
+            values["tests.run"] = bool(tests.result.get("passed"))
+        design = latest.get("design.review")
+        if design is not None and isinstance(design.result, dict):
+            values["design.review"] = bool((design.result.get("review") or {}).get("passed"))
+        security = latest.get("security.scan")
+        if security is not None and isinstance(security.result, dict):
+            values["security.scan"] = bool((security.result.get("security") or {}).get("passed"))
+
+        present = [x for x in values.values() if x is not None]
+        if any(x is False for x in present):
+            state = "failed"
+        elif all(values[name] is True for name in values):
+            state = "verified"
+        else:
+            state = "partial"
+        return {
+            "state": state,
+            "checks": values,
+            "rule": "Only actual reviewed tests/design/security tool results determine verification state.",
+        }
 
     @staticmethod
     def _tool_args(tool_name: str, goal: str, project_slug: str) -> dict[str, Any]:
