@@ -23,6 +23,7 @@ from .web_packager import WebPackager
 from .social_generator import SocialAutomationGenerator
 from .knowledge_store import VerifiedKnowledgeStore
 from .evaluation_engine import EvaluationEngine
+from .visual_design_ai import VisualDesignAI
 
 @dataclass
 class CoreResult:
@@ -64,6 +65,7 @@ class AICore:
         self.social = SocialAutomationGenerator()
         self.knowledge = VerifiedKnowledgeStore()
         self.evaluation = EvaluationEngine()
+        self.visual_design = VisualDesignAI()
 
     def execute(
         self,
@@ -148,6 +150,31 @@ class AICore:
         design_review = self.design.review(project_dir)
         files.append(self.design.save(project_dir, design_review))
         log_event("design.reviewed", json.dumps(design_review.to_dict(), ensure_ascii=False), slug, "design-ai")
+
+        try:
+            visual_review = self.visual_design.review(project_dir)
+            files.append(self.visual_design.save(project_dir, visual_review))
+            log_event(
+                "design.visual_reviewed",
+                json.dumps(visual_review.to_dict(), ensure_ascii=False),
+                slug,
+                "visual-design-ai",
+            )
+            if visual_review.status == "reviewed":
+                combined_findings = list(design_review.findings)
+                combined_strengths = list(design_review.strengths)
+                combined_findings += [f"Visual: {x}" for x in visual_review.findings]
+                combined_strengths += [f"Visual: {x}" for x in visual_review.strengths]
+                combined_score = min(design_review.score, int(visual_review.score or 0))
+                design_review = DesignReview(
+                    combined_score,
+                    bool(design_review.passed and visual_review.passed and combined_score >= 90),
+                    combined_findings,
+                    combined_strengths,
+                )
+                files.append(self.design.save(project_dir, design_review))
+        except Exception as exc:
+            log_event("design.visual_review_failed", str(exc), slug, "visual-design-ai")
 
         gaps = self.capability.assess(plan.spec, project_dir)
         files.append(self.capability.save(project_dir, gaps))
