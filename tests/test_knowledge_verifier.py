@@ -15,6 +15,12 @@ class ProjectKnowledgeVerifierTests(unittest.TestCase):
             source_kind="official_docs",
             source_locator="https://official.example.test/docs",
         )
+        store.ingest(
+            topic="Demo framework",
+            statement="This project configuration passed verified checks.",
+            source_kind="web",
+            source_locator="https://reference.example.test/demo-framework",
+        )
         return store.promote_candidate(item.knowledge_id)
 
     def test_missing_project_reports_cannot_verify_candidate(self):
