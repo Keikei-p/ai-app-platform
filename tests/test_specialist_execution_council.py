@@ -127,6 +127,30 @@ class SpecialistExecutionCouncilTests(unittest.TestCase):
         self.assertEqual(len(project_calls), 1)
         self.assertTrue(any(x.status == "reused" for x in report.tool_executions))
 
+    def test_all_validation_tool_results_create_verified_evidence_state(self):
+        executor = FakeExecutor()
+        report = SpecialistExecutionCouncil(
+            engine=EvidenceSeekingEngine(),
+            executor=executor,
+        ).run(
+            "verify demo",
+            "demo",
+            roles=("test", "design", "security", "coordinator"),
+        )
+        self.assertEqual(report.evidence_state, "verified")
+        self.assertTrue(report.validation["checks"]["tests.run"])
+        self.assertTrue(report.validation["checks"]["design.review"])
+        self.assertTrue(report.validation["checks"]["security.scan"])
+        self.assertTrue(report.external_actions_blocked)
+
+    def test_partial_evidence_is_not_called_verified(self):
+        executor = FakeExecutor()
+        report = SpecialistExecutionCouncil(
+            engine=EvidenceSeekingEngine(),
+            executor=executor,
+        ).run("test demo", "demo", roles=("test",))
+        self.assertEqual(report.evidence_state, "partial")
+
     def test_release_role_cannot_enter_execution_council(self):
         executor = FakeExecutor()
         with self.assertRaises(ValueError):
