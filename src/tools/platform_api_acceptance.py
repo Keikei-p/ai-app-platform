@@ -327,11 +327,18 @@ def main() -> int:
             {
                 "topic": "acceptance research unique topic",
                 "statement": "POST /v2/items creates an item.",
-                "sources": [{
-                    "kind": "official_docs",
-                    "locator": "https://docs.example.test/items",
-                    "content": "POST /v2/items creates an item and returns an id.",
-                }],
+                "sources": [
+                    {
+                        "kind": "official_docs",
+                        "locator": "https://docs.example.test/items",
+                        "content": "POST /v2/items creates an item and returns an id.",
+                    },
+                    {
+                        "kind": "web",
+                        "locator": "https://reference.example.test/items",
+                        "content": "POST /v2/items creates an item and returns an id.",
+                    },
+                ],
             },
             csrf,
         )
