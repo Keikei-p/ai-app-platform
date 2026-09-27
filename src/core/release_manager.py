@@ -146,7 +146,9 @@ class ReleaseManager:
             return self._state(target, quality, status, artifacts, distribution, blockers, next_step)
 
         if target == "ios":
-            ipas = self._files(root / "artifacts" / "ios", {".ipa"})
+            folder = root / "artifacts" / "ios"
+            ipas = self._files(folder, {".ipa"})
+            source_zips = tuple(x for x in self._files(folder, {".zip"}) if "source" in x.stem.lower())
             blockers = []
             if not quality:
                 blockers.append("quality gates have not verified preview readiness")
@@ -157,6 +159,12 @@ class ReleaseManager:
                     "Verify Apple signing/provisioning and request explicit distribution/App Store approval.",
                 )
             blockers.append("signed iOS IPA does not exist")
+            if source_zips and quality:
+                return self._state(
+                    target, quality, "source_bundle", source_zips, "source_only",
+                    blockers,
+                    "iOS source is downloadable; use macOS/Xcode or an approved build service with Apple signing credentials to produce an IPA.",
+                )
             return self._state(
                 target, quality, "source_only", (), "blocked", blockers,
                 "Use macOS/Xcode or an approved build service with Apple signing credentials to produce an IPA.",
