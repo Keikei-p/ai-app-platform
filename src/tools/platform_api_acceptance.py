@@ -69,7 +69,18 @@ def main() -> int:
         if status != 200 or not isinstance(projects.get("projects"), list):
             raise RuntimeError("projects endpoint failed")
 
-        print("PLATFORM API ACCEPTANCE PASS: v0.9 Web UI + loopback API + CSRF + agent plan + project catalog")
+        status, agents = request(port, "GET", "/api/v1/agents")
+        if status != 200 or len(agents.get("agents") or []) < 8:
+            raise RuntimeError("specialist agent endpoint failed")
+        names = {x.get("name") for x in agents.get("agents") or []}
+        if not {"coordinator", "coding", "design", "test", "security", "build"}.issubset(names):
+            raise RuntimeError("required specialist agents are missing")
+
+        status, knowledge = request(port, "GET", "/api/v1/knowledge")
+        if status != 200 or not isinstance(knowledge.get("knowledge"), list):
+            raise RuntimeError("verified knowledge endpoint failed")
+
+        print("PLATFORM API ACCEPTANCE PASS: v0.9 Web UI + loopback API + specialist agents + verified knowledge + CSRF")
     finally:
         server.shutdown()
         server.server_close()
