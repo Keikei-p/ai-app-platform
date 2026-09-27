@@ -141,6 +141,10 @@ class PlatformAPI:
                         query = parse_qs(parsed.query).get("q", [""])[0]
                         self._json(200, {"knowledge": api.service.verified_knowledge(query)})
                         return
+                    if path == "/api/v1/knowledge/staged":
+                        trust = str(parse_qs(parsed.query).get("trust", [""])[0]).strip() or None
+                        self._json(200, {"knowledge": api.service.staged_knowledge(trust)})
+                        return
                     if path == "/api/v1/conversations":
                         query = parse_qs(parsed.query).get("q", [""])[0]
                         self._json(200, {"conversations": api.service.list_conversations(query)})
@@ -316,6 +320,23 @@ class PlatformAPI:
                             sources=sources,
                         )
                         self._json(202 if row.get("accepted") else 422, row)
+                        return
+                    parts = [x for x in path.split("/") if x]
+                    if len(parts) == 6 and parts[:3] == ["api", "v1", "knowledge"] and parts[4] == "candidate":
+                        row = api.service.promote_knowledge_candidate(parts[3])
+                        self._json(200, row)
+                        return
+                    if len(parts) == 6 and parts[:3] == ["api", "v1", "knowledge"] and parts[4] == "verify":
+                        project_slug = str(data.get("project_slug") or "").strip()
+                        verifier_types = data.get("verifier_types")
+                        if not project_slug or not isinstance(verifier_types, list):
+                            raise ValueError("project_slug and verifier_types are required")
+                        row = api.service.verify_knowledge_from_project(
+                            parts[3],
+                            project_slug=project_slug,
+                            verifier_types=[str(x) for x in verifier_types],
+                        )
+                        self._json(200, row)
                         return
                     parts = [x for x in path.split("/") if x]
                     if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "health-check":
