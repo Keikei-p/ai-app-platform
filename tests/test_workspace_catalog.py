@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -77,6 +78,75 @@ class ProjectCatalogTests(unittest.TestCase):
                 self.assertEqual(resolved, artifact.resolve())
                 with self.assertRaises(FileNotFoundError):
                     catalog.artifact_path(slug, "../../outside.zip")
+
+    def test_invalid_certificate_blocks_direct_artifact_download(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = root / "demo"
+            artifact = project / "artifacts" / "web" / "demo-web.zip"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_bytes(b"bundle")
+            (project / "project.json").write_text(
+                json.dumps({"name": "Demo", "slug": "demo"}),
+                encoding="utf-8",
+            )
+            certificate = project / ".aiapp" / "reports" / "development_certificate.json"
+            certificate.parent.mkdir(parents=True)
+            certificate.write_text(json.dumps({
+                "status": "verified_preview_candidate",
+                "external_actions": "approval_required",
+                "evidence": [{
+                    "kind": "artifact:web",
+                    "path": "artifacts/web/demo-web.zip",
+                    "sha256": "0" * 64,
+                }],
+            }), encoding="utf-8")
+
+            with patch("src.core.workspace_catalog.WORKSPACE_DIR", root):
+                catalog = ProjectCatalog()
+                artifact_id = catalog.artifacts("demo")[0].artifact_id
+                with self.assertRaises(PermissionError):
+                    catalog.artifact_path("demo", artifact_id)
+                option = catalog.delivery_options("demo")[0]
+                self.assertFalse(option.available)
+                self.assertEqual(option.status, "Evidence確認待ち")
+
+    def test_valid_certificate_only_allows_hash_bound_artifact(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = root / "demo"
+            artifact = project / "artifacts" / "web" / "demo-web.zip"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_bytes(b"bundle")
+            stale = project / "artifacts" / "web" / "stale.zip"
+            stale.write_bytes(b"stale")
+            (project / "project.json").write_text(
+                json.dumps({"name": "Demo", "slug": "demo"}),
+                encoding="utf-8",
+            )
+            digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+            certificate = project / ".aiapp" / "reports" / "development_certificate.json"
+            certificate.parent.mkdir(parents=True)
+            certificate.write_text(json.dumps({
+                "status": "verified_preview_candidate",
+                "external_actions": "approval_required",
+                "evidence": [{
+                    "kind": "artifact:web",
+                    "path": "artifacts/web/demo-web.zip",
+                    "sha256": digest,
+                }],
+            }), encoding="utf-8")
+
+            with patch("src.core.workspace_catalog.WORKSPACE_DIR", root):
+                catalog = ProjectCatalog()
+                rows = {x.artifact_id: x for x in catalog.artifacts("demo")}
+                allowed = catalog.artifact_path("demo", "artifacts/web/demo-web.zip")
+                self.assertEqual(allowed, artifact.resolve())
+                with self.assertRaises(PermissionError):
+                    catalog.artifact_path("demo", "artifacts/web/stale.zip")
+                options = {x.label + ":" + (x.artifact_id or ""): x for x in catalog.delivery_options("demo")}
+                self.assertTrue(any(x.available for x in options.values()))
+                self.assertTrue(any(not x.available for x in options.values()))
 
     def test_requested_ios_is_visible_as_pending_not_downloadable(self):
         with tempfile.TemporaryDirectory() as td:
