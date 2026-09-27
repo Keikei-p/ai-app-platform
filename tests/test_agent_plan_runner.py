@@ -16,10 +16,11 @@ class FakeExecutor:
             "tests.run": {"passed": tests, "results": []},
             "design.review": {"review": {"passed": design, "score": 95}},
             "security.scan": {"security": {"passed": security, "findings": []}},
+            "package.build": {"status": "built", "external_release_performed": False},
         }
 
     def executable_tools(self):
-        return ("project.inspect", "knowledge.search", "tests.run", "design.review", "security.scan")
+        return ("project.inspect", "knowledge.search", "tests.run", "design.review", "security.scan", "package.build")
 
     class Row:
         def __init__(self, result):
@@ -61,6 +62,9 @@ class AgentPlanRunnerTests(unittest.TestCase):
         self.assertIn("design.review", report.executed_tools)
         self.assertIn("security.scan", report.executed_tools)
         self.assertIn("code.generate", report.delegated_tools)
+        self.assertIn("package.build", report.executed_tools)
+        package_call = next(x for x in executor.calls if x[0] == "package.build")
+        self.assertEqual(package_call[1]["project_slug"], "demo")
         self.assertEqual(report.status, "approval_required")
         self.assertIn("release.publish", report.approval_required)
         self.assertFalse(report.arbitrary_shell)
