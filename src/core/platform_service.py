@@ -14,6 +14,9 @@ from .path_security import safe_child
 from .project_manager import ProjectManager
 from .workspace_catalog import ConversationStore, ProjectCatalog
 from .agent_tools import AgentToolRegistry
+from .specialist_agents import SpecialistAgentRegistry
+from .model_router import ModelRouter
+from .knowledge_store import VerifiedKnowledgeStore
 
 
 class PlatformService:
@@ -30,7 +33,15 @@ class PlatformService:
         self.chat = ChatPartner()
         self.core = AICore()
         self.tools = AgentToolRegistry()
-        self.agent = AgentOrchestrator(tools=self.tools)
+        self.specialists = SpecialistAgentRegistry(self.tools)
+        self.model_router = ModelRouter()
+        self.knowledge = VerifiedKnowledgeStore()
+        self.agent = AgentOrchestrator(
+            tools=self.tools,
+            specialists=self.specialists,
+            model_router=self.model_router,
+            knowledge=self.knowledge,
+        )
 
     def status(self) -> dict[str, Any]:
         return {
@@ -47,8 +58,21 @@ class PlatformService:
                 "artifact_catalog": True,
                 "agent_planning": True,
                 "registered_agent_tools": len(self.tools.list()),
+                "specialist_agents": len(self.specialists.list()),
+                "verified_knowledge": True,
+                "model_router": True,
             },
         }
+
+    def specialist_agents(self) -> list[dict[str, Any]]:
+        return self.specialists.public_contract()
+
+    def agent_context(self, goal: str) -> dict[str, Any]:
+        return self.agent.context(goal)
+
+    def verified_knowledge(self, query: str = "") -> list[dict[str, Any]]:
+        rows = self.knowledge.search(query, verified_only=True) if query.strip() else self.knowledge.list("verified")
+        return [x.to_dict() for x in rows]
 
     def list_project_cards(self) -> list[dict[str, Any]]:
         return [asdict(x) for x in self.catalog.list_cards()]
