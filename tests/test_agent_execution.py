@@ -85,6 +85,14 @@ class AgentExecutionLoopTests(unittest.TestCase):
         self.assertEqual(executor.calls[1][1], {"project_slug": "demo"})
         self.assertTrue(all(call[2] is False for call in executor.calls))
 
+    def test_cross_role_tool_escalation_is_blocked(self):
+        executor = FakeExecutor(executable=("security.scan",))
+        council = report((("test", ("security.scan",)),))
+        out = AgentExecutionLoop(executor=executor).run(council, project_slug="demo")
+        self.assertFalse(executor.calls)
+        self.assertEqual(out.skipped[0].status, "blocked")
+        self.assertIn("allowlist", out.skipped[0].detail)
+
     def test_unbound_code_generation_is_not_auto_executed(self):
         executor = FakeExecutor()
         out = AgentExecutionLoop(executor=executor).run(
