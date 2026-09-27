@@ -140,14 +140,30 @@ class ReleaseManager:
         if target == "android":
             aab_candidates = self._files(root / "artifacts" / "android", {".aab"})
             apk_candidates = self._files(root / "artifacts" / "android", {".apk"})
-            aabs = tuple(
-                x for x in aab_candidates
-                if self.verifier.verify_android_aab(x, x.with_name(x.stem + ".manifest.json")).valid
-            )
-            apks = tuple(
-                x for x in apk_candidates
-                if self.verifier.verify_android_apk(x, x.with_name(x.stem + ".manifest.json")).valid
-            )
+
+            aab_verifications = [
+                (
+                    x,
+                    self.verifier.verify_android_aab(
+                        x,
+                        x.with_name(x.stem + ".manifest.json"),
+                    ),
+                )
+                for x in aab_candidates
+            ]
+            apk_verifications = [
+                (
+                    x,
+                    self.verifier.verify_android_apk(
+                        x,
+                        x.with_name(x.stem + ".manifest.json"),
+                    ),
+                )
+                for x in apk_candidates
+            ]
+            aabs = tuple(x for x, verification in aab_verifications if verification.valid)
+            apks = tuple(x for x, verification in apk_verifications if verification.valid)
+
             blockers: list[str] = []
             if not quality:
                 blockers.append("quality gates have not verified preview readiness")
@@ -166,8 +182,12 @@ class ReleaseManager:
                 status = "not_ready"
                 artifacts = ()
                 distribution = "blocked"
-                if aab_candidates or apk_candidates:
-                    blockers.append("Android artifact failed structure, checksum, or release-evidence verification")
+                invalid = [*aab_verifications, *apk_verifications]
+                if invalid:
+                    blockers.append("Android artifact failed structural, checksum, or release-evidence verification")
+                    for artifact, verification in invalid:
+                        for failure in verification.failures[:6]:
+                            blockers.append(f"{artifact.name}: {failure}")
                 else:
                     blockers.append("Android APK/AAB does not exist")
                 next_step = "Prepare Android build dependencies and build a verified debug APK."
