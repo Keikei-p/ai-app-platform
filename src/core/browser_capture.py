@@ -21,6 +21,9 @@ APPROVED_BROWSER_NAMES = {
     "msedge.exe",
     "chrome.exe",
     "chromium.exe",
+    "msedge",
+    "google-chrome",
+    "chromium-browser",
     "microsoft edge",
     "google chrome",
     "chromium",
@@ -114,6 +117,13 @@ class BrowserScreenshotCapture:
             tuple(screenshots),
             "Verified loopback preview captured at mobile, tablet, and desktop sizes.",
         )
+
+    def save(self, project_dir: Path, result: ScreenshotCaptureResult) -> Path:
+        import json
+        path = Path(project_dir) / ".aiapp" / "reports" / "screenshot_capture.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        return path
 
     @staticmethod
     def _run(command: list[str], timeout: int) -> None:
