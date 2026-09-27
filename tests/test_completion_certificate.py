@@ -64,6 +64,47 @@ class DevelopmentCertificateTests(unittest.TestCase):
             self.assertFalse(cert.preview_verified)
             self.assertTrue(any("security" in x for x in cert.blockers))
 
+    def test_saved_certificate_detects_tampered_evidence(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            trace = self._passing_project(root)
+            builder = DevelopmentCertificateBuilder()
+            cert = builder.create(
+                root,
+                run_id="run-1",
+                project_slug="demo",
+                execution_trace_path=trace,
+                agent_completion={"complete": True},
+            )
+            builder.save(root, cert)
+            self.assertTrue(builder.verify_saved(root).valid)
+
+            (root / ".aiapp/reports/security_report.json").write_text(
+                json.dumps({"passed": False}),
+                encoding="utf-8",
+            )
+            integrity = builder.verify_saved(root)
+            self.assertFalse(integrity.valid)
+            self.assertIn(".aiapp/reports/security_report.json", integrity.mismatched)
+
+    def test_later_agent_ledger_append_does_not_invalidate_certificate(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            trace = self._passing_project(root)
+            builder = DevelopmentCertificateBuilder()
+            cert = builder.create(
+                root,
+                run_id="run-1",
+                project_slug="demo",
+                execution_trace_path=trace,
+                agent_completion={"complete": True},
+            )
+            builder.save(root, cert)
+            ledger = root / ".aiapp/agent/evidence.jsonl"
+            with ledger.open("a", encoding="utf-8") as handle:
+                handle.write('{"run_id":"later-run","status":"pass"}\n')
+            self.assertTrue(builder.verify_saved(root).valid)
+
     def test_release_ready_still_requires_external_approval(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
