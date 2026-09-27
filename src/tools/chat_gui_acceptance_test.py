@@ -155,8 +155,8 @@ def main() -> int:
             if not (project / "server.py").is_file():
                 raise AssertionError("approved chat did not generate functional server")
             chat_text = app.chat_history.get("1.0", "end-1c")
-            if "あなた" not in chat_text or "AI" not in chat_text:
-                raise AssertionError("chat history not rendered")
+            if "あなた" not in chat_text or "Aivy" not in chat_text:
+                raise AssertionError("Aivy chat history not rendered")
 
             app.instruction.insert("1.0", "スマホでボタンが押しにくいから直して")
             app.send_button.invoke()
