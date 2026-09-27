@@ -104,6 +104,32 @@ def main() -> int:
             if forbidden in research_text:
                 failures.append(f"research_provider contains forbidden network capability: {forbidden}")
 
+    browser_capture_path = ROOT_DIR / "src" / "core" / "browser_capture.py"
+    if not browser_capture_path.is_file():
+        failures.append("browser_capture.py missing")
+    else:
+        browser_text = browser_capture_path.read_text(encoding="utf-8").lower()
+        for required in (
+            "previewruntime.assert_verified",
+            "http://127.0.0.1:",
+            "--headless=new",
+            "--screenshot=",
+            "--window-size=",
+            "shell=false",
+            "approved_browser_names",
+        ):
+            if required not in browser_text:
+                failures.append(f"browser_capture missing safety contract: {required}")
+        for forbidden in (
+            "shell=true",
+            "os.system",
+            "subprocess.popen",
+            "https://",
+            "http://0.0.0.0",
+        ):
+            if forbidden in browser_text:
+                failures.append(f"browser_capture contains forbidden execution/network term: {forbidden}")
+
     remote_path = ROOT_DIR / "src" / "core" / "remote_server.py"
     if not remote_path.is_file():
         failures.append("remote_server.py missing")
@@ -138,6 +164,7 @@ def main() -> int:
     print("- generated-code templates are not mistaken for executable platform source")
     print("- inbound listeners are limited to reviewed Remote LAN module and loopback-only Platform API")
     print("- outbound Research Provider is HTTPS-only and rejects private/local targets and unsafe redirects")
+    print("- browser screenshots require a verified loopback preview and reviewed fixed browser arguments")
     print("- preview runtime exposes no generic shell/process action")
     print("- remote/local worker privileged actions remain blocked")
     return 0
