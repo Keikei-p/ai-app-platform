@@ -46,6 +46,38 @@ class AgentRuntimeTests(unittest.TestCase):
 
 
 class PlatformServiceTests(unittest.TestCase):
+    def _install_passing_postflight(self, service: PlatformService):
+        class PassingPostflight:
+            def run(self, project_slug, *, run_id=None):
+                payload = {
+                    "run_id": str(run_id or "postflight-test"),
+                    "project_slug": project_slug,
+                    "status": "pass",
+                    "tests_passed": True,
+                    "design_passed": True,
+                    "security_passed": True,
+                    "checks": [],
+                    "created_at": "2026-09-27T00:00:00+00:00",
+                }
+                return SimpleNamespace(**payload, to_dict=lambda: dict(payload))
+
+            def save(self, project_dir, report):
+                path = Path(project_dir) / ".aiapp" / "agent" / "runs" / f"{report.run_id}-postflight.json"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps({
+                    "run_id": report.run_id,
+                    "project_slug": report.project_slug,
+                    "status": "pass",
+                    "tests_passed": True,
+                    "design_passed": True,
+                    "security_passed": True,
+                    "checks": [],
+                    "created_at": report.created_at,
+                }), encoding="utf-8")
+                return path
+
+        service.project_health_checker = PassingPostflight()
+
     def _write_verified_reports(self, project: Path):
         reports = project / ".aiapp" / "reports"
         reports.mkdir(parents=True, exist_ok=True)
@@ -90,6 +122,7 @@ class PlatformServiceTests(unittest.TestCase):
             self._write_verified_reports(project)
 
             service = PlatformService()
+            self._install_passing_postflight(service)
             service.core = SimpleNamespace(
                 execute=lambda *args, **kwargs: SimpleNamespace(
                     ok=True,
@@ -120,6 +153,7 @@ class PlatformServiceTests(unittest.TestCase):
             (project / "project.json").write_text('{"name":"Demo","slug":"demo"}', encoding="utf-8")
 
             service = PlatformService()
+            self._install_passing_postflight(service)
             service.core = SimpleNamespace(
                 execute=lambda *args, **kwargs: SimpleNamespace(
                     ok=True,
