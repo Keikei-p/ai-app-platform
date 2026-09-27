@@ -7,6 +7,7 @@ import json
 
 from .app_spec import AppSpec
 from .llm_chat import AIChatEngine
+from .model_router import ModelRouter
 
 
 @dataclass(frozen=True)
@@ -43,12 +44,14 @@ class CodingBrain:
     MAX_TOTAL_CHARS = 700_000
     MAX_CONTEXT_CHARS = 60_000
 
-    def __init__(self, engine: AIChatEngine | None = None):
+    def __init__(self, engine: AIChatEngine | None = None, router: ModelRouter | None = None):
         self.engine = engine or AIChatEngine()
+        self.router = router or ModelRouter(self.engine)
 
     def enhance(self, project_dir: Path, spec: AppSpec, instruction: str) -> CodingBrainResult:
-        status = self.engine.status()
-        if not status.connected:
+        route = self.router.route("coding")
+        if route.mode == "deterministic_fallback":
+            status = self.engine.status()
             return CodingBrainResult("not_connected", status.detail, [])
 
         context = self._project_context(project_dir)
@@ -70,7 +73,10 @@ class CodingBrain:
             + "\n\nCURRENT PROJECT FILES:\n"
             + context
         )
-        raw = self.engine.reply([], prompt, system)
+        if hasattr(self.engine, "reply_routed"):
+            raw = self.engine.reply_routed(route.provider, route.model, [], prompt, system)
+        else:
+            raw = self.engine.reply([], prompt, system)
         proposal = self._parse(raw)
         summary = str(proposal.get("summary") or "AI code enhancement").strip()[:1000]
         files = proposal.get("files")
