@@ -76,6 +76,8 @@ def main() -> int:
             raise RuntimeError("observable build jobs capability is missing")
         if not data.get("capabilities", {}).get("project_health_check"):
             raise RuntimeError("project health check capability is missing")
+        if not data.get("capabilities", {}).get("agent_safe_tool_execution"):
+            raise RuntimeError("safe agent tool execution capability is missing")
         if not data.get("capabilities", {}).get("agent_safe_execution"):
             raise RuntimeError("safe agent execution capability is missing")
         if not data.get("capabilities", {}).get("evidence_backed_knowledge_promotion"):
@@ -277,6 +279,29 @@ def main() -> int:
             raise RuntimeError("specialist council endpoint failed")
         if council.get("advisory_only") is not True:
             raise RuntimeError("specialist council unexpectedly gained execution authority")
+
+        status, safe_run = request(
+            port,
+            "POST",
+            "/api/v1/agent/safe-run",
+            {
+                "goal": "inspect and verify the generated project without publishing",
+                "project_slug": turn["project_slug"],
+                "context": {"source": "acceptance"},
+            },
+            csrf,
+        )
+        if status != 200:
+            raise RuntimeError("safe agent run endpoint failed")
+        safe_council = safe_run.get("council") or {}
+        safe_execution = safe_run.get("execution") or {}
+        if safe_council.get("status") not in {"not_connected", "ok"}:
+            raise RuntimeError("safe agent council returned unexpected status")
+        if safe_execution.get("external_actions_blocked") is not True:
+            raise RuntimeError("safe agent run did not keep external actions blocked")
+        auto_tools = {x.get("tool_name") for x in safe_execution.get("executed") or []}
+        if auto_tools & {"code.generate", "code.repair", "package.build", "artifact.export", "release.publish", "store.submit"}:
+            raise RuntimeError("safe agent run executed a consequential or unbound tool")
 
         status, execution_council = request(
             port,
