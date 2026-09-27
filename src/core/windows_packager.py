@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from hashlib import sha256
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -25,6 +27,9 @@ class WindowsBuildResult:
     built: bool
     artifact: Path | None
     detail: str
+    manifest: Path | None = None
+    sha256: str = ""
+    self_test_passed: bool = False
 
 
 class WindowsPackager:
@@ -101,6 +106,8 @@ class WindowsPackager:
     def build(self, project_dir: Path, spec: AppSpec, timeout: int = 300) -> WindowsBuildResult:
         if "windows" not in spec.targets:
             return WindowsBuildResult(False, False, None, "windows target not requested")
+        if os.name != "nt":
+            return WindowsBuildResult(False, False, None, "Windows EXE builds require a Windows host")
         if importlib.util.find_spec("PyInstaller") is None:
             return WindowsBuildResult(False, False, None, "PyInstaller is not installed")
 
@@ -143,14 +150,75 @@ class WindowsPackager:
             log_event("packager.windows.build_failed", str(exc), spec.slug)
             return WindowsBuildResult(True, False, None, str(exc))
 
-        built = completed.returncode == 0 and artifact.is_file()
-        detail = "Windows EXE built" if built else (completed.stderr or completed.stdout)[-2000:]
-        log_event(
-            "packager.windows.built" if built else "packager.windows.build_failed",
-            detail,
-            spec.slug,
+        built = completed.returncode == 0 and artifact.is_file() and artifact.stat().st_size > 0
+        if not built:
+            detail = (completed.stderr or completed.stdout)[-2000:]
+            log_event("packager.windows.build_failed", detail, spec.slug)
+            return WindowsBuildResult(True, False, None, detail)
+
+        runtime_root = project_dir / ".aiapp-build" / "windows-runtime"
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        env = dict(os.environ)
+        env["LOCALAPPDATA"] = str(runtime_root)
+        try:
+            self_test = subprocess.run(
+                [str(artifact), "--self-test"],
+                cwd=project_dir,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=min(60, max(15, timeout)),
+                check=False,
+                shell=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            self_test = None
+            self_test_detail = f"{type(exc).__name__}: {exc}"
+        else:
+            self_test_detail = ((self_test.stdout or "") + "\n" + (self_test.stderr or ""))[-2000:]
+
+        self_test_passed = bool(
+            self_test is not None
+            and self_test.returncode == 0
+            and "AI_APP_WINDOWS_SELFTEST_OK" in (self_test.stdout or "")
         )
-        return WindowsBuildResult(True, built, artifact if built else None, detail)
+        if not self_test_passed:
+            try:
+                artifact.unlink(missing_ok=True)
+            except OSError:
+                pass
+            detail = "Windows EXE self-test failed: " + self_test_detail
+            log_event("packager.windows.self_test_failed", detail, spec.slug)
+            return WindowsBuildResult(True, False, None, detail)
+
+        digest = sha256(artifact.read_bytes()).hexdigest()
+        manifest = artifact.parent / f"{spec.slug}.manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "target": "windows",
+                    "artifact": artifact.name,
+                    "sha256": digest,
+                    "self_test_passed": True,
+                    "signed": False,
+                    "distribution": "local executable; code signing/public release require human approval",
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        detail = "Windows EXE built and self-test passed"
+        log_event("packager.windows.built", f"{detail}; sha256={digest}", spec.slug)
+        return WindowsBuildResult(
+            True,
+            True,
+            artifact,
+            detail,
+            manifest,
+            digest,
+            True,
+        )
 
     @staticmethod
     def artifact_path(project_dir: Path, slug: str) -> Path:
@@ -278,8 +346,13 @@ if not exist ".aiapp-build\windows" mkdir ".aiapp-build\windows"
   --add-data "windows\payload;app" ^
   "windows\launcher.py" || goto :failed
 
+set "AIVY_SELFTEST_ROOT=%CD%\.aiapp-build\windows-runtime"
+set "LOCALAPPDATA=%AIVY_SELFTEST_ROOT%"
+"artifacts\windows\{safe_name}.exe" --self-test || goto :failed
+%PY% -c "import hashlib,json,pathlib;p=pathlib.Path(r'artifacts/windows/{safe_name}.exe');d=hashlib.sha256(p.read_bytes()).hexdigest();m=p.with_name(r'{safe_name}.manifest.json');m.write_text(json.dumps({{'target':'windows','artifact':p.name,'sha256':d,'self_test_passed':True,'signed':False,'distribution':'local executable; code signing/public release require human approval'}},ensure_ascii=False,indent=2),encoding='utf-8')" || goto :failed
+
 echo.
-echo BUILD PASSED
+echo BUILD PASSED + SELF-TEST PASSED
 echo EXE: artifacts\windows\{safe_name}.exe
 pause
 exit /b 0
