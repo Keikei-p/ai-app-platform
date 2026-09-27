@@ -322,11 +322,11 @@ class PlatformAPI:
                         self._json(202 if row.get("accepted") else 422, row)
                         return
                     parts = [x for x in path.split("/") if x]
-                    if len(parts) == 6 and parts[:3] == ["api", "v1", "knowledge"] and parts[4] == "candidate":
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "knowledge"] and parts[4] == "candidate":
                         row = api.service.promote_knowledge_candidate(parts[3])
                         self._json(200, row)
                         return
-                    if len(parts) == 6 and parts[:3] == ["api", "v1", "knowledge"] and parts[4] == "verify":
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "knowledge"] and parts[4] == "verify":
                         project_slug = str(data.get("project_slug") or "").strip()
                         verifier_types = data.get("verifier_types")
                         if not project_slug or not isinstance(verifier_types, list):
