@@ -371,6 +371,7 @@ class PlatformService:
             "repair_attempts": result.repair_attempts or [],
             "windows_build": result.windows_build,
             "web_build": result.web_build,
+            "android_build": result.android_build,
         }
 
     def delivery_options(self, slug: str) -> list[dict[str, Any]]:
