@@ -24,6 +24,7 @@ from .social_generator import SocialAutomationGenerator
 from .knowledge_store import VerifiedKnowledgeStore
 from .evaluation_engine import EvaluationEngine
 from .visual_design_ai import VisualDesignAI
+from .browser_capture import BrowserScreenshotCapture
 
 @dataclass
 class CoreResult:
@@ -66,6 +67,7 @@ class AICore:
         self.knowledge = VerifiedKnowledgeStore()
         self.evaluation = EvaluationEngine()
         self.visual_design = VisualDesignAI()
+        self.screenshot_capture = BrowserScreenshotCapture()
 
     def execute(
         self,
@@ -111,6 +113,22 @@ class AICore:
         emit("build", "アプリのコードと画面を作成しています")
         self.projects.snapshot(slug, "before-ai-change")
         self.vault.save(slug, "AI変更前", actor="ai-core", reason=instruction, kind="auto-before-ai")
+        screenshot_dir = project_dir / ".aiapp" / "screenshots"
+        if screenshot_dir.is_dir():
+            for old_shot in screenshot_dir.glob("*.png"):
+                try:
+                    old_shot.unlink()
+                except OSError:
+                    pass
+        for stale_report in (
+            project_dir / ".aiapp" / "reports" / "visual_design_review.json",
+            project_dir / ".aiapp" / "reports" / "screenshot_capture.json",
+        ):
+            try:
+                if stale_report.is_file():
+                    stale_report.unlink()
+            except OSError:
+                pass
         spec_path = plan.spec.save(project_dir)
         files = [spec_path]
         files += self.generator.generate_from_spec(project_dir, plan.spec)
@@ -150,31 +168,6 @@ class AICore:
         design_review = self.design.review(project_dir)
         files.append(self.design.save(project_dir, design_review))
         log_event("design.reviewed", json.dumps(design_review.to_dict(), ensure_ascii=False), slug, "design-ai")
-
-        try:
-            visual_review = self.visual_design.review(project_dir)
-            files.append(self.visual_design.save(project_dir, visual_review))
-            log_event(
-                "design.visual_reviewed",
-                json.dumps(visual_review.to_dict(), ensure_ascii=False),
-                slug,
-                "visual-design-ai",
-            )
-            if visual_review.status == "reviewed":
-                combined_findings = list(design_review.findings)
-                combined_strengths = list(design_review.strengths)
-                combined_findings += [f"Visual: {x}" for x in visual_review.findings]
-                combined_strengths += [f"Visual: {x}" for x in visual_review.strengths]
-                combined_score = min(design_review.score, int(visual_review.score or 0))
-                design_review = DesignReview(
-                    combined_score,
-                    bool(design_review.passed and visual_review.passed and combined_score >= 90),
-                    combined_findings,
-                    combined_strengths,
-                )
-                files.append(self.design.save(project_dir, design_review))
-        except Exception as exc:
-            log_event("design.visual_review_failed", str(exc), slug, "visual-design-ai")
 
         gaps = self.capability.assess(plan.spec, project_dir)
         files.append(self.capability.save(project_dir, gaps))
@@ -311,6 +304,55 @@ class AICore:
                 "coding-brain",
             )
 
+        visual_review_result = None
+        screenshot_capture_info: dict | None = None
+        if pipeline_report.preview_ready and "web" in plan.spec.targets:
+            if self.visual_design.engine.status().connected:
+                emit("visual", "検証済み画面を3サイズで撮影してVision AIが確認しています")
+                try:
+                    capture_result = self.screenshot_capture.capture(project_dir)
+                    screenshot_capture_info = capture_result.to_dict()
+                    files.append(self.screenshot_capture.save(project_dir, capture_result))
+                    log_event(
+                        "design.screenshot_capture",
+                        json.dumps(screenshot_capture_info, ensure_ascii=False),
+                        slug,
+                        "browser-capture",
+                    )
+                    visual_review_result = self.visual_design.review(project_dir)
+                    files.append(self.visual_design.save(project_dir, visual_review_result))
+                    log_event(
+                        "design.visual_reviewed",
+                        json.dumps(visual_review_result.to_dict(), ensure_ascii=False),
+                        slug,
+                        "visual-design-ai",
+                    )
+                    if visual_review_result.status == "reviewed":
+                        combined_findings = list(design_review.findings)
+                        combined_strengths = list(design_review.strengths)
+                        combined_findings += [f"Visual: {x}" for x in visual_review_result.findings]
+                        combined_strengths += [f"Visual: {x}" for x in visual_review_result.strengths]
+                        combined_score = min(design_review.score, int(visual_review_result.score or 0))
+                        design_review = DesignReview(
+                            combined_score,
+                            bool(design_review.passed and visual_review_result.passed and combined_score >= 90),
+                            combined_findings,
+                            combined_strengths,
+                        )
+                        files.append(self.design.save(project_dir, design_review))
+                        pipeline_report = self.pipeline.evaluate(
+                            project_dir=project_dir,
+                            test_results=test_results,
+                            design_passed=design_review.passed,
+                            capability_gaps=gaps,
+                            risk_items=risk_items,
+                        )
+                except Exception as exc:
+                    log_event("design.visual_review_failed", str(exc), slug, "visual-design-ai")
+            else:
+                visual_review_result = self.visual_design.review(project_dir)
+                files.append(self.visual_design.save(project_dir, visual_review_result))
+
         windows_build_info: dict | None = None
         if pipeline_report.preview_ready and "windows" in plan.spec.targets:
             emit("package", "Windows EXEを安全にビルドできるか確認しています")
@@ -375,6 +417,10 @@ class AICore:
 
         pipeline_dict = pipeline_report.to_dict()
         pipeline_dict["agent_evaluation"] = evaluation_report.to_dict()
+        if screenshot_capture_info is not None:
+            pipeline_dict["screenshot_capture"] = screenshot_capture_info
+        if visual_review_result is not None:
+            pipeline_dict["visual_design"] = visual_review_result.to_dict()
         final_ok = pipeline_report.preview_ready
         if final_ok:
             self.vault.save(slug, "AI変更後", actor="ai-core", reason=instruction, kind="auto-after-ai")
