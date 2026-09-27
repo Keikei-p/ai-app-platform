@@ -26,6 +26,13 @@ class FakeEngine:
 
 
 class AgentBudgetTests(unittest.TestCase):
+    def test_tool_call_budget_is_enforced(self):
+        tracker = AgentBudgetTracker(AgentBudget(max_tool_calls=1))
+        self.assertEqual(tracker.reserve_tool_call(), 1)
+        with self.assertRaises(RuntimeError):
+            tracker.reserve_tool_call()
+        self.assertEqual(tracker.snapshot()["used"]["tool_calls"], 1)
+
     def test_model_call_budget_is_enforced(self):
         tracker = AgentBudgetTracker(AgentBudget(max_model_calls=1))
         self.assertEqual(tracker.reserve_model_call(), 1)
