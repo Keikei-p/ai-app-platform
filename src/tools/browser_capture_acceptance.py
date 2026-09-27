@@ -34,22 +34,14 @@ button{min-height:48px;padding:0 18px}
     (root / "server.py").write_text(
         """from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-import argparse
 
-parser=argparse.ArgumentParser()
-parser.add_argument("--host",default="127.0.0.1")
-parser.add_argument("--port",type=int,required=True)
-args=parser.parse_args()
-root=Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self,*a,**kw):
-        super().__init__(*a,directory=str(root),**kw)
+        super().__init__(*a,directory=str(ROOT),**kw)
     def log_message(self,fmt,*args):
         pass
-
-server=ThreadingHTTPServer((args.host,args.port),Handler)
-server.serve_forever()
 """,
         encoding="utf-8",
     )
