@@ -66,6 +66,8 @@ def main() -> int:
             raise RuntimeError("project health check capability is missing")
         if not data.get("capabilities", {}).get("agent_safe_execution"):
             raise RuntimeError("safe agent execution capability is missing")
+        if not data.get("capabilities", {}).get("evidence_backed_knowledge_promotion"):
+            raise RuntimeError("evidence-backed knowledge promotion capability is missing")
         if (data.get("identity") or {}).get("name") != "Aivy":
             raise RuntimeError("Aivy identity was not exposed by platform core")
         csrf = str(data.get("csrf") or "")
@@ -299,6 +301,26 @@ def main() -> int:
             raise RuntimeError("safe research intake failed")
         if (safe.get("knowledge") or {}).get("trust_level") != "untrusted":
             raise RuntimeError("research skipped the untrusted knowledge stage")
+
+        knowledge_id = str((safe.get("knowledge") or {}).get("knowledge_id") or "")
+        status, candidate_row = request(
+            port,
+            "POST",
+            f"/api/v1/knowledge/{knowledge_id}/candidate",
+            {},
+            csrf,
+        )
+        if status != 200 or candidate_row.get("trust_level") != "candidate":
+            raise RuntimeError("official research could not enter candidate stage")
+        status, rejected_verify = request(
+            port,
+            "POST",
+            f"/api/v1/knowledge/{knowledge_id}/verify",
+            {"project_slug": turn["project_slug"], "verifier_types": ["tests"]},
+            csrf,
+        )
+        if status != 400 or "evidence" not in str(rejected_verify.get("error") or "").lower():
+            raise RuntimeError("knowledge verification accepted missing project evidence")
 
         status, verified_lookup = request(
             port,
