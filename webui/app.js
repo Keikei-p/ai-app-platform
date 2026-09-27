@@ -75,7 +75,8 @@ async function showProject(slug){
     : '<div class="plan-step"><div class="step-no">◇</div><div><strong>Development Certificate</strong><p>まだ証明書はありません。</p></div></div>';
   $('#agentPlan').innerHTML=`
     <div class="data-card"><h3>${esc(card.name||slug)}</h3><div class="meta"><span>${esc(card.status)}</span><span>${esc(card.quality)}</span>${evaluation.score!=null?`<span>AI評価 ${evaluation.score}/100</span>`:''}</div></div>
-    <div class="health-actions"><button class="agent-action secondary" id="runHealthCheck" type="button">Aivy再点検</button><span id="healthStatus" class="meta">Tests / Design / Securityを再確認</span></div>
+    <div class="health-actions"><button class="agent-action secondary" id="runHealthCheck" type="button">Aivy再点検</button><button class="agent-action secondary" id="runExecutionCouncil" type="button">専門AI＋実測</button><span id="healthStatus" class="meta">Tests / Design / Securityを再確認</span></div>
+    <div id="executionCouncilResult"></div>
     ${visualBlock}
     ${traceBlock}
     ${certificateBlock}
@@ -85,6 +86,45 @@ async function showProject(slug){
   $('#inspector').classList.add('open');
   const healthButton=$('#runHealthCheck');
   if(healthButton)healthButton.onclick=()=>runProjectHealth(slug);
+  const councilButton=$('#runExecutionCouncil');
+  if(councilButton)councilButton.onclick=()=>runProjectExecutionCouncil(slug);
+}
+async function runProjectExecutionCouncil(slug){
+  const button=$('#runExecutionCouncil');const target=$('#executionCouncilResult');
+  if(!button||!target)return;
+  button.disabled=true;button.textContent='専門AI＋実測中…';
+  target.innerHTML='<div class="council-note">検証済みToolのEvidenceを集めています…</div>';
+  try{
+    const report=await api('/api/v1/agent/council/execute',{
+      method:'POST',
+      body:JSON.stringify({
+        goal:'現在のプロジェクトを専門AIと検証済みToolで実測レビューする',
+        project_slug:slug,
+        context:{source:'web-project-execution-council'}
+      })
+    });
+    if(report.status==='not_connected'){
+      target.innerHTML='<div class="council-note">AIモデル未接続のため実行Councilは開始していません。</div>';
+      return;
+    }
+    const executed=report.executed_tools||[];
+    const delegated=report.delegated_tools||[];
+    target.innerHTML='<div class="council-report"><div class="council-head"><strong>Aivy専門AI＋実測</strong><span>'+esc(report.status||'')+'</span></div>'+
+      '<p>実行: '+esc(executed.join(', ')||'なし')+'<br>委譲: '+esc(delegated.join(', ')||'なし')+'</p>'+
+      (report.turns||[]).map(x=>{
+        const r=x.result||{};
+        const toolRows=(x.tool_executions||[]).map(t=>esc(t.tool_name)+': '+esc(t.status)).join(' / ');
+        return '<details class="council-turn"><summary>'+esc(x.specialist)+' · '+esc(r.summary||'')+'</summary>'+
+          (toolRows?'<p>Tool: '+toolRows+'</p>':'')+
+          ((r.findings||[]).length?'<p>'+ (r.findings||[]).slice(0,3).map(esc).join('<br>') +'</p>':'')+
+          '</details>';
+      }).join('')+
+      '<div class="council-final"><strong>まとめ</strong><p>'+esc(report.summary||'')+'</p></div></div>';
+  }catch(e){
+    target.innerHTML='<div class="council-note error">専門AI＋実測を完了できませんでした: '+esc(e.message)+'</div>';
+  }finally{
+    button.disabled=false;button.textContent='専門AI＋実測';
+  }
 }
 async function runProjectHealth(slug){
   const button=$('#runHealthCheck');const status=$('#healthStatus');
