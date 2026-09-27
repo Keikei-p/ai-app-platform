@@ -132,6 +132,15 @@ class AgentToolRegistry:
                     "package",
                 ),
                 AgentToolDefinition(
+                    "evolution.compare",
+                    "Compare a verified baseline and candidate without applying or merging the candidate.",
+                    "low",
+                    False,
+                    ("reports", "candidate_diff", "evidence"),
+                    ("reports",),
+                    "validate",
+                ),
+                AgentToolDefinition(
                     "artifact.export",
                     "Copy an existing verified artifact to a user-selected destination.",
                     "medium",
