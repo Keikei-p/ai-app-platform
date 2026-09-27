@@ -214,9 +214,10 @@ async function executeBuild(slug,instruction){
   setBusy(true);
   message('assistant','Aivyが作成・デザイン確認・テスト・セキュリティ検査を開始しました。');
   const stageNames={
-    queued:'待機中',starting:'開始中',understand:'内容確認',plan:'設計中',build:'コード生成中',
+    queued:'待機中',starting:'開始中',preflight:'事前確認',understand:'内容確認',plan:'設計中',build:'コード生成中',
     enhance:'AI改善中',package:'成果物準備中',design:'Design確認中',repair:'修正中',
-    verify:'テスト・Security確認中',visual:'Vision Design確認中',done:'完了',issue:'確認事項あり'
+    verify:'テスト・Security確認中',visual:'Vision Design確認中',core_checked:'Core内部確認済み',
+    postflight:'独立再検証',trace:'Evidence照合',certificate:'証明書作成',done:'完了',issue:'確認事項あり'
   };
   try{
     const started=await api('/api/v1/projects/'+encodeURIComponent(slug)+'/build/jobs',{
