@@ -573,6 +573,7 @@ class PlatformService:
             project_slug=slug,
             execution_trace_path=trace.history_path,
             agent_completion=completion,
+            preflight_path=preflight.history_path,
         )
         certificate_path = self.development_certificates.save(project_dir, certificate)
         result_files = getattr(result, "files", None)
