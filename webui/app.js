@@ -87,7 +87,12 @@ async function newChat(){
 }
 async function planGoal(text){
   const plan=await api('/api/v1/agent/plan',{method:'POST',body:JSON.stringify({goal:text,project_slug:state.currentThread?.project_slug||null})});
-  $('#agentPlan').innerHTML=(plan.steps||[]).map((x,i)=>`<div class="plan-step"><div class="step-no">${i+1}</div><div><strong>${esc(x.title)}</strong><p>${esc(x.purpose)}${x.requires_human_approval?' · 人の承認が必要':''}</p></div></div>`).join('');
+  $('#agentPlan').innerHTML=(plan.steps||[]).map((x,i)=>{
+    const team=(x.specialists||[]).length?' · '+(x.specialists||[]).map(s=>({
+      coordinator:'司令塔',research:'Research',architect:'Architect',coding:'Coding',design:'Design',test:'Test',security:'Security',build:'Build',release:'Release'
+    }[s]||s)).join(' / '):'';
+    return `<div class="plan-step"><div class="step-no">${i+1}</div><div><strong>${esc(x.title)}</strong><p>${esc(x.purpose)}${esc(team)}${x.requires_human_approval?' · 人の承認が必要':''}</p></div></div>`;
+  }).join('');
   $('#inspector').classList.add('open');
   return plan;
 }
