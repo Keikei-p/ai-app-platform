@@ -64,6 +64,26 @@ class VerifiedKnowledgeStoreTests(unittest.TestCase):
             candidate = store.promote_candidate(item.knowledge_id)
             self.assertEqual(candidate.trust_level, "candidate")
 
+    def test_declared_official_source_is_not_authority_proof(self):
+        with tempfile.TemporaryDirectory() as td:
+            store = VerifiedKnowledgeStore(Path(td) / "knowledge.json")
+            item = store.ingest(
+                topic="Official claim",
+                statement="Use a new API.",
+                source_kind="official_docs",
+                source_locator="https://self-declared.test/docs",
+            )
+            with self.assertRaises(ValueError):
+                store.promote_candidate(item.knowledge_id)
+            store.ingest(
+                topic="Official claim",
+                statement="Use a new API.",
+                source_kind="web",
+                source_locator="https://self-declared.test/docs",
+            )
+            with self.assertRaises(ValueError):
+                store.promote_candidate(item.knowledge_id)
+
     def test_verified_requires_platform_evidence(self):
         with tempfile.TemporaryDirectory() as td:
             store = VerifiedKnowledgeStore(Path(td) / "knowledge.json")
@@ -72,6 +92,12 @@ class VerifiedKnowledgeStoreTests(unittest.TestCase):
                 statement="This configuration builds successfully.",
                 source_kind="official_docs",
                 source_locator="https://official.test/build",
+            )
+            store.ingest(
+                topic="Build",
+                statement="This configuration builds successfully.",
+                source_kind="web",
+                source_locator="https://secondary.test/build-check",
             )
             item = store.promote_candidate(item.knowledge_id)
             with self.assertRaises(ValueError):
