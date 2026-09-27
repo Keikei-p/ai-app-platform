@@ -64,6 +64,7 @@ class FakeExecutor:
             "tests.run",
             "design.review",
             "security.scan",
+            "package.build",
         )
 
     def execute(self, name, args, approved=False, run_id=""):
