@@ -113,9 +113,44 @@ function showBuildApproval(instruction){
   state.pendingInstruction=instruction||state.lastGoal;
   const holder=document.createElement('div');
   holder.className='agent-action-wrap';
-  holder.innerHTML='<button class="agent-action" id="approveBuild">この内容で作る</button><p>押すまで生成は始まりません。</p>';
+  holder.innerHTML='<div class="agent-action-grid"><button class="agent-action secondary" id="runCouncil">専門AIで検討</button><button class="agent-action" id="approveBuild">この内容で作る</button></div><p>専門AI会議は明示的に押した時だけ実行します。「この内容で作る」を押すまで生成は始まりません。</p><div id="councilResult"></div>';
   $('#agentPlan').append(holder);
   $('#approveBuild').onclick=approveBuild;
+  $('#runCouncil').onclick=runCouncil;
+}
+async function runCouncil(){
+  const button=$('#runCouncil');const target=$('#councilResult');
+  if(!button||!target||state.busy)return;
+  button.disabled=true;button.textContent='専門AIが検討中…';
+  try{
+    const report=await api('/api/v1/agent/council',{
+      method:'POST',
+      body:JSON.stringify({
+        goal:state.pendingInstruction||state.lastGoal||'',
+        project_slug:state.currentThread?.project_slug||null,
+        context:{source:'web-user-requested-council'}
+      })
+    });
+    if(report.status==='not_connected'){
+      target.innerHTML='<div class="council-note">AIモデル未接続のため専門AI会議は実行していません。</div>';
+      return;
+    }
+    const turns=report.turns||[];
+    target.innerHTML='<div class="council-report"><div class="council-head"><strong>Aivy専門AI会議</strong><span>'+esc(report.status)+'</span></div>'+
+      turns.map(x=>{
+        const r=x.result||{};
+        const findings=(r.findings||[]).slice(0,3);
+        return '<details class="council-turn"><summary>'+esc(x.specialist)+' · '+esc(r.summary||'')+'</summary>'+
+          (findings.length?'<p>'+findings.map(esc).join('<br>')+'</p>':'')+
+          ((r.uncertainties||[]).length?'<p class="muted">不確実: '+(r.uncertainties||[]).slice(0,2).map(esc).join(' / ')+'</p>':'')+
+          '</details>';
+      }).join('')+
+      '<div class="council-final"><strong>まとめ</strong><p>'+esc(report.summary||'')+'</p></div></div>';
+  }catch(e){
+    target.innerHTML='<div class="council-note error">専門AI会議を実行できませんでした: '+esc(e.message)+'</div>';
+  }finally{
+    button.disabled=false;button.textContent='専門AIで検討';
+  }
 }
 async function executeBuild(slug,instruction){
   setBusy(true);
