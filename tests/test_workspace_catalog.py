@@ -15,7 +15,9 @@ class ConversationStoreTests(unittest.TestCase):
         store.append(thread, "assistant", "どこで使いますか？")
         store.rename(thread, "予約アプリ相談")
         store.set_pinned(thread, True)
-        rows = store.list_threads("予約")
+        # Re-open the store to prove the chat is not only in process memory.
+        reopened = ConversationStore()
+        rows = reopened.list_threads("予約")
         row = next(x for x in rows if x.thread_id == thread)
         self.assertEqual(row.title, "予約アプリ相談")
         self.assertTrue(row.pinned)
