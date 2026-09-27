@@ -26,6 +26,7 @@ from .aivy_identity import AIVY
 from .evolution_engine import VerifiedEvolutionEngine
 from .evolution_experiments import EvolutionExperimentStore
 from .build_jobs import BuildJobManager
+from .agent_tool_executor import AgentToolExecutor
 
 
 class PlatformService:
@@ -51,6 +52,14 @@ class PlatformService:
         self.evolution = VerifiedEvolutionEngine()
         self.evolution_experiments = EvolutionExperimentStore()
         self.build_jobs = BuildJobManager()
+        self.tool_executor = AgentToolExecutor(
+            registry=self.tools,
+            catalog=self.catalog,
+            knowledge=self.knowledge,
+            research=self.research_provider,
+            projects=self.projects,
+            evolution=self.evolution,
+        )
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -86,11 +95,21 @@ class PlatformService:
                 "evolution_experiment_history": True,
                 "release_manager": True,
                 "observable_build_jobs": True,
+                "reviewed_tool_executor": True,
             },
         }
 
     def specialist_agents(self) -> list[dict[str, Any]]:
         return self.specialists.public_contract()
+
+    def agent_tools(self) -> list[dict[str, Any]]:
+        executable = set(self.tool_executor.executable_tools())
+        rows = []
+        for tool in self.tools.list():
+            row = tool.to_dict()
+            row["executable"] = tool.name in executable
+            rows.append(row)
+        return rows
 
     def model_routes(self) -> dict[str, Any]:
         tasks = {
