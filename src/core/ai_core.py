@@ -21,6 +21,7 @@ from .coding_brain import CodingBrain
 from .windows_packager import WindowsPackager
 from .web_packager import WebPackager
 from .android_packager import AndroidPackager
+from .release_manager import ReleaseManager
 from .social_generator import SocialAutomationGenerator
 from .knowledge_store import VerifiedKnowledgeStore
 from .evaluation_engine import EvaluationEngine
@@ -45,6 +46,7 @@ class CoreResult:
     windows_build: dict | None = None
     web_build: dict | None = None
     android_build: dict | None = None
+    release_report: dict | None = None
 
 class AICore:
     """Local-first orchestration core. Models cannot bypass safety, permissions, tests, approval, or audit."""
@@ -66,6 +68,7 @@ class AICore:
         self.windows_packager = WindowsPackager()
         self.web_packager = WebPackager()
         self.android_packager = AndroidPackager()
+        self.release_manager = ReleaseManager()
         self.social = SocialAutomationGenerator()
         self.knowledge = VerifiedKnowledgeStore()
         self.evaluation = EvaluationEngine()
@@ -431,6 +434,16 @@ class AICore:
                 "web-packager",
             )
 
+        release_report = self.release_manager.assess(project_dir, plan.spec)
+        release_path = self.release_manager.save(project_dir, release_report)
+        files.append(release_path)
+        log_event(
+            "release.manager_assessed",
+            json.dumps(release_report.to_dict(), ensure_ascii=False),
+            slug,
+            "release-manager",
+        )
+
         evaluation_report = self.evaluation.evaluate(project_dir)
         evaluation_path = self.evaluation.save(project_dir, evaluation_report)
         files.append(evaluation_path)
@@ -449,6 +462,7 @@ class AICore:
             pipeline_dict["visual_design"] = visual_review_result.to_dict()
         if android_build_info is not None:
             pipeline_dict["android_build"] = android_build_info
+        pipeline_dict["release_manager"] = release_report.to_dict()
         final_ok = pipeline_report.preview_ready
         if final_ok:
             self.vault.save(slug, "AI変更後", actor="ai-core", reason=instruction, kind="auto-after-ai")
@@ -521,4 +535,5 @@ class AICore:
             windows_build_info,
             web_build_info,
             android_build_info,
+            release_report.to_dict(),
         )
