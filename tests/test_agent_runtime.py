@@ -94,5 +94,40 @@ class PlatformServiceTests(unittest.TestCase):
             self.assertTrue(result.ok)
             self.assertTrue((project / trace["history_path"]).is_file())
 
+    def test_build_project_blocks_self_asserted_completion_without_completion_evidence(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = root / "demo"
+            project.mkdir()
+            (project / "project.json").write_text('{"name":"Demo","slug":"demo"}', encoding="utf-8")
+
+            service = PlatformService()
+            service.core = SimpleNamespace(
+                execute=lambda *args, **kwargs: SimpleNamespace(
+                    ok=True,
+                    message="claimed complete",
+                    pipeline_report={"security": {"passed": True}},
+                    tests=[TestResult("demo", True, "ok")],
+                    design_review=DesignReview(95, True, [], []),
+                    repair_attempts=[],
+                    plan={"spec": {"targets": ["web"]}},
+                    windows_build=None,
+                    web_build={"built": True, "artifact": "demo.zip"},
+                    android_build=None,
+                    ios_source_build=None,
+                )
+            )
+            service.agent.completion_check = lambda *args, **kwargs: {
+                "complete": False,
+                "missing_evidence": ["report"],
+                "blocking_evidence": [],
+                "rule": "evidence required",
+            }
+            with patch("src.core.platform_service.WORKSPACE_DIR", root):
+                result = service.build_project("demo", "build demo", approved=True)
+            self.assertFalse(result.ok)
+            self.assertIn("Evidence", result.message)
+            self.assertFalse((result.pipeline_report or {})["agent_completion"]["complete"])
+
 if __name__ == "__main__":
     unittest.main()
