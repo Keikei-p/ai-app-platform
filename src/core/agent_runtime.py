@@ -10,6 +10,7 @@ import uuid
 
 from .development_memory import DevelopmentMemory
 from .database import log_event
+from .agent_tools import AgentToolRegistry
 
 
 ALLOWED_AGENT_ACTIONS = {
@@ -35,6 +36,7 @@ class AgentStep:
     action: str
     title: str
     purpose: str
+    tool_name: str | None = None
     requires_human_approval: bool = False
 
 
@@ -137,8 +139,9 @@ class AgentOrchestrator:
     It creates a transparent plan which existing platform engines can execute.
     """
 
-    def __init__(self, memory: DevelopmentMemory | None = None):
+    def __init__(self, memory: DevelopmentMemory | None = None, tools: AgentToolRegistry | None = None):
         self.memory = memory or DevelopmentMemory()
+        self.tools = tools or AgentToolRegistry()
 
     def plan(self, goal: str, project_slug: str | None = None) -> AgentPlan:
         goal = goal.strip()
@@ -147,15 +150,20 @@ class AgentOrchestrator:
         run_id = uuid.uuid4().hex
         steps = [
             AgentStep("understand", "understand", "目的を理解", "依頼内容・制約・成功条件を整理する"),
-            AgentStep("inspect", "inspect", "現状を確認", "既存コード・履歴・テスト・過去の改善点を確認する"),
+            AgentStep("inspect", "inspect", "現状を確認", "既存コード・履歴・テスト・過去の改善点を確認する", "project.inspect"),
             AgentStep("plan", "plan", "実装計画", "変更範囲と検証方法を小さな単位へ分解する"),
-            AgentStep("generate", "generate", "実装", "既存機能を壊さない範囲でコードを生成・変更する"),
-            AgentStep("validate", "validate", "検証", "テスト・Design AI・Security Gateで根拠を集める"),
-            AgentStep("repair", "repair", "必要なら修正", "失敗原因だけを材料に最大2回まで安全に修正する"),
-            AgentStep("package", "package", "成果物を準備", "対象OS/形式の成果物を生成できる場合だけ生成する"),
-            AgentStep("review", "review", "公開前確認", "外部公開・署名・ストア提出などは人の承認を要求する", True),
+            AgentStep("generate", "generate", "実装", "既存機能を壊さない範囲でコードを生成・変更する", "code.generate"),
+            AgentStep("validate", "validate", "検証", "テスト・Design AI・Security Gateで根拠を集める", "tests.run"),
+            AgentStep("repair", "repair", "必要なら修正", "失敗原因だけを材料に最大2回まで安全に修正する", "code.repair"),
+            AgentStep("package", "package", "成果物を準備", "対象OS/形式の成果物を生成できる場合だけ生成する", "package.build"),
+            AgentStep("review", "review", "公開前確認", "外部公開・署名・ストア提出などは人の承認を要求する", "release.publish", True),
             AgentStep("report", "report", "根拠付き報告", "できたこと・できないこと・証拠・次の課題を報告する"),
         ]
+        for step in steps:
+            if step.tool_name:
+                tool = self.tools.get(step.tool_name)
+                if tool.requires_human_approval != step.requires_human_approval and step.action == "review":
+                    raise RuntimeError("agent plan approval contract mismatch")
         return AgentPlan(run_id, goal, project_slug, _now(), steps, 2)
 
     def context(self, goal: str, limit: int = 5) -> dict[str, Any]:
@@ -168,6 +176,7 @@ class AgentOrchestrator:
                 "max_repair_attempts": 2,
                 "human_approval_for_external_actions": True,
                 "evidence_required_for_completion": True,
+                "registered_tools": [x.name for x in self.tools.list()],
             },
         }
 
