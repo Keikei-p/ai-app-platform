@@ -9,6 +9,7 @@ NETWORK_MODULES = {"socket", "http", "flask", "fastapi", "aiohttp", "websockets"
 APPROVED_NETWORK_FILES = {
     Path("src/core/remote_server.py"),
     Path("src/core/platform_api.py"),
+    Path("src/core/research_provider.py"),
     Path("src/tools/platform_api_acceptance.py"),
 }
 FORBIDDEN_REMOTE_NETWORK_TERMS = (
@@ -75,6 +76,34 @@ def main() -> int:
             if term in platform_api_text:
                 failures.append(f"platform_api contains forbidden public-exposure mechanism: {term}")
 
+    research_path = ROOT_DIR / "src" / "core" / "research_provider.py"
+    if not research_path.is_file():
+        failures.append("research_provider.py missing")
+    else:
+        research_text = research_path.read_text(encoding="utf-8").lower()
+        for required in (
+            "_validate_url",
+            "_guardedredirecthandler",
+            "ip.is_private",
+            "ip.is_loopback",
+            "ip.is_link_local",
+            "research url must use https",
+        ):
+            if required not in research_text:
+                failures.append(f"research_provider missing network guard: {required}")
+        for forbidden in (
+            "socket.socket(",
+            ".bind(",
+            ".listen(",
+            "threadinghttpserver",
+            "httpserver(",
+            "serve_forever",
+            "0.0.0.0",
+            "authorization",
+        ):
+            if forbidden in research_text:
+                failures.append(f"research_provider contains forbidden network capability: {forbidden}")
+
     remote_path = ROOT_DIR / "src" / "core" / "remote_server.py"
     if not remote_path.is_file():
         failures.append("remote_server.py missing")
@@ -108,6 +137,7 @@ def main() -> int:
     print("- AST scan found no dynamic eval/exec/os.system/shell=True/Popen/pickle load in runtime code")
     print("- generated-code templates are not mistaken for executable platform source")
     print("- inbound listeners are limited to reviewed Remote LAN module and loopback-only Platform API")
+    print("- outbound Research Provider is HTTPS-only and rejects private/local targets and unsafe redirects")
     print("- preview runtime exposes no generic shell/process action")
     print("- remote/local worker privileged actions remain blocked")
     return 0
