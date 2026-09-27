@@ -9,6 +9,7 @@ import os
 import secrets
 
 from .platform_service import PlatformService
+from .config import ROOT_DIR
 
 
 MAX_BODY = 1024 * 1024
@@ -40,6 +41,24 @@ class PlatformAPI:
                 self.end_headers()
                 self.wfile.write(raw)
 
+            def _asset(self, relative: str, content_type: str):
+                path = (ROOT_DIR / "webui" / relative).resolve()
+                root = (ROOT_DIR / "webui").resolve()
+                if root not in path.parents and path != root:
+                    self._json(404, {"error": "not_found"})
+                    return
+                if not path.is_file():
+                    self._json(404, {"error": "not_found"})
+                    return
+                raw = path.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(raw)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(raw)
+
             def _body(self) -> dict[str, Any]:
                 size = int(self.headers.get("Content-Length") or 0)
                 if size < 0 or size > MAX_BODY:
@@ -64,6 +83,15 @@ class PlatformAPI:
                 parsed = urlparse(self.path)
                 path = parsed.path.rstrip("/") or "/"
                 try:
+                    if path in {"/", "/ui"}:
+                        self._asset("index.html", "text/html; charset=utf-8")
+                        return
+                    if path == "/ui/styles.css":
+                        self._asset("styles.css", "text/css; charset=utf-8")
+                        return
+                    if path == "/ui/app.js":
+                        self._asset("app.js", "application/javascript; charset=utf-8")
+                        return
                     if path == "/api/v1/status":
                         self._json(200, {**api.service.status(), "csrf": api.csrf})
                         return
