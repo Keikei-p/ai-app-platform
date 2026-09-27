@@ -544,6 +544,9 @@ class ProjectCatalog:
     @staticmethod
     def _artifact_meta(path: Path) -> tuple[str, str, str]:
         suffix = path.suffix.lower()
+        lower_parts = {x.lower() for x in path.parts}
+        if suffix == ".zip" and "ios" in lower_parts and "source" in path.stem.lower():
+            return "iOS Source", "iOSソースZIP", "Expo/React NativeのiOS向けソースです。署名済みIPAではありません。"
         if suffix == ".exe":
             return "Windows", "Windows版", "ダウンロード後、WindowsでEXEを起動します。"
         if suffix == ".apk":
