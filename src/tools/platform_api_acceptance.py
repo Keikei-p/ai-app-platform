@@ -76,6 +76,16 @@ def main() -> int:
         if not {"coordinator", "coding", "design", "test", "security", "build"}.issubset(names):
             raise RuntimeError("required specialist agents are missing")
 
+        status, consultation = request(
+            port,
+            "POST",
+            "/api/v1/agents/coding/consult",
+            {"task": "check a small validation change", "context": {"project": "acceptance"}},
+            csrf,
+        )
+        if status != 200 or consultation.get("status") not in {"not_connected", "ok"}:
+            raise RuntimeError("specialist consultation endpoint failed")
+
         status, knowledge = request(port, "GET", "/api/v1/knowledge")
         if status != 200 or not isinstance(knowledge.get("knowledge"), list):
             raise RuntimeError("verified knowledge endpoint failed")
