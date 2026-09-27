@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -40,6 +41,12 @@ def main() -> int:
         raise RuntimeError(result.detail)
     if not result.built or result.artifact is None or not result.artifact.is_file():
         raise RuntimeError("Windows EXE build failed: " + result.detail)
+
+    if not result.self_test_passed or result.manifest is None or not result.manifest.is_file():
+        raise RuntimeError("Windows build did not persist self-test/checksum evidence")
+    manifest = json.loads(result.manifest.read_text(encoding="utf-8"))
+    if manifest.get("self_test_passed") is not True or manifest.get("sha256") != result.sha256:
+        raise RuntimeError("Windows evidence manifest is inconsistent")
 
     runtime_base = root / "runtime-localappdata"
     env = dict(os.environ)
