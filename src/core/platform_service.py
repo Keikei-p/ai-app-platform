@@ -305,11 +305,15 @@ class PlatformService:
         combined = dict(context or {})
         combined["verified_agent_context"] = self.agent.context(clean_goal)
         combined["project_slug"] = slug
-        return self.execution_council.run(
+        report = self.execution_council.run(
             clean_goal,
             slug,
             context=combined,
-        ).to_dict()
+        )
+        history_path = self.execution_council.save(project_dir, report)
+        payload = report.to_dict()
+        payload["history_path"] = history_path.relative_to(project_dir).as_posix()
+        return payload
 
     def agent_context(self, goal: str) -> dict[str, Any]:
         return self.agent.context(goal)
