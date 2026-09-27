@@ -80,7 +80,7 @@ async function loadDownloads(){
       <div><strong>${esc(x.project_name)}</strong><div class="meta">${esc(x.label)}</div></div>
       <div>${esc(x.target)}</div>
       <div class="download-status">${esc(x.status)}</div>
-      <div class="meta">${esc(x.guide)}</div>
+      <div class="meta">${esc(x.guide)}${x.available&&x.artifact_id?`<div class="download-action"><a class="download-link" href="/api/v1/artifacts/download?project=${encodeURIComponent(x.project_slug)}&id=${encodeURIComponent(x.artifact_id)}">ダウンロード</a></div>`:''}</div>
     </div>`).join('')||'<div class="empty">まだ配布対象の成果物はありません。</div>';
 }
 async function newChat(){
