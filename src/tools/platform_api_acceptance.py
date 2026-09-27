@@ -49,6 +49,8 @@ def main() -> int:
             raise RuntimeError("status endpoint did not expose platform capabilities")
         if not data.get("capabilities", {}).get("specialist_council"):
             raise RuntimeError("specialist council capability is missing")
+        if not data.get("capabilities", {}).get("guarded_web_research"):
+            raise RuntimeError("guarded web research capability is missing")
         if (data.get("identity") or {}).get("name") != "Aivy":
             raise RuntimeError("Aivy identity was not exposed by platform core")
         csrf = str(data.get("csrf") or "")
