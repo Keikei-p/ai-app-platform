@@ -1,5 +1,6 @@
 import hashlib
 import json
+import plistlib
 import tempfile
 import unittest
 import zipfile
@@ -68,6 +69,45 @@ class ReleaseManagerTests(unittest.TestCase):
             self.assertEqual(state.artifact_status, "debug_apk")
             self.assertEqual(state.distribution_status, "debug_only")
             self.assertTrue(any("AAB" in x for x in state.blockers))
+
+    def test_ios_simulator_bundle_is_verified_but_not_device_ready(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._ready(root)
+            folder = root / "artifacts/ios"
+            folder.mkdir(parents=True)
+            artifact = folder / "release-demo-simulator.app.zip"
+            info = plistlib.dumps({
+                "CFBundleExecutable": "ReleaseDemo",
+                "CFBundleIdentifier": "com.example.release",
+            })
+            self._write_zip(
+                artifact,
+                {
+                    "ReleaseDemo.app/Info.plist": info,
+                    "ReleaseDemo.app/ReleaseDemo": b"binary",
+                },
+            )
+            digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+            (folder / "release-demo-simulator.app.manifest.json").write_text(
+                json.dumps({
+                    "artifact": artifact.name,
+                    "sha256": digest,
+                    "bundle_identifier": "com.example.release",
+                    "executable": "ReleaseDemo",
+                    "simulator_only": True,
+                    "signed_ipa": False,
+                    "apple_signing_verified": False,
+                    "store_ready": False,
+                }),
+                encoding="utf-8",
+            )
+            report = ReleaseManager().assess(root, self._spec(["ios"]))
+            state = report.targets[0]
+            self.assertEqual(state.artifact_status, "simulator_bundle")
+            self.assertEqual(state.distribution_status, "simulator_only")
+            self.assertFalse(report.all_requested_artifacts_ready)
+            self.assertTrue(any("physical" in x for x in state.blockers))
 
     def test_ios_source_is_not_mislabeled_as_downloadable_ipa(self):
         with tempfile.TemporaryDirectory() as td:
