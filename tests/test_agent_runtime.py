@@ -1,9 +1,12 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.core.agent_runtime import AgentOrchestrator, EvidenceLedger
+from src.core.test_runner import TestResult
+from src.core.design_ai import DesignReview
 from src.core.platform_service import PlatformService
 
 
@@ -60,6 +63,36 @@ class PlatformServiceTests(unittest.TestCase):
         self.assertGreaterEqual(len(plan["steps"]), 8)
         self.assertTrue(plan["steps"][-2]["requires_human_approval"])
 
+
+    def test_build_project_attaches_verified_agent_execution_trace(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = root / "demo"
+            project.mkdir()
+            (project / "project.json").write_text('{"name":"Demo","slug":"demo"}', encoding="utf-8")
+
+            service = PlatformService()
+            service.core = SimpleNamespace(
+                execute=lambda *args, **kwargs: SimpleNamespace(
+                    ok=True,
+                    message="ok",
+                    pipeline_report={"security": {"passed": True}},
+                    tests=[TestResult("demo", True, "ok")],
+                    design_review=DesignReview(95, True, [], []),
+                    repair_attempts=[],
+                    plan={"spec": {"targets": ["web"]}},
+                    windows_build=None,
+                    web_build={"built": True, "artifact": "demo.zip"},
+                    android_build=None,
+                    ios_source_build=None,
+                )
+            )
+            with patch("src.core.platform_service.WORKSPACE_DIR", root):
+                result = service.build_project("demo", "build demo", approved=True)
+            trace = (result.pipeline_report or {}).get("agent_execution_trace") or {}
+            self.assertEqual(trace.get("status"), "verified")
+            self.assertTrue(result.ok)
+            self.assertTrue((project / trace["history_path"]).is_file())
 
 if __name__ == "__main__":
     unittest.main()
