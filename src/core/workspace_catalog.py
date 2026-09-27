@@ -494,6 +494,21 @@ class ProjectCatalog:
                 continue
         return out
 
+    def artifact_path(self, slug: str, artifact_id: str) -> Path:
+        choices = {x.artifact_id: x for x in self.artifacts(slug)}
+        record = choices.get(artifact_id)
+        if not record:
+            raise FileNotFoundError("artifact is not available")
+        path = Path(record.path).resolve()
+        project_dir = safe_child(WORKSPACE_DIR, slug).resolve()
+        try:
+            path.relative_to(project_dir)
+        except ValueError as exc:
+            raise ValueError("artifact path escapes project") from exc
+        if not path.is_file() or path.is_symlink():
+            raise FileNotFoundError("artifact is not available")
+        return path
+
     def export_artifact(self, slug: str, artifact_id: str, destination: Path) -> Path:
         choices = {x.artifact_id: x for x in self.artifacts(slug)}
         record = choices.get(artifact_id)
