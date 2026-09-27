@@ -50,7 +50,7 @@ class ArtifactVerifier:
         self._manifest_checksum(artifact, manifest, digest, checks, failures)
         return ArtifactVerification("web_zip", not failures, digest, tuple(checks), tuple(failures))
 
-    def verify_windows_exe(self, artifact: Path) -> ArtifactVerification:
+    def verify_windows_exe(self, artifact: Path, manifest: Path | None) -> ArtifactVerification:
         checks: list[str] = []
         failures: list[str] = []
         digest = self._safe_sha(artifact, failures)
@@ -67,6 +67,14 @@ class ArtifactVerifier:
                         checks.extend(("mz_header", "pe_signature"))
             except OSError as exc:
                 failures.append(f"Windows artifact unreadable: {exc}")
+        manifest_data = self._manifest_checksum(artifact, manifest, digest, checks, failures)
+        if manifest_data is not None:
+            if manifest_data.get("self_test_passed") is True:
+                checks.append("self_test_passed")
+            else:
+                failures.append("Windows manifest does not prove self-test success")
+            if manifest_data.get("signed") is False:
+                checks.append("unsigned_declared")
         return ArtifactVerification("windows_exe", not failures, digest, tuple(checks), tuple(failures))
 
     def verify_android_apk(self, artifact: Path) -> ArtifactVerification:
