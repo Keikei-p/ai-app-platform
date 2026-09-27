@@ -159,7 +159,7 @@ class AgentOrchestrator:
         return AgentPlan(run_id, goal, project_slug, _now(), steps, 2)
 
     def context(self, goal: str, limit: int = 5) -> dict[str, Any]:
-        lessons = self.memory.lessons_for(goal, limit=limit)
+        lessons = self.memory.lessons_for(goal, limit=limit, verified_only=True)
         return {
             "goal": goal,
             "lessons": lessons,
@@ -188,6 +188,8 @@ class AgentOrchestrator:
             lesson=lesson,
             outcome=outcome,
             project_slug=project_slug,
+            verified=True,
+            evidence_source="agent-verified-outcome",
         )
         log_event(
             "agent.lesson_recorded",
