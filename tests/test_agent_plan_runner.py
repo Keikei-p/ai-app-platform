@@ -31,6 +31,25 @@ class FakeExecutor:
 
 
 class AgentPlanRunnerTests(unittest.TestCase):
+    def test_preflight_executes_only_inspection_and_verified_knowledge(self):
+        plan = AgentOrchestrator().plan("既存アプリを安全に改善する", "demo")
+        executor = FakeExecutor()
+        with tempfile.TemporaryDirectory() as td:
+            report = AgentPlanRunner(executor).run_preflight(
+                plan,
+                project_dir=Path(td),
+            )
+        self.assertEqual(report.status, "completed")
+        self.assertEqual(
+            list(report.executed_tools),
+            ["project.inspect", "knowledge.search"],
+        )
+        called = [x[0] for x in executor.calls]
+        self.assertEqual(called, ["project.inspect", "knowledge.search"])
+        self.assertNotIn("code.generate", called)
+        self.assertNotIn("tests.run", called)
+        self.assertNotIn("release.publish", called)
+
     def test_reviewed_tools_execute_and_unbound_tools_are_delegated(self):
         plan = AgentOrchestrator().plan("既存アプリを改善する", "demo")
         executor = FakeExecutor()
