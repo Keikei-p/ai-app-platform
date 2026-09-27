@@ -36,8 +36,21 @@ class AgentToolExecutor:
 
     This class intentionally has no generic shell/process/command execution path.
     Registered metadata alone does not make a tool executable: a reviewed handler
-    must also exist in this class.
+    must also exist in this class. Every binding also has an exact argument allowlist.
     """
+
+    ARG_ALLOWLIST = {
+        "project.inspect": {"project_slug"},
+        "knowledge.search": {"query", "limit"},
+        "research.fetch": {"url"},
+        "vault.snapshot": {"project_slug", "label"},
+        "tests.run": {"project_slug"},
+        "design.review": {"project_slug"},
+        "security.scan": {"project_slug"},
+        "evolution.compare": {
+            "baseline", "candidate", "changed_paths", "evidence_refs", "requested_actions",
+        },
+    }
 
     def __init__(
         self,
@@ -92,6 +105,7 @@ class AgentToolExecutor:
 
         payload = dict(args or {})
         self._reject_execution_smuggling(payload)
+        self._validate_args(tool_name, payload)
         result = handler(payload)
         if not isinstance(result, dict):
             result = {"value": result}
@@ -100,11 +114,12 @@ class AgentToolExecutor:
         if project_slug:
             project_dir = self._project_dir(project_slug)
             ledger = EvidenceLedger(project_dir)
+            evidence_status = self._evidence_status(tool_name, result)
             ledger.record(
                 run_id=run_id,
                 stage=definition.evidence_stage,
-                status="pass",
-                summary=f"reviewed tool executed: {tool_name}",
+                status=evidence_status,
+                summary=f"reviewed tool executed: {tool_name} ({evidence_status})",
                 source="agent-tool-executor",
             )
 
@@ -125,6 +140,24 @@ class AgentToolExecutor:
         for key in payload:
             if str(key).strip().lower() in forbidden_keys:
                 raise ValueError("generic execution arguments are not allowed")
+
+    def _validate_args(self, tool_name: str, payload: dict[str, Any]) -> None:
+        allowed = self.ARG_ALLOWLIST.get(tool_name)
+        if allowed is None:
+            raise PermissionError(f"tool has no reviewed argument schema: {tool_name}")
+        unknown = sorted(str(key) for key in payload if str(key) not in allowed)
+        if unknown:
+            raise ValueError("unsupported tool arguments: " + ", ".join(unknown))
+
+    @staticmethod
+    def _evidence_status(tool_name: str, result: dict[str, Any]) -> str:
+        if tool_name == "tests.run":
+            return "pass" if bool(result.get("passed")) else "fail"
+        if tool_name == "design.review":
+            return "pass" if bool((result.get("review") or {}).get("passed")) else "fail"
+        if tool_name == "security.scan":
+            return "pass" if bool((result.get("security") or {}).get("passed")) else "fail"
+        return "pass"
 
     @staticmethod
     def _project_dir(slug: str) -> Path:
