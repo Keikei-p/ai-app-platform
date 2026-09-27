@@ -9,6 +9,11 @@ on:
       - "src/core/ios_source_packager.py"
       - "src/core/ai_core.py"
       - "src/core/test_runner.py"
+      - "src/core/platform_service.py"
+      - "src/core/agent_execution_trace.py"
+      - "src/core/agent_runtime.py"
+      - "src/core/generation_pipeline.py"
+      - "src/core/release_manager.py"
       - "src/tools/mobile_source_acceptance.py"
       - ".github/workflows/mobile-generated-app.yml"
   pull_request:
@@ -18,6 +23,11 @@ on:
       - "src/core/ios_source_packager.py"
       - "src/core/ai_core.py"
       - "src/core/test_runner.py"
+      - "src/core/platform_service.py"
+      - "src/core/agent_execution_trace.py"
+      - "src/core/agent_runtime.py"
+      - "src/core/generation_pipeline.py"
+      - "src/core/release_manager.py"
       - "src/tools/mobile_source_acceptance.py"
       - ".github/workflows/mobile-generated-app.yml"
 
