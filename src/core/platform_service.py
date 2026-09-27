@@ -155,6 +155,66 @@ class PlatformService:
     def conversation_messages(self, thread_id: str) -> list[dict[str, str]]:
         return self.conversations.messages(thread_id)
 
+    def chat_turn(self, thread_id: str, text: str) -> dict[str, Any]:
+        clean = text.strip()
+        if not clean:
+            raise ValueError("message is required")
+        thread = self.conversations.get(thread_id)
+        if thread is None:
+            raise KeyError(thread_id)
+
+        if thread.project_slug:
+            slug = thread.project_slug
+            project_dir = safe_child(WORKSPACE_DIR, slug)
+            if not project_dir.is_dir():
+                raise FileNotFoundError(slug)
+            meta = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
+            project_name = str(meta.get("name") or slug)
+            has_generated = (project_dir / "app_spec.json").is_file()
+        else:
+            opening = self.chat.opening_response(clean)
+            if opening is not None:
+                self.conversations.append(thread_id, "user", clean)
+                self.conversations.append(thread_id, "assistant", opening)
+                return {
+                    "action": "chat",
+                    "message": opening,
+                    "instruction": None,
+                    "project_slug": None,
+                    "thread": asdict(self.conversations.get(thread_id)),
+                }
+
+            project_name = self.chat.suggest_project_name(clean)
+            prior_rows = self.conversations.messages(thread_id)
+            created = self.create_project(project_name, thread_id)
+            slug = str(created["slug"])
+            project_dir = safe_child(WORKSPACE_DIR, slug)
+            for row in prior_rows:
+                self.chat.append_external_message(
+                    project_dir,
+                    str(row.get("role") or "user"),
+                    str(row.get("content") or ""),
+                )
+            has_generated = False
+
+        decision = self.chat.handle(
+            project_dir,
+            project_name,
+            slug,
+            clean,
+            has_generated=has_generated,
+        )
+        self.conversations.append(thread_id, "user", clean)
+        self.conversations.append(thread_id, "assistant", decision.message)
+        current = self.conversations.get(thread_id)
+        return {
+            "action": decision.action,
+            "message": decision.message,
+            "instruction": decision.instruction,
+            "project_slug": slug,
+            "thread": asdict(current) if current else None,
+        }
+
     def create_conversation(self, title: str = "新しいチャット") -> dict[str, Any]:
         thread_id = self.conversations.create_thread(title)
         row = self.conversations.get(thread_id)
@@ -178,6 +238,7 @@ class PlatformService:
         *,
         approved: bool,
         progress: Callable[[str, str], None] | None = None,
+        thread_id: str | None = None,
     ) -> CoreResult:
         if not approved:
             raise PermissionError("explicit user approval is required before generation")
@@ -213,7 +274,33 @@ class PlatformService:
                 summary="generation completed with platform quality gates satisfied",
                 source="generation-pipeline",
             )
+        if thread_id:
+            self.conversations.append(thread_id, "assistant", result.message)
+            try:
+                self.chat.append_external_message(project_dir, "assistant", result.message)
+            except Exception:
+                pass
         return result
+
+    @staticmethod
+    def core_result_dict(result: CoreResult) -> dict[str, Any]:
+        return {
+            "ok": result.ok,
+            "message": result.message,
+            "safety": asdict(result.safety),
+            "files": [str(x) for x in result.files],
+            "tests": [asdict(x) for x in result.tests],
+            "plan": result.plan,
+            "risk_items": result.risk_items or [],
+            "design_review": result.design_review.to_dict() if result.design_review else None,
+            "capability_gaps": [asdict(x) for x in (result.capability_gaps or [])],
+            "lessons_used": result.lessons_used or [],
+            "pipeline_report": result.pipeline_report or {},
+            "ai_enhancement": result.ai_enhancement or {},
+            "repair_attempts": result.repair_attempts or [],
+            "windows_build": result.windows_build,
+            "web_build": result.web_build,
+        }
 
     def delivery_options(self, slug: str) -> list[dict[str, Any]]:
         return [asdict(x) for x in self.catalog.delivery_options(slug)]
