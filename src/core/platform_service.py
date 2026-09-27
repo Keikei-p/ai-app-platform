@@ -18,6 +18,8 @@ from .specialist_agents import SpecialistAgentRegistry
 from .model_router import ModelRouter
 from .knowledge_store import VerifiedKnowledgeStore
 from .research_guard import ResearchIntake
+from .specialist_runtime import SpecialistRuntime
+from .llm_chat import AIChatEngine
 
 
 class PlatformService:
@@ -35,9 +37,15 @@ class PlatformService:
         self.core = AICore()
         self.tools = AgentToolRegistry()
         self.specialists = SpecialistAgentRegistry(self.tools)
-        self.model_router = ModelRouter()
+        self.ai_engine = AIChatEngine()
+        self.model_router = ModelRouter(self.ai_engine)
         self.knowledge = VerifiedKnowledgeStore()
         self.research = ResearchIntake(self.knowledge)
+        self.specialist_runtime = SpecialistRuntime(
+            engine=self.ai_engine,
+            registry=self.specialists,
+            router=self.model_router,
+        )
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -63,11 +71,24 @@ class PlatformService:
                 "specialist_agents": len(self.specialists.list()),
                 "verified_knowledge": True,
                 "model_router": True,
+                "specialist_consultation": True,
             },
         }
 
     def specialist_agents(self) -> list[dict[str, Any]]:
         return self.specialists.public_contract()
+
+    def consult_specialist(
+        self,
+        specialist_name: str,
+        task: str,
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self.specialist_runtime.consult(
+            specialist_name,
+            task,
+            context or {},
+        ).to_dict()
 
     def agent_context(self, goal: str) -> dict[str, Any]:
         return self.agent.context(goal)
