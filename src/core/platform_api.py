@@ -275,6 +275,14 @@ class PlatformAPI:
                         row = api.service.agent_plan(goal, str(data.get("project_slug") or "") or None)
                         self._json(200, row)
                         return
+                    if path == "/api/v1/agent/run-safe":
+                        goal = str(data.get("goal") or "").strip()
+                        project_slug = str(data.get("project_slug") or "").strip()
+                        if not goal or not project_slug:
+                            raise ValueError("goal and project_slug are required")
+                        row = api.service.run_safe_agent(goal, project_slug)
+                        self._json(200, row)
+                        return
                     if path == "/api/v1/agent/council":
                         goal = str(data.get("goal") or "").strip()
                         context = data.get("context")
