@@ -97,6 +97,8 @@ class PlatformService:
                 "windows": True,
                 "android": True,
                 "ios_source": True,
+                "ios_simulator_native_build": True,
+                "ios_signed_ipa": False,
                 "social_automation": True,
                 "persistent_conversations": True,
                 "artifact_catalog": True,
