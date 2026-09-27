@@ -40,6 +40,18 @@ class ArtifactRecord:
 
 
 @dataclass(frozen=True)
+class DeliveryOption:
+    project_slug: str
+    target: str
+    label: str
+    status: str
+    available: bool
+    artifact_id: str | None
+    size_bytes: int
+    guide: str
+
+
+@dataclass(frozen=True)
 class ProjectCard:
     name: str
     slug: str
@@ -375,6 +387,7 @@ class ProjectCatalog:
             "security": security,
             "readiness": readiness,
             "approval": approval,
+            "gaps": self._json(project_dir / "implementation_gaps.json"),
             "versions": versions,
             "audit": [dict(x) for x in audit],
             "artifacts": [asdict(x) for x in self.artifacts(slug)],
@@ -417,6 +430,58 @@ class ProjectCatalog:
             try:
                 out.extend(self.artifacts(str(project["slug"])))
             except (OSError, ValueError):
+                continue
+        return out
+
+    def delivery_options(self, slug: str) -> list[DeliveryOption]:
+        project_dir = safe_child(WORKSPACE_DIR, slug)
+        spec = self._json(project_dir / "app_spec.json")
+        requested = [str(x).lower() for x in spec.get("targets") or ["web"]]
+        artifacts = self.artifacts(slug)
+        options = [
+            DeliveryOption(x.project_slug, x.target, x.label, "ダウンロード可能", True, x.artifact_id, x.size_bytes, x.guide)
+            for x in artifacts
+        ]
+        available_targets = {x.target.lower() for x in artifacts}
+        gaps = self._json(project_dir / "implementation_gaps.json").get("items") or []
+        gaps_by_key = {str(x.get("key")): x for x in gaps if isinstance(x, dict)}
+        meta = {
+            "web": ("Web", "Web ZIP", "Web版のビルドが完了するとZIPを保存できます。"),
+            "windows": ("Windows", "Windows版", "Windows EXEのビルドと確認が完了すると保存できます。"),
+            "android": ("Android", "Androidアプリ", "APK/AABのビルドが完了すると保存できます。"),
+            "ios": ("iOS", "iOSアプリ", "Apple署名とiOSビルドが完了するとIPAを保存できます。"),
+        }
+        gap_keys = {
+            "windows": ("windows_package_prep", "windows_binary"),
+            "android": ("mobile_source", "android_binary"),
+            "ios": ("mobile_source", "ios_binary"),
+        }
+        for target in requested:
+            row_meta = meta.get(target)
+            if not row_meta:
+                continue
+            display, label, default_guide = row_meta
+            if display.lower() in available_targets:
+                continue
+            reason = next_step = ""
+            for key in gap_keys.get(target, ()):
+                gap = gaps_by_key.get(key)
+                if gap:
+                    reason = str(gap.get("reason") or "")
+                    next_step = str(gap.get("next_step") or "")
+                    break
+            guide = " ".join(x for x in (reason, next_step) if x).strip() or default_guide
+            options.append(DeliveryOption(slug, display, label, "準備中", False, None, 0, guide))
+        order = {"Web": 0, "Windows": 1, "Android": 2, "iOS": 3}
+        options.sort(key=lambda x: (order.get(x.target, 9), not x.available, x.label))
+        return options
+
+    def all_delivery_options(self) -> list[DeliveryOption]:
+        out: list[DeliveryOption] = []
+        for project in list_projects():
+            try:
+                out.extend(self.delivery_options(str(project["slug"])))
+            except (OSError, ValueError, json.JSONDecodeError):
                 continue
         return out
 
