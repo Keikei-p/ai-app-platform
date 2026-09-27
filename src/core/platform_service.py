@@ -73,6 +73,8 @@ class PlatformService:
                 "guarded_web_research": True,
                 "model_router": True,
                 "specialist_consultation": True,
+                "multimodal_design_review": True,
+                "automatic_screenshot_capture": False,
                 "specialist_council": True,
             },
         }
