@@ -60,6 +60,8 @@ def main() -> int:
             raise RuntimeError("evolution experiment history capability is missing")
         if not data.get("capabilities", {}).get("observable_build_jobs"):
             raise RuntimeError("observable build jobs capability is missing")
+        if not data.get("capabilities", {}).get("project_health_check"):
+            raise RuntimeError("project health check capability is missing")
         if (data.get("identity") or {}).get("name") != "Aivy":
             raise RuntimeError("Aivy identity was not exposed by platform core")
         csrf = str(data.get("csrf") or "")
@@ -126,6 +128,18 @@ def main() -> int:
         )
         if status != 400 or "approval" not in str(denied_job.get("error") or "").lower():
             raise RuntimeError("build job endpoint bypassed explicit approval")
+
+        status, health = request(
+            port,
+            "POST",
+            f"/api/v1/projects/{turn['project_slug']}/health-check",
+            {},
+            csrf,
+        )
+        if status != 200 or health.get("status") not in {"pass", "attention_required"}:
+            raise RuntimeError("project health check endpoint failed")
+        if not isinstance(health.get("checks"), list) or len(health.get("checks")) != 3:
+            raise RuntimeError("project health check did not use three reviewed checks")
 
         status, routes = request(port, "GET", "/api/v1/models/routes")
         if status != 200 or len(routes.get("routes") or []) < 6:
