@@ -70,7 +70,13 @@ class ModelRouter:
                 )
 
         status = self.engine.status()
-        settings = self.engine.settings()
+        if hasattr(self.engine, "settings"):
+            try:
+                settings = self.engine.settings()
+            except Exception:
+                settings = {}
+        else:
+            settings = {}
         if not status.connected:
             return ModelRoute(
                 task=task,
@@ -80,11 +86,13 @@ class ModelRouter:
                 capability=capability,
                 reason="No external AI provider is connected; use deterministic platform logic where supported.",
             )
+        provider = str(settings.get("provider") or getattr(status, "provider", "") or "legacy")
+        model = str(settings.get("model") or getattr(status, "model", "") or "")
         return ModelRoute(
             task=task,
             mode="configured_provider",
-            provider=str(settings.get("provider") or ""),
-            model=str(settings.get("model") or ""),
+            provider=provider,
+            model=model,
             capability=capability,
             reason="No capability-specific route is active, so Aivy uses the configured default provider/model.",
         )
