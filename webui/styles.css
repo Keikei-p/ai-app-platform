@@ -17,3 +17,8 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .agent-action{width:100%;min-height:46px;border:0;border-radius:12px;background:var(--text);color:var(--bg);font-weight:700;cursor:pointer}
 .agent-action:hover{opacity:.9}
 .agent-action:disabled{opacity:.5;cursor:not-allowed}
+
+
+.download-action{margin-top:8px}
+.download-link{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 13px;border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);font-weight:700;background:var(--panel)}
+.download-link:hover{transform:translateY(-1px)}
