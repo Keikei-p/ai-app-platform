@@ -8,6 +8,7 @@ import zipfile
 
 from .app_spec import AppSpec
 from .database import log_event
+from .artifact_verifier import ArtifactVerifier
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,9 @@ class WebBuildResult:
 
 class WebPackager:
     """Create a portable web bundle without publishing it anywhere."""
+
+    def __init__(self, verifier: ArtifactVerifier | None = None):
+        self.verifier = verifier or ArtifactVerifier()
 
     EXCLUDED_PARTS = {
         ".git", ".snapshots", ".vault", ".aiapp", "node_modules", "__pycache__",
@@ -81,5 +85,17 @@ class WebPackager:
             ),
             encoding="utf-8",
         )
+        verification = self.verifier.verify_web_zip(artifact, manifest)
+        if not verification.valid:
+            failures = "; ".join(verification.failures[:8]) or "unknown Web artifact verification failure"
+            detail = "Web ZIP verification failed: " + failures
+            log_event("packager.web.verification_failed", detail, spec.slug)
+            try:
+                artifact.unlink(missing_ok=True)
+                manifest.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return WebBuildResult(False, None, None, 0, "", detail)
+
         log_event("packager.web.built", f"{artifact.name} sha256={digest}", spec.slug)
-        return WebBuildResult(True, artifact, manifest, len(entries), digest, "Web ZIP built")
+        return WebBuildResult(True, artifact, manifest, len(entries), digest, "Web ZIP built and artifact evidence verified")
