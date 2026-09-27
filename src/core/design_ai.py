@@ -23,20 +23,26 @@ class DesignAI:
         findings: list[str] = []
         strengths: list[str] = []
         checks = [
-            ("responsive viewport", 'name="viewport"' in html, 12),
-            ("responsive layout", "@media" in css or "clamp(" in css, 12),
-            ("touch targets", bool(re.search(r"min-height\s*:\s*(4[4-9]|[5-9]\d)px", css)), 12),
-            ("focus visibility", ":focus-visible" in css, 9),
-            ("content width", "max-width" in css or "width:min(" in css, 8),
-            ("spacing system", "--space-" in css, 7),
-            ("design tokens", "--color-" in css, 7),
-            ("semantic main", "<main" in html, 5),
-            ("semantic navigation", "<header" in html and "class=\"nav\"" in html, 5),
-            ("button semantics", "<button" in html, 5),
-            ("labels/aria", "aria-" in html or "<label" in html, 5),
-            ("empty state", "empty-state" in html, 5),
-            ("clear information hierarchy", "section-heading" in html and "stats-grid" in html, 5),
-            ("no internal platform branding", "AI App Platform" not in html, 3),
+            ("responsive viewport", 'name="viewport"' in html, 10),
+            ("responsive layout", "@media" in css and ("clamp(" in css or "min(" in css), 10),
+            ("touch targets", bool(re.search(r"min-height\s*:\s*(4[4-9]|[5-9]\d)px", css)), 10),
+            ("focus visibility", ":focus-visible" in css, 7),
+            ("content width", "max-width" in css or "width:min(" in css, 6),
+            ("spacing system", "--space-" in css, 5),
+            ("design tokens", "--color-" in css and "--radius" in css, 6),
+            ("mobile overflow protection", "min-width:0" in css and "overflow-wrap" in css, 7),
+            ("readable typography", "clamp(" in css and "line-height" in css, 6),
+            ("semantic main", "<main" in html, 4),
+            ("semantic navigation", "<header" in html and "class=\"nav\"" in html, 4),
+            ("button semantics", "<button" in html, 4),
+            ("labels/aria", "aria-" in html or "<label" in html, 4),
+            ("empty state", "empty-state" in html, 4),
+            ("clear information hierarchy", "section-heading" in html and "stats-grid" in html, 4),
+            ("success/error feedback", "class=\"toast\"" in html and "aria-live" in html, 4),
+            ("confirmation affordance", "confirmDialog" in html or "<dialog" in html, 3),
+            ("theme accessibility", "themeToggle" in html and "prefers-color-scheme" in css, 3),
+            ("subtle visual hierarchy", "box-shadow" in css and "border-radius" in css, 2),
+            ("no internal platform branding", "AI App Platform" not in html, 1),
         ]
         for label, ok, penalty in checks:
             if ok:
@@ -45,7 +51,7 @@ class DesignAI:
                 score -= penalty
                 findings.append(label + " が不足")
         score = max(0, score)
-        return DesignReview(score, score >= 88, findings, strengths)
+        return DesignReview(score, score >= 90, findings, strengths)
 
     def save(self, project_dir: Path, review: DesignReview) -> Path:
         path = project_dir / "design_review.json"
