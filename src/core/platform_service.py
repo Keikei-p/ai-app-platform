@@ -13,6 +13,7 @@ from .database import list_projects
 from .path_security import safe_child
 from .project_manager import ProjectManager
 from .workspace_catalog import ConversationStore, ProjectCatalog
+from .agent_tools import AgentToolRegistry
 
 
 class PlatformService:
@@ -28,7 +29,8 @@ class PlatformService:
         self.conversations = ConversationStore()
         self.chat = ChatPartner()
         self.core = AICore()
-        self.agent = AgentOrchestrator()
+        self.tools = AgentToolRegistry()
+        self.agent = AgentOrchestrator(tools=self.tools)
 
     def status(self) -> dict[str, Any]:
         return {
@@ -44,6 +46,7 @@ class PlatformService:
                 "persistent_conversations": True,
                 "artifact_catalog": True,
                 "agent_planning": True,
+                "registered_agent_tools": len(self.tools.list()),
             },
         }
 
