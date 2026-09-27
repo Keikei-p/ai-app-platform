@@ -182,6 +182,7 @@ class AgentPlanRunner:
                 "tests.run",
                 "design.review",
                 "security.scan",
+                "package.build",
             }:
                 payload.setdefault("project_slug", plan.project_slug)
             if step.tool_name == "knowledge.search":
@@ -310,4 +311,6 @@ class AgentPlanRunner:
         if tool_name == "security.scan":
             report = result.get("security") or {}
             return bool(report.get("passed"))
+        if tool_name == "package.build":
+            return str(result.get("status") or "") in {"built", "partial"}
         return None
