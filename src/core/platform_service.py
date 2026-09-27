@@ -31,6 +31,7 @@ from .project_health import ProjectHealthCheck
 from .agent_plan_runner import AgentPlanRunner
 from .agent_execution_trace import BuildExecutionTracer
 from .knowledge_verifier import ProjectKnowledgeVerifier
+from .completion_certificate import DevelopmentCertificateBuilder
 
 
 class PlatformService:
@@ -68,6 +69,7 @@ class PlatformService:
         self.project_health_checker = ProjectHealthCheck(self.tool_executor)
         self.agent_plan_runner = AgentPlanRunner(self.tool_executor, registry=self.tools)
         self.build_execution_tracer = BuildExecutionTracer()
+        self.development_certificates = DevelopmentCertificateBuilder()
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -107,6 +109,7 @@ class PlatformService:
                 "project_health_check": True,
                 "agent_safe_execution": True,
                 "evidence_backed_knowledge_promotion": True,
+                "development_certificate": True,
             },
         }
 
@@ -541,6 +544,25 @@ class PlatformService:
             result.message = (
                 "Agent completion Evidenceが不足しているため完成扱いを停止しました。"
                 f" 不足: {missing}"
+            )
+
+        certificate = self.development_certificates.create(
+            project_dir,
+            run_id=plan.run_id,
+            project_slug=slug,
+            execution_trace_path=trace.history_path,
+            agent_completion=completion,
+        )
+        certificate_path = self.development_certificates.save(project_dir, certificate)
+        result.files.append(certificate_path)
+        pipeline_report = dict(result.pipeline_report or {})
+        pipeline_report["development_certificate"] = certificate.to_dict()
+        result.pipeline_report = pipeline_report
+        if result.ok and not certificate.preview_verified:
+            result.ok = False
+            result.message = (
+                "Development Certificateの独立Evidenceが不足しているため、"
+                "完成扱いを停止しました。"
             )
 
         if thread_id:
