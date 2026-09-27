@@ -59,6 +59,17 @@ class PlatformAPI:
                 self.end_headers()
                 self.wfile.write(raw)
 
+            def _screenshot(self, project_slug: str, name: str):
+                path = api.service.catalog.screenshot_path(project_slug, name)
+                raw = path.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(raw)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(raw)
+
             def _artifact(self, project_slug: str, artifact_id: str):
                 path = api.service.catalog.artifact_path(project_slug, artifact_id)
                 raw = path.read_bytes()
@@ -146,6 +157,9 @@ class PlatformAPI:
                         return
                     if len(parts) == 4 and parts[:3] == ["api", "v1", "projects"]:
                         self._json(200, api.service.project_detail(parts[3]))
+                        return
+                    if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "screenshots":
+                        self._screenshot(parts[3], parts[5])
                         return
                     if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "deliveries":
                         self._json(200, {"deliveries": api.service.delivery_options(parts[3])})
