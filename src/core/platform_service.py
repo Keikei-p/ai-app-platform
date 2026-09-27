@@ -554,7 +554,9 @@ class PlatformService:
             agent_completion=completion,
         )
         certificate_path = self.development_certificates.save(project_dir, certificate)
-        result.files.append(certificate_path)
+        result_files = getattr(result, "files", None)
+        if isinstance(result_files, list):
+            result_files.append(certificate_path)
         pipeline_report = dict(result.pipeline_report or {})
         pipeline_report["development_certificate"] = certificate.to_dict()
         result.pipeline_report = pipeline_report
