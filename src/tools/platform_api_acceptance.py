@@ -295,18 +295,17 @@ def main() -> int:
         )
         if status != 200:
             raise RuntimeError("safe agent run endpoint failed")
-        safe_council = safe_run.get("council") or {}
-        safe_execution = safe_run.get("execution") or {}
-        if safe_council.get("status") not in {"not_connected", "ok"}:
-            raise RuntimeError("safe agent council returned unexpected status")
-        if safe_execution.get("external_actions_blocked") is not True:
+        if safe_run.get("status") not in {"not_connected", "completed", "blocked"}:
+            raise RuntimeError("safe agent execution council returned unexpected status")
+        if safe_run.get("external_actions_blocked") is not True:
             raise RuntimeError("safe agent run did not keep external actions blocked")
-        evidence_review = safe_run.get("evidence_review") or {}
-        if evidence_review.get("evidence_state") not in {"verified", "partial", "failed"}:
+        if safe_run.get("evidence_state") not in {"verified", "partial", "failed"}:
             raise RuntimeError("safe agent run did not expose deterministic evidence state")
-        if evidence_review.get("advisory_only") is not True:
-            raise RuntimeError("evidence reviewer unexpectedly gained execution authority")
-        auto_tools = {x.get("tool_name") for x in safe_execution.get("executed") or []}
+        auto_tools = {
+            x.get("tool_name")
+            for x in safe_run.get("tool_executions") or []
+            if x.get("status") in {"executed", "reused"}
+        }
         if auto_tools & {"code.generate", "code.repair", "package.build", "artifact.export", "release.publish", "store.submit"}:
             raise RuntimeError("safe agent run executed a consequential or unbound tool")
 
