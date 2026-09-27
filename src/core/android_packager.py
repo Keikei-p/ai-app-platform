@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Callable
+import json
 import os
 import shutil
 import subprocess
@@ -19,10 +20,12 @@ class AndroidBuildResult:
     artifact: Path | None
     sha256: str
     detail: str
+    manifest: Path | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["artifact"] = str(self.artifact) if self.artifact else None
+        data["manifest"] = str(self.manifest) if self.manifest else None
         return data
 
 
@@ -107,6 +110,23 @@ class AndroidPackager:
         artifact = artifact_dir / f"{spec.slug}-debug.apk"
         shutil.copy2(source, artifact)
         digest = sha256(artifact.read_bytes()).hexdigest()
+        manifest = artifact_dir / f"{spec.slug}-debug.manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "target": "android",
+                    "artifact": artifact.name,
+                    "sha256": digest,
+                    "build_variant": "debug",
+                    "production_signing_verified": False,
+                    "store_ready": False,
+                    "distribution": "testing only; production AAB/signing/store submission require explicit human approval",
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         log_event(
             "packager.android.debug_built",
             f"{artifact.name} sha256={digest}",
@@ -119,6 +139,7 @@ class AndroidPackager:
             artifact,
             digest,
             "Android debug APK built. Production AAB/signing/store submission remain approval-gated.",
+            manifest,
         )
 
     @staticmethod
