@@ -207,6 +207,39 @@ class ProjectCatalogTests(unittest.TestCase):
                 with self.assertRaises(FileNotFoundError):
                     catalog.screenshot_path("demo", "other.png")
 
+    def test_project_detail_prefers_real_build_trace_over_newer_auxiliary_run_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = root / "demo"
+            runs = project / ".aiapp" / "agent" / "runs"
+            runs.mkdir(parents=True)
+            (project / "project.json").write_text('{"name":"Demo","slug":"demo"}', encoding="utf-8")
+            build = runs / "run-1-build.json"
+            build.write_text(json.dumps({
+                "run_id": "run-1",
+                "status": "verified",
+                "steps": [{"step_id":"validate-tests","action":"validate","status":"pass","summary":"verified build"}],
+            }), encoding="utf-8")
+            auxiliary = runs / "run-1-postflight.json"
+            auxiliary.write_text(json.dumps({
+                "run_id": "run-1",
+                "status": "pass",
+                "checks": [{"tool_name":"tests.run"}],
+            }), encoding="utf-8")
+            build.touch()
+            auxiliary.touch()
+
+            catalog = ProjectCatalog()
+            with patch("src.core.workspace_catalog.WORKSPACE_DIR", root), patch("src.core.workspace_catalog.connect") as conn:
+                fake_conn = conn.return_value.__enter__.return_value
+                fake_conn.execute.return_value.fetchall.return_value = []
+                detail = catalog.detail("demo")
+            self.assertEqual(detail["latest_build_trace"]["status"], "verified")
+            self.assertEqual(
+                detail["latest_build_trace"]["steps"][0]["summary"],
+                "verified build",
+            )
+
     def test_project_detail_exposes_only_summary_agent_runs(self):
         with tempfile.TemporaryDirectory() as td:
             from unittest.mock import patch
