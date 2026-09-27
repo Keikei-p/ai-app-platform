@@ -179,6 +179,15 @@ def main() -> int:
             card = next((x for x in cards if x.slug == app.current_slug), None)
             if not card or card.quality != "PASS":
                 raise AssertionError("generated app was not surfaced with verified quality state")
+            if not app.next_actions.winfo_manager():
+                raise AssertionError("post-build next-action bar was not shown")
+            app.geometry("680x440"); app.update()
+            app._apply_responsive_layout(680, 440); app.update()
+            _assert_chat_visible(app, "680x440 after build")
+            if app.next_actions.winfo_manager():
+                raise AssertionError("post-build actions should collapse before the composer on compact windows")
+            app.geometry("1280x820"); app.update()
+            app._apply_responsive_layout(1280, 820); app.update()
 
             app.instruction.delete("1.0", "end")
             app.instruction.insert("1.0", "1行目")
