@@ -120,6 +120,9 @@ class PlatformAPI:
                     if path == "/api/v1/evolution/policy":
                         self._json(200, api.service.evolution_policy())
                         return
+                    if path == "/api/v1/evolution/experiments":
+                        self._json(200, {"experiments": api.service.list_evolution_experiments()})
+                        return
                     if path == "/api/v1/knowledge":
                         query = parse_qs(parsed.query).get("q", [""])[0]
                         self._json(200, {"knowledge": api.service.verified_knowledge(query)})
@@ -209,6 +212,42 @@ class PlatformAPI:
                             changed_paths=[str(x) for x in changed_paths],
                             evidence_refs=[str(x) for x in evidence_refs],
                             requested_actions=[str(x) for x in requested_actions],
+                        )
+                        self._json(200, row)
+                        return
+                    if path == "/api/v1/evolution/experiments":
+                        baseline = data.get("baseline")
+                        candidate = data.get("candidate")
+                        changed_paths = data.get("changed_paths")
+                        evidence_refs = data.get("evidence_refs")
+                        requested_actions = data.get("requested_actions") or []
+                        if not isinstance(baseline, dict) or not isinstance(candidate, dict):
+                            raise ValueError("baseline and candidate reports are required")
+                        if not isinstance(changed_paths, list) or not isinstance(evidence_refs, list):
+                            raise ValueError("changed_paths and evidence_refs must be arrays")
+                        if not isinstance(requested_actions, list):
+                            raise ValueError("requested_actions must be an array")
+                        row = api.service.create_evolution_experiment(
+                            title=str(data.get("title") or "Aivy improvement experiment"),
+                            baseline_label=str(data.get("baseline_label") or "baseline"),
+                            candidate_label=str(data.get("candidate_label") or "candidate"),
+                            baseline=baseline,
+                            candidate=candidate,
+                            changed_paths=[str(x) for x in changed_paths],
+                            evidence_refs=[str(x) for x in evidence_refs],
+                            requested_actions=[str(x) for x in requested_actions],
+                        )
+                        self._json(201, row)
+                        return
+                    parts = [x for x in path.split("/") if x]
+                    if len(parts) == 6 and parts[:4] == ["api", "v1", "evolution", "experiments"] and parts[5] == "review":
+                        approved = data.get("approved")
+                        if not isinstance(approved, bool):
+                            raise ValueError("approved must be boolean")
+                        row = api.service.review_evolution_experiment(
+                            parts[4],
+                            approved=approved,
+                            note=str(data.get("note") or ""),
                         )
                         self._json(200, row)
                         return
