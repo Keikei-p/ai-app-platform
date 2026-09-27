@@ -62,8 +62,9 @@ class DesignAI:
             json.dumps(
                 {
                     "schema_version": 1,
-                    "status": "static_checks_active",
-                    "future_visual_diff_ready": True,
+                    "status": "screenshot_contract_active",
+                    "static_checks_active": True,
+                    "multimodal_review_supported": True,
                     "viewports": [
                         {"name": "mobile", "width": 390, "height": 844},
                         {"name": "tablet", "width": 768, "height": 1024},
@@ -79,7 +80,7 @@ class DesignAI:
                         "primary_action_clarity",
                         "empty_loading_success_error_states",
                     ],
-                    "note": "Screenshot capture/visual-diff model execution is not enabled yet; this contract defines the future review input.",
+                    "note": "When mobile.png, tablet.png, and desktop.png exist under .aiapp/screenshots, Aivy can run multimodal visual review. Automatic browser screenshot capture is tracked separately.",
                 },
                 ensure_ascii=False,
                 indent=2,
