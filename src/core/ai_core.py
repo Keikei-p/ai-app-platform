@@ -307,7 +307,7 @@ class AICore:
         visual_review_result = None
         screenshot_capture_info: dict | None = None
         if pipeline_report.preview_ready and "web" in plan.spec.targets:
-            if self.visual_design.engine.status().connected:
+            if self.visual_design.available():
                 emit("visual", "検証済み画面を3サイズで撮影してVision AIが確認しています")
                 try:
                     capture_result = self.screenshot_capture.capture(project_dir)
