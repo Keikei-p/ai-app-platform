@@ -4,9 +4,13 @@ import json
 import threading
 import urllib.request
 import urllib.error
+from urllib.parse import quote
+from pathlib import Path
 
 from src.core.platform_api import PlatformAPI
 from src.core.platform_service import PlatformService
+from src.core.config import WORKSPACE_DIR
+from src.core.path_security import safe_child
 from http.server import ThreadingHTTPServer
 
 
@@ -394,6 +398,31 @@ def main() -> int:
             raise RuntimeError("evolution human review record failed")
         if (reviewed.get("decision") or {}).get("policy", {}).get("auto_apply") is not False:
             raise RuntimeError("human review unexpectedly enabled automatic evolution apply")
+
+        project_dir = safe_child(WORKSPACE_DIR, str(turn["project_slug"]))
+        artifact = project_dir / "artifacts" / "web" / "acceptance-tampered.zip"
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_bytes(b"tampered-artifact")
+        certificate = project_dir / ".aiapp" / "reports" / "development_certificate.json"
+        certificate.parent.mkdir(parents=True, exist_ok=True)
+        certificate.write_text(json.dumps({
+            "status": "verified_preview_candidate",
+            "external_actions": "approval_required",
+            "evidence": [{
+                "kind": "artifact:web",
+                "path": "artifacts/web/acceptance-tampered.zip",
+                "sha256": "0" * 64,
+            }],
+        }), encoding="utf-8")
+        artifact_id = quote("artifacts/web/acceptance-tampered.zip", safe="")
+        project_id = quote(str(turn["project_slug"]), safe="")
+        status, blocked_download = request(
+            port,
+            "GET",
+            f"/api/v1/artifacts/download?project={project_id}&id={artifact_id}",
+        )
+        if status != 403:
+            raise RuntimeError("tampered certificate artifact bypassed HTTP download gate")
 
         print("PLATFORM API ACCEPTANCE PASS: Web UI + specialists + guarded research + verified knowledge + CSRF")
     finally:
