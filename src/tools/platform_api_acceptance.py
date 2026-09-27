@@ -48,6 +48,8 @@ def main() -> int:
             web_js = response.read().decode("utf-8")
         if "専門AIで検討" not in web_js or "/api/v1/agent/council" not in web_js:
             raise RuntimeError("user-triggered specialist council control is missing")
+        if "Aivy自律点検" not in web_js or "/api/v1/agent/run-safe" not in web_js:
+            raise RuntimeError("safe agent execution control is missing from web UI")
 
         status, data = request(port, "GET", "/api/v1/status")
         if status != 200 or not data.get("capabilities", {}).get("agent_planning"):
