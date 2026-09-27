@@ -52,6 +52,8 @@ def main() -> int:
             web_js = response.read().decode("utf-8")
         if "専門AIで検討" not in web_js or "/api/v1/agent/council" not in web_js:
             raise RuntimeError("user-triggered specialist council control is missing")
+        if "専門AI＋実測" not in web_js or "/api/v1/agent/council/execute" not in web_js:
+            raise RuntimeError("reviewed-tool specialist execution council control is missing")
         if "Aivy Development Certificate" not in web_js:
             raise RuntimeError("development certificate UI is missing")
         if "Aivy自律点検" not in web_js or "/api/v1/agent/run-safe" not in web_js:
@@ -64,6 +66,8 @@ def main() -> int:
             raise RuntimeError("status endpoint did not expose platform capabilities")
         if not data.get("capabilities", {}).get("specialist_council"):
             raise RuntimeError("specialist council capability is missing")
+        if not data.get("capabilities", {}).get("specialist_execution_council"):
+            raise RuntimeError("specialist execution council capability is missing")
         if not data.get("capabilities", {}).get("guarded_web_research"):
             raise RuntimeError("guarded web research capability is missing")
         if not data.get("capabilities", {}).get("evolution_experiment_history"):
@@ -269,6 +273,26 @@ def main() -> int:
             raise RuntimeError("specialist council endpoint failed")
         if council.get("advisory_only") is not True:
             raise RuntimeError("specialist council unexpectedly gained execution authority")
+
+        status, execution_council = request(
+            port,
+            "POST",
+            "/api/v1/agent/council/execute",
+            {
+                "goal": "review the current project with bounded evidence tools",
+                "project_slug": turn["project_slug"],
+                "context": {"source": "acceptance"},
+            },
+            csrf,
+        )
+        if status != 200 or execution_council.get("status") not in {"not_connected", "completed", "blocked"}:
+            raise RuntimeError("specialist execution council endpoint failed")
+        if execution_council.get("execution_mode") != "reviewed_local_validation_only":
+            raise RuntimeError("specialist execution council escaped reviewed execution mode")
+        if "release.publish" in (execution_council.get("executed_tools") or []):
+            raise RuntimeError("specialist execution council unexpectedly published externally")
+        if "code.generate" in (execution_council.get("executed_tools") or []):
+            raise RuntimeError("specialist execution council unexpectedly generated code")
 
         status, knowledge = request(port, "GET", "/api/v1/knowledge")
         if status != 200 or not isinstance(knowledge.get("knowledge"), list):
