@@ -24,6 +24,7 @@ from .specialist_council import SpecialistCouncil
 from .llm_chat import AIChatEngine
 from .aivy_identity import AIVY
 from .evolution_engine import VerifiedEvolutionEngine
+from .evolution_experiments import EvolutionExperimentStore
 from .build_jobs import BuildJobManager
 
 
@@ -48,6 +49,7 @@ class PlatformService:
         self.research = ResearchIntake(self.knowledge)
         self.research_provider = GuardedResearchProvider()
         self.evolution = VerifiedEvolutionEngine()
+        self.evolution_experiments = EvolutionExperimentStore()
         self.build_jobs = BuildJobManager()
         self.agent = AgentOrchestrator(
             tools=self.tools,
@@ -81,6 +83,7 @@ class PlatformService:
                 "automatic_screenshot_capture": True,
                 "specialist_council": True,
                 "verified_evolution_engine": True,
+                "evolution_experiment_history": True,
                 "release_manager": True,
                 "observable_build_jobs": True,
             },
@@ -154,6 +157,51 @@ class PlatformService:
             requested_actions=requested_actions or [],
         )
         return decision.to_dict()
+
+    def create_evolution_experiment(
+        self,
+        *,
+        title: str,
+        baseline_label: str,
+        candidate_label: str,
+        baseline: dict[str, Any],
+        candidate: dict[str, Any],
+        changed_paths: list[str],
+        evidence_refs: list[str],
+        requested_actions: list[str] | None = None,
+    ) -> dict[str, Any]:
+        decision = self.evolution.compare(
+            self.evolution.report_from_dict(baseline),
+            self.evolution.report_from_dict(candidate),
+            changed_paths=changed_paths,
+            evidence_refs=evidence_refs,
+            requested_actions=requested_actions or [],
+        )
+        item = self.evolution_experiments.create(
+            title=title,
+            baseline_label=baseline_label,
+            candidate_label=candidate_label,
+            changed_paths=changed_paths,
+            evidence_refs=evidence_refs,
+            decision=decision,
+        )
+        return item.to_dict()
+
+    def list_evolution_experiments(self) -> list[dict[str, Any]]:
+        return [x.to_dict() for x in self.evolution_experiments.list()]
+
+    def review_evolution_experiment(
+        self,
+        experiment_id: str,
+        *,
+        approved: bool,
+        note: str = "",
+    ) -> dict[str, Any]:
+        return self.evolution_experiments.record_human_review(
+            experiment_id,
+            approved=approved,
+            note=note,
+        ).to_dict()
 
     def consult_specialist(
         self,
