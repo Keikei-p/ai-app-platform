@@ -21,6 +21,7 @@ from .coding_brain import CodingBrain
 from .windows_packager import WindowsPackager
 from .web_packager import WebPackager
 from .social_generator import SocialAutomationGenerator
+from .knowledge_store import VerifiedKnowledgeStore
 
 @dataclass
 class CoreResult:
@@ -60,6 +61,7 @@ class AICore:
         self.windows_packager = WindowsPackager()
         self.web_packager = WebPackager()
         self.social = SocialAutomationGenerator()
+        self.knowledge = VerifiedKnowledgeStore()
 
     def execute(
         self,
@@ -91,10 +93,15 @@ class AICore:
             return CoreResult(False, msg, decision, [], [], None, [], None, [], [])
 
         emit("plan", "要件を整理して設計しています")
-        lessons = self.memory.lessons_for(instruction)
+        lessons = self.memory.lessons_for(instruction, verified_only=True)
+        verified_knowledge = self.knowledge.search(instruction, verified_only=True, limit=5)
         enriched = instruction
         if lessons:
-            enriched += "\n過去の改善学習: " + " / ".join(lessons)
+            enriched += "\n検証済みの改善学習: " + " / ".join(lessons)
+        if verified_knowledge:
+            enriched += "\n検証済みKnowledge: " + " / ".join(
+                item.statement for item in verified_knowledge
+            )
 
         plan = self.planner.plan(project_name, slug, enriched, decision.level)
         emit("build", "アプリのコードと画面を作成しています")
