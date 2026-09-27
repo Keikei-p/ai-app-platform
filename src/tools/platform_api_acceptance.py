@@ -75,6 +75,39 @@ def main() -> int:
         if status != 200 or not isinstance(projects.get("projects"), list):
             raise RuntimeError("projects endpoint failed")
 
+        status, thread_row = request(
+            port,
+            "POST",
+            "/api/v1/conversations",
+            {"title": "Web chat acceptance"},
+            csrf,
+        )
+        if status != 201 or not thread_row.get("thread_id"):
+            raise RuntimeError("conversation creation failed")
+        thread_id = str(thread_row["thread_id"])
+
+        status, turn = request(
+            port,
+            "POST",
+            "/api/v1/chat/turn",
+            {"thread_id": thread_id, "message": "営業担当が案件ごとにタスクを管理するWebアプリを作りたい。ログインと保存が必要。モダンなデザイン。"},
+            csrf,
+        )
+        if status != 200 or turn.get("action") not in {"ask", "review"}:
+            raise RuntimeError("Aivy requirement-collection turn failed")
+        if not turn.get("project_slug"):
+            raise RuntimeError("project was not linked after a real app request")
+
+        status, denied_build = request(
+            port,
+            "POST",
+            f"/api/v1/projects/{turn['project_slug']}/build",
+            {"instruction": "demo build", "approved": False},
+            csrf,
+        )
+        if status != 400 or "approval" not in str(denied_build.get("error") or "").lower():
+            raise RuntimeError("Web build endpoint bypassed explicit approval")
+
         status, agents = request(port, "GET", "/api/v1/agents")
         if status != 200 or len(agents.get("agents") or []) < 8:
             raise RuntimeError("specialist agent endpoint failed")
