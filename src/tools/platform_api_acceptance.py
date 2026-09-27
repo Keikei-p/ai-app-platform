@@ -186,6 +186,15 @@ def main() -> int:
         status, agents = request(port, "GET", "/api/v1/agents")
         if status != 200 or len(agents.get("agents") or []) < 8:
             raise RuntimeError("specialist agent endpoint failed")
+        status, tool_rows = request(port, "GET", "/api/v1/agent/tools")
+        if status != 200 or not isinstance(tool_rows.get("tools"), list):
+            raise RuntimeError("agent tool contract endpoint failed")
+        tool_map = {x.get("name"): x for x in tool_rows.get("tools") or []}
+        if not tool_map.get("tests.run", {}).get("executable"):
+            raise RuntimeError("reviewed tests.run tool is not executable")
+        if tool_map.get("release.publish", {}).get("executable"):
+            raise RuntimeError("release.publish unexpectedly has an executor binding")
+
         names = {x.get("name") for x in agents.get("agents") or []}
         if not {"coordinator", "coding", "design", "test", "security", "build"}.issubset(names):
             raise RuntimeError("required specialist agents are missing")
