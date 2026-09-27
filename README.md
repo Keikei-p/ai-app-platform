@@ -1,50 +1,94 @@
-# AI App Platform v0.7.0
+# AI App Platform v0.8.0
 
-AI App Platform is a local-first, conversation-first app-building environment. Describe what you want, review the brief, explicitly approve the build, and the platform generates, tests, security-checks and packages the result while keeping risky production actions behind approval gates.
+AI App Platform is a local-first, conversation-first app-building environment. Describe what you want, review the brief, explicitly approve the build, then let the platform generate, test, security-check and package the result.
 
-## v0.7.0 highlights
+## v0.8.0 — from chat to something you can actually use
 
-### Real generation quality pipeline
+The main workspace is now organized around a simple lifecycle:
 
-Generated projects now go through design review, automated tests, artifact security scanning, readiness reporting and generated-file SHA-256 manifests. A failed quality gate blocks preview instead of calling the project complete.
+**話す → 作る → 確認する → 修正する → 履歴を見る → ダウンロードする → 使う**
 
-When an AI coding provider is connected, it can make bounded multi-file changes inside the generated project. It cannot escape the project directory, overwrite protected platform metadata or write credential/signing files. If AI generation fails, the stable deterministic generator remains available as a fallback.
+### Cleaner AI-first desktop UX
 
-The platform can also perform up to two bounded automatic repair/retest attempts for code-repairable failures without weakening tests, security checks or approval gates.
+The landing screen asks 「何を作りたいですか？」.
 
-### Generated SNS automation apps
+The sidebar is intentionally small:
+- 新しいチャット
+- 最近の会話
+- 作成したアプリ
+- ダウンロード
+- 最近のプロジェクト
+- 設定
 
-Requests for SNS自動投稿 / 予約投稿 / Threads / Instagram / YouTube投稿 / X投稿 can generate a dedicated SNS automation application with:
+Advanced tools stay out of the main path until needed.
 
-- scheduled posting queue persisted in SQLite
-- manual approval mode by default
-- optional auto mode
-- DRY RUN by default
-- bounded retries and error state
-- local idempotency keys
-- X text posting adapter
-- Threads text create/publish adapter
-- Instagram public image URL publishing adapter
-- YouTube video upload adapter
-- tokens/credentials loaded only from environment variables
-- loopback-only server by default
-- LAN exposure blocked unless explicit LAN permission and an admin token are configured
+### Persistent chat history
 
-The CI acceptance test starts an actually generated SNS server and verifies queue -> approval/auto -> worker -> posted in DRY RUN, so this is not only a UI/template mock.
+Chats are stored locally and can be searched, renamed, pinned and reopened after restart. A chat can later become an app project without losing the earlier discussion.
 
-### Build outputs
+### Created-app library
 
-- Web: verified distribution ZIP + SHA-256 manifest
-- Windows: generated PyInstaller packaging path; generated EXE build and launch self-test verified on Windows CI
-- Android/iOS: Expo/React Native source, TypeScript validation and Android/iOS bundling verified
-- Android: native debug APK generation verified in CI
-- Production Android/iOS signing and store submission remain external credential/approval steps
+Each app exposes its status, targets, quality state, spec, tests, security review, build readiness, history, Code Vault versions, preview and artifacts in one place.
+
+### Honest downloads
+
+The download center never treats a missing file as downloadable.
+
+Real generated ZIP/EXE/APK/AAB/IPA artifacts are marked ダウンロード可能. Requested formats that are not built yet are marked 準備中 and explain the next required step.
+
+### Better generated-app design
+
+Generated Web apps now include:
+- responsive mobile-first layout
+- modern spacing and typography
+- consistent cards/forms/buttons
+- touch-friendly controls
+- success/error toast feedback
+- confirmation dialogs
+- light/dark/system display modes
+- purpose-aware design themes
+- stronger Design AI checks
+
+The design themes include modern, minimal, premium, friendly, business, soft, finance, youthful, future and dark. Domain context helps choose a sensible look, but explicit visual preferences still take priority.
+
+### SNS automation UI
+
+Generated SNS automation apps keep the v0.7 queue/scheduler/provider architecture while adopting the v0.8 design system. Posting states are easier to scan and the page retains the safe DRY RUN/manual-approval defaults.
+
+### Build and quality pipeline retained
+
+v0.8 keeps the v0.7 safety guarantees:
+- explicit build approval
+- bounded optional LLM code edits
+- deterministic fallback
+- max-two repair/retest loop
+- artifact security scan
+- preview gate
+- Web ZIP + SHA-256
+- Windows EXE packaging
+- Android/iOS source validation and bundling
+- Android debug APK acceptance
+- production/store actions require explicit approval
+
+## Validation
+
+Current v0.8 integration evidence includes:
+- 106 unit/security/regression tests PASS
+- Security Self-Check PASS
+- Chat GUI acceptance PASS
+- SNS automation acceptance PASS
+- Windows generated EXE acceptance PASS
+- Android/iOS generated source acceptance PASS
+
+The release PR also runs the dedicated Android native APK acceptance before main is updated.
 
 ## Important boundaries
 
-SNS provider credentials, OAuth tokens, signing keys and other secrets are not stored in Git. Live provider publishing is not executed in CI. Provider API permissions, review requirements, rate limits and commercial terms can change, so live deployment must re-check the current official provider requirements.
+Generated projects, runtime databases, logs, API keys, OAuth tokens, signing keys and user data are not committed to Git.
 
-Production deployment, store submission and other consequential external actions remain explicit-approval operations.
+Live SNS publishing, production signing and store publication require the user's own external accounts/credentials and remain approval-gated.
+
+Screenshot-based visual-diff critique is prepared at the report-schema level but is not yet executing screenshots automatically.
 
 ## Run
 
@@ -54,10 +98,8 @@ Validation: `CHECK.bat`
 
 ## Git workflow
 
-This repository is the source of truth for AI App Platform code.
-
 - `main`: stable and tested
 - `develop`: active integration
 - `feature/*`: larger isolated changes
 
-Runtime user data, generated projects, logs, backups, credentials, API keys, certificates and signing keys are not stored in Git.
+GitHub remains the source of truth for platform code.
