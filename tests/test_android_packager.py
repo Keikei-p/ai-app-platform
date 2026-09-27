@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -47,7 +48,9 @@ class AndroidPackagerTests(unittest.TestCase):
                 else:
                     apk = mobile / "android/app/build/outputs/apk/debug/app-debug.apk"
                     apk.parent.mkdir(parents=True, exist_ok=True)
-                    apk.write_bytes(b"apk")
+                    with zipfile.ZipFile(apk, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                        archive.writestr("AndroidManifest.xml", b"binary-manifest")
+                        archive.writestr("classes.dex", b"dex")
 
             with patch.dict(os.environ, {"ANDROID_SDK_ROOT": str(sdk)}):
                 result = AndroidPackager(
@@ -69,6 +72,36 @@ class AndroidPackagerTests(unittest.TestCase):
             self.assertEqual(commands[0][1:5], ["expo", "prebuild", "--platform", "android"])
             self.assertIn("assembleDebug", commands[1])
             self.assertFalse(any("install" in item for cmd in commands for item in cmd))
+
+    def test_corrupt_gradle_apk_is_not_reported_as_built(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            mobile = self._mobile(root)
+            sdk = root / "sdk"
+            sdk.mkdir()
+
+            def runner(command, cwd, timeout):
+                if "prebuild" in command:
+                    android = mobile / "android"
+                    android.mkdir()
+                    gradle = android / ("gradlew.bat" if os.name == "nt" else "gradlew")
+                    gradle.write_text("", encoding="utf-8")
+                else:
+                    apk = mobile / "android/app/build/outputs/apk/debug/app-debug.apk"
+                    apk.parent.mkdir(parents=True, exist_ok=True)
+                    apk.write_bytes(b"not-an-apk")
+
+            with patch.dict(os.environ, {"ANDROID_SDK_ROOT": str(sdk)}):
+                result = AndroidPackager(
+                    which=lambda name: f"/tools/{name}",
+                    runner=runner,
+                ).build_debug_apk(root, self._spec())
+
+            self.assertTrue(result.attempted)
+            self.assertFalse(result.built)
+            self.assertIsNone(result.artifact)
+            self.assertIn("verification failed", result.detail.lower())
+            self.assertFalse((root / "artifacts/android/android-demo-debug.apk").exists())
 
     def test_production_aab_is_not_part_of_debug_builder(self):
         source = Path(__file__).parents[1] / "src/core/android_packager.py"
