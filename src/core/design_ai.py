@@ -56,4 +56,34 @@ class DesignAI:
     def save(self, project_dir: Path, review: DesignReview) -> Path:
         path = project_dir / "design_review.json"
         path.write_text(json.dumps(review.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        visual_plan = project_dir / ".aiapp" / "reports" / "visual_review_plan.json"
+        visual_plan.parent.mkdir(parents=True, exist_ok=True)
+        visual_plan.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "status": "static_checks_active",
+                    "future_visual_diff_ready": True,
+                    "viewports": [
+                        {"name": "mobile", "width": 390, "height": 844},
+                        {"name": "tablet", "width": 768, "height": 1024},
+                        {"name": "desktop", "width": 1440, "height": 1000},
+                    ],
+                    "visual_checks": [
+                        "horizontal_overflow",
+                        "touch_target_size",
+                        "text_contrast",
+                        "information_density",
+                        "spacing_consistency",
+                        "form_usability",
+                        "primary_action_clarity",
+                        "empty_loading_success_error_states",
+                    ],
+                    "note": "Screenshot capture/visual-diff model execution is not enabled yet; this contract defines the future review input.",
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         return path
