@@ -1,4 +1,6 @@
 import json
+import hashlib
+import zipfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -109,11 +111,28 @@ class DevelopmentCertificateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             trace = self._passing_project(root)
+            folder = root / "artifacts" / "web"
+            folder.mkdir(parents=True)
+            artifact = folder / "demo-web.zip"
+            with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("index.html", "<title>Demo</title>")
+            digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+            manifest = folder / "demo-web.manifest.json"
+            manifest.write_text(
+                json.dumps({"artifact": artifact.name, "sha256": digest}),
+                encoding="utf-8",
+            )
             self._json(root, ".aiapp/reports/release_manager.json", {
                 "all_requested_artifacts_ready": True,
-                "targets": [{"target": "web", "artifact_status": "portable_bundle"}],
+                "targets": [{
+                    "target": "web",
+                    "artifact_status": "portable_bundle",
+                    "artifacts": [str(artifact)],
+                    "checksums": [digest],
+                }],
             })
-            cert = DevelopmentCertificateBuilder().create(
+            builder = DevelopmentCertificateBuilder()
+            cert = builder.create(
                 root,
                 run_id="run-1",
                 project_slug="demo",
@@ -123,6 +142,55 @@ class DevelopmentCertificateTests(unittest.TestCase):
             self.assertEqual(cert.status, "verified_release_candidate")
             self.assertTrue(cert.release_artifacts_verified)
             self.assertEqual(cert.external_actions, "approval_required")
+            self.assertTrue(any(x.kind == "artifact:web" for x in cert.evidence))
+            builder.save(root, cert)
+            self.assertTrue(builder.verify_saved(root).valid)
+
+            artifact.write_bytes(b"tampered")
+            integrity = builder.verify_saved(root)
+            self.assertFalse(integrity.valid)
+            self.assertIn("artifacts/web/demo-web.zip", integrity.mismatched)
+
+    def test_debug_apk_is_not_mislabeled_as_release_candidate(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            trace = self._passing_project(root)
+            folder = root / "artifacts" / "android"
+            folder.mkdir(parents=True)
+            artifact = folder / "demo-debug.apk"
+            with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("AndroidManifest.xml", b"manifest")
+                archive.writestr("classes.dex", b"dex")
+            digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+            (folder / "demo-debug.manifest.json").write_text(
+                json.dumps({
+                    "artifact": artifact.name,
+                    "sha256": digest,
+                    "build_variant": "debug",
+                    "production_signing_verified": False,
+                    "store_ready": False,
+                }),
+                encoding="utf-8",
+            )
+            self._json(root, ".aiapp/reports/release_manager.json", {
+                "all_requested_artifacts_ready": True,
+                "targets": [{
+                    "target": "android",
+                    "artifact_status": "debug_apk",
+                    "artifacts": [str(artifact)],
+                    "checksums": [digest],
+                    "distribution_status": "debug_only",
+                }],
+            })
+            cert = DevelopmentCertificateBuilder().create(
+                root,
+                run_id="run-1",
+                project_slug="demo",
+                execution_trace_path=trace,
+                agent_completion={"complete": True},
+            )
+            self.assertEqual(cert.status, "verified_preview_candidate")
+            self.assertFalse(cert.release_artifacts_verified)
 
 
 if __name__ == "__main__":
