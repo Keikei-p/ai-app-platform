@@ -257,6 +257,19 @@ def main() -> int:
         if status != 200 or verified_lookup.get("knowledge"):
             raise RuntimeError("unverified research leaked into verified knowledge results")
 
+        status, routes = request(port, "GET", "/api/v1/models/routes")
+        if status != 200 or not isinstance(routes.get("routes"), list):
+            raise RuntimeError("model route endpoint failed")
+        status, updated_routes = request(
+            port,
+            "POST",
+            "/api/v1/models/routes",
+            {"capability": "vision", "provider": "none", "model": ""},
+            csrf,
+        )
+        if status != 200 or not isinstance(updated_routes.get("routes"), list):
+            raise RuntimeError("model route update endpoint failed")
+
         status, policy = request(port, "GET", "/api/v1/evolution/policy")
         if status != 200 or (policy.get("policy") or {}).get("auto_merge_main") is not False:
             raise RuntimeError("evolution policy does not forbid automatic main merge")
