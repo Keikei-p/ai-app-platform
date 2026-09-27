@@ -114,8 +114,13 @@ function showBuildApproval(instruction){
 async function executeBuild(slug,instruction){
   setBusy(true);
   message('assistant','Aivyが作成・デザイン確認・テスト・セキュリティ検査を開始しました。');
+  const stageNames={
+    queued:'待機中',starting:'開始中',understand:'内容確認',plan:'設計中',build:'コード生成中',
+    enhance:'AI改善中',package:'成果物準備中',design:'Design確認中',repair:'修正中',
+    verify:'テスト・Security確認中',visual:'Vision Design確認中',done:'完了',issue:'確認事項あり'
+  };
   try{
-    const result=await api('/api/v1/projects/'+encodeURIComponent(slug)+'/build',{
+    const started=await api('/api/v1/projects/'+encodeURIComponent(slug)+'/build/jobs',{
       method:'POST',
       body:JSON.stringify({
         instruction,
@@ -123,13 +128,33 @@ async function executeBuild(slug,instruction){
         thread_id:state.currentThread?.thread_id||null
       })
     });
-    message('assistant',result.message||'確認が完了しました。');
+    if(!started.job_id)throw new Error('Build Job IDを取得できませんでした');
+    let job=started;
+    for(let i=0;i<1200;i++){
+      if(['completed','blocked','failed'].includes(job.status))break;
+      await new Promise(resolve=>setTimeout(resolve,1000));
+      job=await api('/api/v1/build/jobs/'+encodeURIComponent(started.job_id));
+      const label=stageNames[job.stage]||job.stage||'処理中';
+      $('#coreStatus').innerHTML='<i></i>'+esc(label);
+      $('#coreStatus').classList.add('success');
+    }
+    if(!['completed','blocked','failed'].includes(job.status)){
+      throw new Error('生成処理の状態確認がタイムアウトしました');
+    }
+    if(job.status==='failed'){
+      throw new Error(job.error||job.message||'Build Job failed');
+    }
+    const result=job.result||{};
+    message('assistant',result.message||job.message||'確認が完了しました。');
     await loadProjects();
     await loadConversations();
-    if(result.ok)await showProject(slug);
+    await loadDownloads();
+    await showProject(slug);
   }catch(e){
     message('assistant','生成を完了できませんでした: '+e.message);
   }finally{
+    $('#coreStatus').innerHTML='<i></i>Core接続';
+    $('#coreStatus').classList.add('success');
     setBusy(false);
   }
 }
