@@ -29,6 +29,7 @@ from .build_jobs import BuildJobManager
 from .agent_tool_executor import AgentToolExecutor
 from .project_health import ProjectHealthCheck
 from .agent_plan_runner import AgentPlanRunner
+from .agent_execution_trace import BuildExecutionTracer
 
 
 class PlatformService:
@@ -64,6 +65,7 @@ class PlatformService:
         )
         self.project_health_checker = ProjectHealthCheck(self.tool_executor)
         self.agent_plan_runner = AgentPlanRunner(self.tool_executor, registry=self.tools)
+        self.build_execution_tracer = BuildExecutionTracer()
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -466,20 +468,41 @@ class PlatformService:
         )
 
         result = self.core.execute(project_name, slug, project_dir, instruction, progress)
+        trace = self.build_execution_tracer.create(plan, result, project_dir)
+        pipeline_report = dict(result.pipeline_report or {})
+        pipeline_report["agent_execution_trace"] = trace.to_dict()
+        result.pipeline_report = pipeline_report
+
+        trace_verified = trace.status == "verified"
+        validated = bool(result.ok and trace_verified)
+        if result.ok and not trace_verified:
+            result.ok = False
+            result.message = (
+                "AICoreの生成結果とAgent Execution TraceのEvidenceが一致しないため、"
+                "完成扱いを停止しました。"
+            )
+
         ledger.record(
             run_id=plan.run_id,
             stage="validate",
-            status="pass" if result.ok else "blocked",
+            status="pass" if validated else "blocked",
             summary=result.message,
-            source="ai-core",
+            source="agent-execution-trace",
         )
-        if result.ok:
+        if validated:
+            ledger.record(
+                run_id=plan.run_id,
+                stage="review",
+                status="approval_required",
+                summary="external publish/signing/store submission still requires explicit human approval",
+                source="agent-execution-trace",
+            )
             ledger.record(
                 run_id=plan.run_id,
                 stage="report",
                 status="verified",
-                summary="generation completed with platform quality gates satisfied",
-                source="generation-pipeline",
+                summary="generation completed with execution trace and platform quality gates satisfied",
+                source="agent-execution-trace",
             )
         if thread_id:
             self.conversations.append(thread_id, "assistant", result.message)
