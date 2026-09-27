@@ -7,6 +7,7 @@ from typing import Any
 import json
 
 from .app_spec import AppSpec
+from .artifact_verifier import ArtifactVerifier
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,9 @@ class ReleaseManager:
 
     ORDER = ("web", "windows", "android", "ios")
 
+    def __init__(self, verifier: ArtifactVerifier | None = None):
+        self.verifier = verifier or ArtifactVerifier()
+
     def assess(self, project_dir: Path, spec: AppSpec) -> ReleaseReport:
         project_dir = Path(project_dir)
         readiness = self._json(project_dir / ".aiapp" / "reports" / "build_readiness.json")
@@ -84,46 +88,56 @@ class ReleaseManager:
 
     def _target(self, root: Path, target: str, quality: bool) -> TargetReleaseState:
         if target == "web":
-            artifacts = self._files(root / "artifacts" / "web", {".zip"})
+            candidates = self._files(root / "artifacts" / "web", {".zip"})
             manifest = next(iter(sorted((root / "artifacts" / "web").glob("*.manifest.json"))), None) if (root / "artifacts" / "web").is_dir() else None
-            valid = bool(artifacts) and self._web_manifest_valid(artifacts[0], manifest)
-            blockers = []
+            verified: tuple[Path, ...] = ()
+            blockers: list[str] = []
             if not quality:
                 blockers.append("quality gates have not verified preview readiness")
-            if not artifacts:
+            if not candidates:
                 blockers.append("Web ZIP does not exist")
-            elif not valid:
-                blockers.append("Web artifact checksum manifest is missing or invalid")
+            else:
+                verification = self.verifier.verify_web_zip(candidates[0], manifest)
+                if verification.valid:
+                    verified = (candidates[0],)
+                else:
+                    blockers.extend(f"Web artifact invalid: {x}" for x in verification.failures)
+            ready = quality and bool(verified)
             return self._state(
                 target, quality,
-                "portable_bundle" if quality and valid else "not_ready",
-                artifacts if valid else (),
-                "approval_required" if quality and valid else "blocked",
+                "portable_bundle" if ready else "not_ready",
+                verified if ready else (),
+                "approval_required" if ready else "blocked",
                 blockers,
-                "Human approval is required before production deployment." if quality and valid else "Build and verify the Web ZIP.",
+                "Human approval is required before production deployment." if ready else "Build and verify the Web ZIP.",
             )
 
         if target == "windows":
-            artifacts = self._files(root / "artifacts" / "windows", {".exe"})
-            blockers = []
+            candidates = self._files(root / "artifacts" / "windows", {".exe"})
+            blockers: list[str] = []
+            verified = tuple(x for x in candidates if self.verifier.verify_windows_exe(x).valid)
             if not quality:
                 blockers.append("quality gates have not verified preview readiness")
-            if not artifacts:
+            if not candidates:
                 blockers.append("Windows EXE does not exist")
-            ready = quality and bool(artifacts)
+            elif not verified:
+                blockers.append("Windows EXE failed PE format verification")
+            ready = quality and bool(verified)
             return self._state(
                 target, quality,
                 "local_executable" if ready else "not_ready",
-                artifacts if ready else (),
+                verified if ready else (),
                 "local_download_ready" if ready else "blocked",
                 blockers,
                 "Code signing/public distribution remains a separate human-controlled release step." if ready else "Build and self-test the Windows EXE.",
             )
 
         if target == "android":
-            aabs = self._files(root / "artifacts" / "android", {".aab"})
-            apks = self._files(root / "artifacts" / "android", {".apk"})
-            blockers = []
+            aab_candidates = self._files(root / "artifacts" / "android", {".aab"})
+            apk_candidates = self._files(root / "artifacts" / "android", {".apk"})
+            aabs = tuple(x for x in aab_candidates if self.verifier.verify_android_aab(x).valid)
+            apks = tuple(x for x in apk_candidates if self.verifier.verify_android_apk(x).valid)
+            blockers: list[str] = []
             if not quality:
                 blockers.append("quality gates have not verified preview readiness")
             if aabs:
@@ -141,15 +155,24 @@ class ReleaseManager:
                 status = "not_ready"
                 artifacts = ()
                 distribution = "blocked"
-                blockers.append("Android APK/AAB does not exist")
+                if aab_candidates or apk_candidates:
+                    blockers.append("Android artifact failed structural verification")
+                else:
+                    blockers.append("Android APK/AAB does not exist")
                 next_step = "Prepare Android build dependencies and build a verified debug APK."
             return self._state(target, quality, status, artifacts, distribution, blockers, next_step)
 
         if target == "ios":
             folder = root / "artifacts" / "ios"
-            ipas = self._files(folder, {".ipa"})
-            source_zips = tuple(x for x in self._files(folder, {".zip"}) if "source" in x.stem.lower())
-            blockers = []
+            ipa_candidates = self._files(folder, {".ipa"})
+            ipas = tuple(x for x in ipa_candidates if self.verifier.verify_ipa(x).valid)
+            source_candidates = tuple(x for x in self._files(folder, {".zip"}) if "source" in x.stem.lower())
+            source_zips: list[Path] = []
+            for source in source_candidates:
+                manifest = folder / (source.stem + ".manifest.json")
+                if self.verifier.verify_ios_source_zip(source, manifest).valid:
+                    source_zips.append(source)
+            blockers: list[str] = []
             if not quality:
                 blockers.append("quality gates have not verified preview readiness")
             if ipas and quality:
@@ -158,13 +181,18 @@ class ReleaseManager:
                     blockers,
                     "Verify Apple signing/provisioning and request explicit distribution/App Store approval.",
                 )
-            blockers.append("signed iOS IPA does not exist")
+            if ipa_candidates and not ipas:
+                blockers.append("iOS IPA failed structural verification")
+            else:
+                blockers.append("signed iOS IPA does not exist")
             if source_zips and quality:
                 return self._state(
-                    target, quality, "source_bundle", source_zips, "source_only",
+                    target, quality, "source_bundle", tuple(source_zips), "source_only",
                     blockers,
                     "iOS source is downloadable; use macOS/Xcode or an approved build service with Apple signing credentials to produce an IPA.",
                 )
+            if source_candidates and not source_zips:
+                blockers.append("iOS source bundle failed checksum or structure verification")
             return self._state(
                 target, quality, "source_only", (), "blocked", blockers,
                 "Use macOS/Xcode or an approved build service with Apple signing credentials to produce an IPA.",
