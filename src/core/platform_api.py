@@ -138,6 +138,9 @@ class PlatformAPI:
                         return
 
                     parts = [x for x in path.split("/") if x]
+                    if len(parts) == 5 and parts[:4] == ["api", "v1", "build", "jobs"]:
+                        self._json(200, api.service.build_job(parts[4]))
+                        return
                     if len(parts) == 4 and parts[:3] == ["api", "v1", "projects"]:
                         self._json(200, api.service.project_detail(parts[3]))
                         return
@@ -251,6 +254,18 @@ class PlatformAPI:
                         self._json(202 if row.get("accepted") else 422, row)
                         return
                     parts = [x for x in path.split("/") if x]
+                    if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4:] == ["build", "jobs"]:
+                        instruction = str(data.get("instruction") or "").strip()
+                        if not instruction:
+                            raise ValueError("instruction is required")
+                        row = api.service.start_build_job(
+                            parts[3],
+                            instruction,
+                            approved=data.get("approved") is True,
+                            thread_id=str(data.get("thread_id") or "") or None,
+                        )
+                        self._json(202, row)
+                        return
                     if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "build":
                         instruction = str(data.get("instruction") or "").strip()
                         if not instruction:
