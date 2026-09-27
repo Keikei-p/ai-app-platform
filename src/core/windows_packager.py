@@ -12,6 +12,7 @@ import sys
 
 from .app_spec import AppSpec
 from .database import log_event
+from .artifact_verifier import ArtifactVerifier
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,9 @@ class WindowsPackager:
     Preparation never executes package managers or shell commands. The generated
     BUILD_GENERATED_WINDOWS.bat is an explicit user-triggered build step.
     """
+
+    def __init__(self, verifier: ArtifactVerifier | None = None):
+        self.verifier = verifier or ArtifactVerifier()
 
     EXCLUDED_PARTS = {
         ".git", ".snapshots", ".vault", ".aiapp", "node_modules", "__pycache__",
@@ -207,7 +211,19 @@ class WindowsPackager:
             ),
             encoding="utf-8",
         )
-        detail = "Windows EXE built and self-test passed"
+        verification = self.verifier.verify_windows_exe(artifact, manifest)
+        if not verification.valid:
+            failures = "; ".join(verification.failures[:8]) or "unknown Windows artifact verification failure"
+            detail = "Windows EXE verification failed: " + failures
+            log_event("packager.windows.verification_failed", detail, spec.slug)
+            try:
+                artifact.unlink(missing_ok=True)
+                manifest.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return WindowsBuildResult(True, False, None, detail)
+
+        detail = "Windows EXE built, self-test passed, and artifact evidence verified"
         log_event("packager.windows.built", f"{detail}; sha256={digest}", spec.slug)
         return WindowsBuildResult(
             True,
