@@ -22,6 +22,7 @@ from ..core.learning_mode import LearningCoach
 from ..core.preview_runtime import PreviewRuntime
 from ..core.llm_chat import AIChatEngine
 from ..core.workspace_catalog import ConversationStore, ProjectCatalog
+from ..core.aivy_identity import AIVY
 from .remote_window import RemoteWindow
 from .workspace_center import WorkspaceCenter
 
@@ -608,9 +609,10 @@ class MainWindow(tk.Tk):
         self._set_busy(True, "AIが考えています")
         self.activity_var.set("AIが返答を考えています…")
         system_instruction = (
-            "あなたはAI App Platformの会話パートナーです。日本語で自然に会話してください。"
+            AIVY.system_preamble()
+            + " 日本語で自然に会話してください。"
             "雑談は雑談として返し、ユーザーがアプリ制作を相談している場合も勝手に制作開始を宣言しません。"
-            "要件が曖昧なら整理を手伝い、断定しすぎず、短く分かりやすく答えてください。"
+            "要件が曖昧なら整理を手伝い、未検証の内容は未検証と明示し、断定しすぎず短く分かりやすく答えてください。"
         )
         threading.Thread(
             target=self._run_llm_reply,
@@ -1286,7 +1288,7 @@ class MainWindow(tk.Tk):
             self.chat_history.insert("end", "あなた\n", "user_label")
             self.chat_history.insert("end", f"{text}\n", "user")
         else:
-            self.chat_history.insert("end", "AI App Platform\n", "assistant_label")
+            self.chat_history.insert("end", "Aivy\n", "assistant_label")
             self.chat_history.insert("end", f"{text}\n", "assistant")
         self.chat_history.see("end")
         self.chat_history.configure(state="disabled")
@@ -1312,7 +1314,7 @@ class MainWindow(tk.Tk):
                 self.chat_history.insert("end", "あなた\n", "user_label")
                 self.chat_history.insert("end", f"{row.get('content','')}\n", "user")
             else:
-                self.chat_history.insert("end", "AI App Platform\n", "assistant_label")
+                self.chat_history.insert("end", "Aivy\n", "assistant_label")
                 self.chat_history.insert("end", f"{row.get('content','')}\n", "assistant")
         self.chat_history.configure(state="disabled")
         if not rows:
