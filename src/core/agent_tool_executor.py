@@ -18,6 +18,8 @@ from .project_manager import ProjectManager
 from .research_provider import GuardedResearchProvider
 from .test_runner import ProjectTestRunner
 from .workspace_catalog import ProjectCatalog
+from .project_understanding import ProjectUnderstandingAI, ChangeImpactAnalyzer, safe_path
+from .checkpoint_manager import CheckpointManager
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,8 @@ class AgentToolExecutor:
     """
 
     ARG_ALLOWLIST = {
+        'change.prepare': {'project_slug', 'request', 'changed_paths'},
+        'checkpoint.restore': {'project_slug', 'checkpoint_id', 'manifest_sha256'},
         "project.inspect": {"project_slug"},
         "knowledge.search": {"query", "limit"},
         "research.fetch": {"url"},
@@ -81,6 +85,8 @@ class AgentToolExecutor:
         self.artifacts = artifacts or LocalArtifactBuilder()
         self.project_resolver = project_resolver or self._default_project_dir
         self._handlers = {
+            'change.prepare': self._change_prepare,
+            'checkpoint.restore': self._checkpoint_restore,
             "project.inspect": self._project_inspect,
             "knowledge.search": self._knowledge_search,
             "research.fetch": self._research_fetch,
@@ -94,6 +100,22 @@ class AgentToolExecutor:
 
     def executable_tools(self) -> tuple[str, ...]:
         return tuple(sorted(self._handlers))
+
+    def _change_prepare(self, args: dict[str, Any]) -> dict[str, Any]:
+        root = self._project_dir(str(args.get('project_slug') or ''))
+        project_map = ProjectUnderstandingAI().analyze(root)
+        impact = ChangeImpactAnalyzer().analyze(project_map, args.get('request'), args.get('changed_paths'))
+        result = {'project_map': project_map, 'impact': impact, 'passed': impact['risk'] != 'RED'}
+        if result['passed']:
+            result['checkpoint'] = CheckpointManager().create(root)
+        target = safe_path(root, '.aiapp/reports/change_preparation.json')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+        return result
+
+    def _checkpoint_restore(self, args: dict[str, Any]) -> dict[str, Any]:
+        return CheckpointManager().restore(self._project_dir(str(args.get('project_slug') or '')),
+                                           str(args.get('checkpoint_id') or ''), str(args.get('manifest_sha256') or ''))
 
     def execute(
         self,
@@ -126,7 +148,9 @@ class AgentToolExecutor:
                 run_id=run_id,
                 stage=definition.evidence_stage,
                 status=evidence_status,
-                summary=f"reviewed tool executed: {tool_name} ({evidence_status})",
+                summary=f"reviewed tool executed: {tool_name} ({evidence_status})" + (
+                    ' checkpoint=' + json.dumps(result.get('checkpoint', {}), sort_keys=True)
+                    if tool_name == 'change.prepare' else ''),
                 source="agent-tool-executor",
             )
 
@@ -158,6 +182,8 @@ class AgentToolExecutor:
 
     @staticmethod
     def _evidence_status(tool_name: str, result: dict[str, Any]) -> str:
+        if tool_name == 'change.prepare':
+            return 'pass' if result.get('passed') else 'blocked'
         if tool_name == "tests.run":
             return "pass" if bool(result.get("passed")) else "fail"
         if tool_name == "design.review":

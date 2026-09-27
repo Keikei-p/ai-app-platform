@@ -72,7 +72,7 @@ class AgentPlanRunner:
         *,
         project_dir: Path,
     ) -> AgentRunReport:
-        allowed = {"project.inspect", "knowledge.search"}
+        allowed = {"project.inspect", "knowledge.search", "change.prepare"}
         steps = [
             step for step in plan.steps
             if step.tool_name in allowed
@@ -178,6 +178,8 @@ class AgentPlanRunner:
             payload = dict(args_by_tool.get(step.tool_name) or {})
             if plan.project_slug and step.tool_name in {
                 "project.inspect",
+                "change.prepare",
+                "checkpoint.restore",
                 "vault.snapshot",
                 "tests.run",
                 "design.review",
@@ -187,6 +189,8 @@ class AgentPlanRunner:
                 payload.setdefault("project_slug", plan.project_slug)
             if step.tool_name == "knowledge.search":
                 payload.setdefault("query", plan.goal)
+            if step.tool_name == 'change.prepare':
+                payload.setdefault('request', plan.goal)
 
             try:
                 execution = self.executor.execute(
@@ -303,6 +307,8 @@ class AgentPlanRunner:
 
     @staticmethod
     def _result_passed(tool_name: str, result: dict[str, Any]) -> bool | None:
+        if tool_name == 'change.prepare':
+            return bool(result.get('passed')) and bool(result.get('checkpoint'))
         if tool_name == "tests.run":
             return bool(result.get("passed"))
         if tool_name == "design.review":

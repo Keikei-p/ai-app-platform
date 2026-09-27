@@ -7,6 +7,7 @@ import json
 
 from .ai_core import AICore, CoreResult
 from .agent_runtime import AgentOrchestrator, EvidenceLedger
+from .checkpoint_manager import CheckpointManager
 from .chat_partner import ChatPartner
 from .config import WORKSPACE_DIR
 from .database import list_projects
@@ -589,13 +590,27 @@ class PlatformService:
             source="agent-plan-runner",
         )
 
-        result = self.core.execute(
-            project_name,
-            slug,
-            project_dir,
-            instruction,
-            core_progress,
-        )
+        preparation = next(row.result for row in preflight.steps if row.tool_name == 'change.prepare')
+        checkpoint = preparation['checkpoint']
+
+        def recover_failed_change() -> dict[str, Any]:
+            recovery = CheckpointManager().restore(project_dir, checkpoint['checkpoint_id'], checkpoint['manifest_sha256'])
+            ledger.record(run_id=plan.run_id, stage='repair', status='recovered',
+                          summary='Verified pre-change source recovered to ' + recovery['recovered_tree'],
+                          source='checkpoint-manager')
+            return recovery
+
+        try:
+            result = self.core.execute(
+                project_name,
+                slug,
+                project_dir,
+                instruction,
+                core_progress,
+            )
+        except Exception:
+            recover_failed_change()
+            raise
         emit_platform(
             "postflight",
             "別経路のTool ExecutorでTests・Design・Securityを再検証しています",
@@ -634,6 +649,8 @@ class PlatformService:
 
         trace_verified = trace.status == "verified"
         validated = bool(result.ok and trace_verified)
+        if not validated:
+            result.pipeline_report['checkpoint_recovery'] = recover_failed_change()
         if result.ok and not trace_verified:
             result.ok = False
             result.message = (

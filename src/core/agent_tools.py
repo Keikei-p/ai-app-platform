@@ -32,6 +32,8 @@ class AgentToolRegistry:
         self._tools = {
             tool.name: tool
             for tool in (
+                AgentToolDefinition('change.prepare', 'Analyze project and impact, enforce risk, then checkpoint source.', 'medium', False, ('project',), ('checkpoint', 'reports'), 'inspect'),
+                AgentToolDefinition('checkpoint.restore', 'Recover verified checkpoint into a new tree without overwriting active work.', 'medium', True, ('checkpoint',), ('recovery',), 'repair'),
                 AgentToolDefinition(
                     "project.inspect",
                     "Read project metadata, specs, reports and prior verified history.",

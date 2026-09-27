@@ -11,6 +11,7 @@ class FakeExecutor:
         self.registry = AgentOrchestrator().tools
         self.calls = []
         self.values = {
+            'change.prepare': {'passed': True, 'checkpoint': {'checkpoint_id': 'fixture'}},
             "project.inspect": {"card": {"name": "Demo"}},
             "knowledge.search": {"knowledge": []},
             "tests.run": {"passed": tests, "results": []},
@@ -20,7 +21,7 @@ class FakeExecutor:
         }
 
     def executable_tools(self):
-        return ("project.inspect", "knowledge.search", "tests.run", "design.review", "security.scan", "package.build")
+        return ("project.inspect", "knowledge.search", "change.prepare", "tests.run", "design.review", "security.scan", "package.build")
 
     class Row:
         def __init__(self, result):
@@ -43,10 +44,10 @@ class AgentPlanRunnerTests(unittest.TestCase):
         self.assertEqual(report.status, "completed")
         self.assertEqual(
             list(report.executed_tools),
-            ["project.inspect", "knowledge.search"],
+            ["project.inspect", "knowledge.search", "change.prepare"],
         )
         called = [x[0] for x in executor.calls]
-        self.assertEqual(called, ["project.inspect", "knowledge.search"])
+        self.assertEqual(called, ["project.inspect", "knowledge.search", "change.prepare"])
         self.assertNotIn("code.generate", called)
         self.assertNotIn("tests.run", called)
         self.assertNotIn("release.publish", called)

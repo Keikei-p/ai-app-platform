@@ -10,6 +10,10 @@ from .evaluation_engine import EvaluationEngine, EvaluationReport
 
 
 ROOT_POLICY_PATHS = {
+    "src/core/project_understanding.py",
+    "src/core/checkpoint_manager.py",
+    "src/core/agent_tool_executor.py",
+    "src/core/agent_plan_runner.py",
     "src/core/safety.py",
     "src/core/permissions.py",
     "src/core/approval.py",
