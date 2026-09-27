@@ -22,6 +22,7 @@ from .windows_packager import WindowsPackager
 from .web_packager import WebPackager
 from .social_generator import SocialAutomationGenerator
 from .knowledge_store import VerifiedKnowledgeStore
+from .evaluation_engine import EvaluationEngine
 
 @dataclass
 class CoreResult:
@@ -62,6 +63,7 @@ class AICore:
         self.web_packager = WebPackager()
         self.social = SocialAutomationGenerator()
         self.knowledge = VerifiedKnowledgeStore()
+        self.evaluation = EvaluationEngine()
 
     def execute(
         self,
@@ -334,7 +336,18 @@ class AICore:
                 "web-packager",
             )
 
+        evaluation_report = self.evaluation.evaluate(project_dir)
+        evaluation_path = self.evaluation.save(project_dir, evaluation_report)
+        files.append(evaluation_path)
+        log_event(
+            "agent.evaluation_completed",
+            json.dumps(evaluation_report.to_dict(), ensure_ascii=False),
+            slug,
+            "evaluation-engine",
+        )
+
         pipeline_dict = pipeline_report.to_dict()
+        pipeline_dict["agent_evaluation"] = evaluation_report.to_dict()
         final_ok = pipeline_report.preview_ready
         if final_ok:
             self.vault.save(slug, "AI変更後", actor="ai-core", reason=instruction, kind="auto-after-ai")
@@ -356,11 +369,11 @@ class AICore:
             message = "生成は完了しましたが、自動テストに失敗しました。完成扱いにはしません。"
 
         try:
-            if final_ok:
+            if final_ok and evaluation_report.learning_eligible:
                 verified_lesson = (
-                    f"検証済み成功: app_type={plan.spec.app_type}, "
+                    f"検証済み成功(score={evaluation_report.score}): app_type={plan.spec.app_type}, "
                     f"targets={','.join(plan.spec.targets)}, design={plan.spec.design_style}. "
-                    "Design/Test/Securityの品質ゲートを通過した構成。"
+                    "Design/Test/Security/Previewの独立Evidenceを通過した構成。"
                 )
                 self.memory.record(
                     category="verified_generation_success",
@@ -369,7 +382,7 @@ class AICore:
                     outcome="preview_ready",
                     project_slug=slug,
                     verified=True,
-                    evidence_source="generation-pipeline",
+                    evidence_source="evaluation-engine",
                 )
             else:
                 reasons = list(pipeline_report.blocking_reasons)[:6]
