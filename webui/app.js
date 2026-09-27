@@ -69,11 +69,33 @@ async function showProject(slug){
     : `<div class="plan-step"><div class="step-no">◉</div><div><strong>Vision Design</strong><p>${esc(visual.summary||'スクリーンショット評価はまだありません')}</p></div></div>`;
   $('#agentPlan').innerHTML=`
     <div class="data-card"><h3>${esc(card.name||slug)}</h3><div class="meta"><span>${esc(card.status)}</span><span>${esc(card.quality)}</span>${evaluation.score!=null?`<span>AI評価 ${evaluation.score}/100</span>`:''}</div></div>
+    <div class="health-actions"><button class="agent-action secondary" id="runHealthCheck" type="button">Aivy再点検</button><span id="healthStatus" class="meta">Tests / Design / Securityを再確認</span></div>
     ${visualBlock}
     <div class="plan-step"><div class="step-no">✓</div><div><strong>プレビュー</strong><p>${readiness.preview_ready?'可能':'まだ準備が必要'}</p></div></div>
     <div class="plan-step"><div class="step-no">⇩</div><div><strong>配布状態</strong><p>${(release.targets||[]).length?(release.targets||[]).map(x=>esc(x.target)+': '+esc(x.artifact_status)+' / '+esc(x.distribution_status)).join('<br>'):'Release Manager未実行'}</p></div></div>
     <div class="plan-step"><div class="step-no">!</div><div><strong>未完了</strong><p>${gaps.length?gaps.map(x=>esc(x.reason||'')).join('<br>'):'大きな未完了項目なし'}</p></div></div>`;
   $('#inspector').classList.add('open');
+  const healthButton=$('#runHealthCheck');
+  if(healthButton)healthButton.onclick=()=>runProjectHealth(slug);
+}
+async function runProjectHealth(slug){
+  const button=$('#runHealthCheck');const status=$('#healthStatus');
+  if(!button||!status)return;
+  button.disabled=true;button.textContent='再点検中…';status.textContent='Evidenceを収集中';
+  try{
+    const report=await api('/api/v1/projects/'+encodeURIComponent(slug)+'/health-check',{
+      method:'POST',
+      body:JSON.stringify({})
+    });
+    const icon=report.status==='pass'?'✓':'!';
+    status.innerHTML=icon+' Tests '+(report.tests_passed?'PASS':'NG')+' · Design '+(report.design_passed?'PASS':'NG')+' · Security '+(report.security_passed?'PASS':'NG');
+    button.textContent=report.status==='pass'?'再点検 PASS':'要確認';
+  }catch(e){
+    status.textContent='再点検失敗: '+e.message;
+    button.textContent='再点検';
+  }finally{
+    button.disabled=false;
+  }
 }
 async function loadDownloads(){
   if(!state.projects.length)await loadProjects();
