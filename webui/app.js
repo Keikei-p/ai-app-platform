@@ -21,7 +21,7 @@ function setView(name){
   if(name==='conversations')loadConversations();
   if(name==='projects')loadProjects();
   if(name==='downloads')loadDownloads();
-  if(name==='settings'){loadModelRoutes();loadEvolutionSummary();}
+  if(name==='settings'){loadModelRoutes();loadEvolutionSummary();loadKnowledgeSummary();}
 }
 function message(role,text){
   $('#welcome').hidden=true;
@@ -368,11 +368,21 @@ async function loadEvolutionSummary(){
     target.textContent='自動適用なし / main自動mergeなし / 人レビュー必須'+suffix;
   }catch(e){target.textContent='Evolution情報を取得できませんでした';}
 }
+async function loadKnowledgeSummary(){
+  const target=$('#knowledgeSummary');if(!target)return;
+  try{
+    const data=await api('/api/v1/knowledge/staged');
+    const rows=data.knowledge||[];
+    const counts={untrusted:0,candidate:0,verified:0};
+    rows.forEach(x=>{if(Object.prototype.hasOwnProperty.call(counts,x.trust_level))counts[x.trust_level]++;});
+    target.textContent='Untrusted '+counts.untrusted+' · Candidate '+counts.candidate+' · Verified '+counts.verified+' · Agentが再利用するのはVerifiedのみ';
+  }catch(e){target.textContent='Knowledge状態を取得できませんでした';}
+}
 async function boot(){
   try{
     const status=await api('/api/v1/status');state.csrf=status.csrf||'';
     $('#coreStatus').innerHTML='<i></i>Core接続';$('#coreStatus').classList.add('success');
-    await loadConversations();await loadProjects();await loadModelRoutes();await loadEvolutionSummary();
+    await loadConversations();await loadProjects();await loadModelRoutes();await loadEvolutionSummary();await loadKnowledgeSummary();
   }catch(e){$('#coreStatus').textContent='Core未接続';}
 }
 $('#composer').addEventListener('submit',e=>{e.preventDefault();send($('#prompt').value);});
