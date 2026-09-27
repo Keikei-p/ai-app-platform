@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ja" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>AI App Platform</title>
+  <link rel="stylesheet" href="/ui/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark">A</div>
+        <div>
+          <strong>AI App Platform</strong>
+          <small>v0.9 foundation</small>
+        </div>
+        <button class="icon-button mobile-only" id="closeSidebar" aria-label="メニューを閉じる">×</button>
+      </div>
+
+      <button class="new-chat" id="newChat">＋ 新しいチャット</button>
+
+      <nav class="nav-list" aria-label="メイン">
+        <button data-view="home" class="nav-item active">⌂ <span>チャット</span></button>
+        <button data-view="conversations" class="nav-item">◷ <span>最近の会話</span></button>
+        <button data-view="projects" class="nav-item">▦ <span>作成したアプリ</span></button>
+        <button data-view="downloads" class="nav-item">↓ <span>ダウンロード</span></button>
+      </nav>
+
+      <div class="sidebar-section">
+        <div class="section-label">最近の会話</div>
+        <div id="recentChats" class="recent-list"></div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="nav-item" data-view="settings">⚙ <span>設定</span></button>
+      </div>
+    </aside>
+
+    <div class="overlay" id="overlay"></div>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-button mobile-only" id="openSidebar" aria-label="メニューを開く">☰</button>
+        <div class="topbar-title" id="topbarTitle">新しいチャット</div>
+        <div class="topbar-actions">
+          <span class="status-pill" id="coreStatus"><i></i>Core確認中</span>
+          <button class="icon-button" id="themeToggle" aria-label="テーマを切り替える">◐</button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-home">
+        <div class="chat-stage">
+          <div class="welcome" id="welcome">
+            <div class="spark">✦</div>
+            <h1>何を作りたいですか？</h1>
+            <p>アイデアをそのまま話してください。AIが目的を整理し、作業計画と次のステップを見える形にします。</p>
+            <div class="suggestions">
+              <button data-prompt="SNSの投稿を自動化するアプリを作りたい">SNS自動投稿</button>
+              <button data-prompt="営業実績をスマホで管理するアプリを作りたい">営業管理</button>
+              <button data-prompt="おしゃれな予約管理アプリを作りたい">予約管理</button>
+            </div>
+          </div>
+
+          <div class="messages" id="messages" aria-live="polite"></div>
+
+          <div class="composer-wrap">
+            <form class="composer" id="composer">
+              <textarea id="prompt" rows="1" placeholder="作りたいもの、直したいことを入力…" aria-label="AIへ依頼"></textarea>
+              <div class="composer-footer">
+                <span class="hint">Enterで送信 · Shift+Enterで改行</span>
+                <button class="send-button" id="sendButton" type="submit" aria-label="送信">↑</button>
+              </div>
+            </form>
+            <p class="safety-note">生成・公開など重要な操作は、既存の承認・品質・セキュリティゲートを通ります。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-conversations">
+        <div class="page">
+          <div class="page-heading">
+            <div><span class="eyebrow">HISTORY</span><h2>最近の会話</h2><p>過去の相談を検索して、続きから再開できます。</p></div>
+            <input class="search" id="conversationSearch" placeholder="会話を検索">
+          </div>
+          <div class="card-grid" id="conversationGrid"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-projects">
+        <div class="page">
+          <div class="page-heading">
+            <div><span class="eyebrow">APPS</span><h2>作成したアプリ</h2><p>状態・対象OS・品質チェックを一目で確認できます。</p></div>
+          </div>
+          <div class="project-grid" id="projectGrid"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-downloads">
+        <div class="page">
+          <div class="page-heading">
+            <div><span class="eyebrow">DELIVERY</span><h2>ダウンロード</h2><p>実在する成果物だけをダウンロード可能として扱います。</p></div>
+          </div>
+          <div class="download-list" id="downloadList"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="page narrow">
+          <div class="page-heading"><div><span class="eyebrow">SETTINGS</span><h2>設定</h2><p>v0.9ではUIとCoreを分離し、同じCoreを複数の画面から利用できるようにします。</p></div></div>
+          <div class="settings-card">
+            <div><strong>Core接続</strong><p>ローカルのPython Platform Serviceと接続します。</p></div>
+            <span class="status-pill success"><i></i>localhost only</span>
+          </div>
+          <div class="settings-card">
+            <div><strong>Agent安全ルール</strong><p>任意shell実行なし / 最大2回修正 / 外部公開は人の承認 / Evidence必須。</p></div>
+            <span class="status-pill success"><i></i>有効</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="inspector" id="inspector">
+      <div class="inspector-head"><span>Agent Plan</span><button class="icon-button" id="closeInspector">×</button></div>
+      <div id="agentPlan" class="agent-plan"><div class="empty">依頼を送ると、AIが作業計画をここに表示します。</div></div>
+    </aside>
+  </div>
+  <script src="/ui/app.js"></script>
+</body>
+</html>
