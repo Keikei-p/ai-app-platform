@@ -59,6 +59,25 @@ class ProjectCatalogTests(unittest.TestCase):
             self.assertEqual(rows[0].label, "Web ZIP")
             self.assertTrue(rows[0].path.endswith("demo-web.zip"))
 
+    def test_artifact_path_resolves_only_cataloged_real_artifacts(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            with patch("src.core.workspace_catalog.WORKSPACE_DIR", root):
+                slug = "safe-artifact"
+                project = root / slug
+                project.mkdir()
+                (project / "project.json").write_text('{"name":"Safe"}', encoding="utf-8")
+                artifact = project / "artifacts/web/demo.zip"
+                artifact.parent.mkdir(parents=True)
+                artifact.write_bytes(b"zip")
+                catalog = ProjectCatalog()
+                rows = catalog.artifacts(slug)
+                self.assertEqual(len(rows), 1)
+                resolved = catalog.artifact_path(slug, rows[0].artifact_id)
+                self.assertEqual(resolved, artifact.resolve())
+                with self.assertRaises(FileNotFoundError):
+                    catalog.artifact_path(slug, "../../outside.zip")
+
     def test_requested_ios_is_visible_as_pending_not_downloadable(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
