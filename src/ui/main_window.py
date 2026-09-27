@@ -143,9 +143,9 @@ class MainWindow(tk.Tk):
         mark.create_oval(2, 2, 26, 26, fill="#111827", outline="")
         mark.create_arc(6, 6, 22, 22, start=25, extent=210, style="arc", outline="#8B5CF6", width=3)
         mark.create_arc(8, 8, 20, 20, start=205, extent=170, style="arc", outline="#22C3A6", width=3)
-        tk.Label(brand_row, text="AI App Platform", bg="#F4F5F7", fg="#17181A",
+        tk.Label(brand_row, text="Aivy", bg="#F4F5F7", fg="#17181A",
                  font=(self.ui_font_semibold, 13, "bold")).pack(side="left")
-        tk.Label(brand, text=f"v{VERSION}", bg="#F4F5F7", fg="#9A9CA1",
+        tk.Label(brand, text=f"育つほど、つくれる。  ·  v{VERSION}", bg="#F4F5F7", fg="#9A9CA1",
                  font=(self.ui_font_family, 8)).pack(anchor="w", padx=37, pady=(2, 0))
 
         self.new_app_button = ttk.Button(
@@ -339,10 +339,10 @@ class MainWindow(tk.Tk):
         hero_mark.create_oval(29, 29, 67, 67, fill="#17181A", outline="")
         hero_mark.create_arc(19, 19, 77, 77, start=30, extent=205, style="arc", outline="#7C5CFC", width=5)
         hero_mark.create_arc(22, 22, 74, 74, start=205, extent=175, style="arc", outline="#18B99A", width=5)
-        hero_mark.create_text(48, 48, text="AI", fill="#FFFFFF",
-                              font=(self.ui_font_semibold, 11, "bold"))
+        hero_mark.create_text(48, 48, text="A", fill="#FFFFFF",
+                              font=(self.ui_font_semibold, 14, "bold"))
         tk.Label(
-            self.welcome_panel, text="何を作りたいですか？",
+            self.welcome_panel, text="Aivyに、何を作ってほしいですか？",
             bg="#FBFBFC", fg="#151618",
             font=(self.ui_font_semibold, 24, "bold")
         ).pack()
