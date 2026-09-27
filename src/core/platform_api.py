@@ -303,6 +303,20 @@ class PlatformAPI:
                         )
                         self._json(200, row)
                         return
+                    if path == "/api/v1/agent/safe-run":
+                        goal = str(data.get("goal") or "").strip()
+                        context = data.get("context")
+                        if not goal:
+                            raise ValueError("goal is required")
+                        if context is not None and not isinstance(context, dict):
+                            raise ValueError("context must be an object")
+                        row = api.service.run_agent_safe_tools(
+                            goal,
+                            project_slug=str(data.get("project_slug") or "") or None,
+                            context=context or {},
+                        )
+                        self._json(200, row)
+                        return
                     if path == "/api/v1/agent/council/execute":
                         goal = str(data.get("goal") or "").strip()
                         project_slug = str(data.get("project_slug") or "").strip()
