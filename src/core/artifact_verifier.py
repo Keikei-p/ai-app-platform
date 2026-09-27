@@ -5,6 +5,7 @@ from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from typing import Any
 import json
+import plistlib
 import struct
 import zipfile
 
@@ -164,6 +165,104 @@ class ArtifactVerifier:
             else:
                 failures.append("iOS source manifest must explicitly state signed_ipa=false")
         return ArtifactVerification("ios_source_zip", not failures, digest, tuple(checks), tuple(failures))
+
+    def verify_ios_simulator_zip(
+        self,
+        artifact: Path,
+        manifest: Path | None,
+    ) -> ArtifactVerification:
+        checks: list[str] = []
+        failures: list[str] = []
+        digest = self._safe_sha(artifact, failures)
+        names = self._zip_names(artifact, failures)
+        app_prefix = ""
+        info: dict[str, Any] = {}
+
+        if names is not None:
+            checks.append("valid_zip")
+            if self._safe_archive_names(names):
+                checks.append("safe_paths")
+            else:
+                failures.append("iOS Simulator ZIP contains unsafe path")
+
+            info_candidates = sorted(
+                name for name in names
+                if name.count("/") == 1
+                and name.endswith(".app/Info.plist")
+            )
+            if len(info_candidates) != 1:
+                failures.append("iOS Simulator ZIP must contain exactly one root .app/Info.plist")
+            else:
+                info_name = info_candidates[0]
+                app_prefix = info_name.rsplit("/", 1)[0]
+                try:
+                    with zipfile.ZipFile(artifact, "r") as archive:
+                        parsed = plistlib.loads(archive.read(info_name))
+                    if isinstance(parsed, dict):
+                        info = parsed
+                        checks.append("valid_info_plist")
+                    else:
+                        failures.append("iOS Simulator Info.plist root is invalid")
+                except Exception as exc:
+                    failures.append(f"iOS Simulator Info.plist is invalid: {exc}")
+
+                executable = str(info.get("CFBundleExecutable") or "").strip()
+                bundle_id = str(info.get("CFBundleIdentifier") or "").strip()
+                if executable and f"{app_prefix}/{executable}" in names:
+                    checks.append("app_executable")
+                else:
+                    failures.append("iOS Simulator app executable is missing")
+                if bundle_id:
+                    checks.append("bundle_identifier")
+                else:
+                    failures.append("iOS Simulator bundle identifier is missing")
+
+        manifest_data = self._manifest_checksum(
+            artifact,
+            manifest,
+            digest,
+            checks,
+            failures,
+        )
+        if manifest_data is not None:
+            if manifest_data.get("simulator_only") is True:
+                checks.append("simulator_only")
+            else:
+                failures.append("iOS Simulator artifact must declare simulator_only=true")
+            if manifest_data.get("signed_ipa") is False:
+                checks.append("signed_ipa_not_claimed")
+            else:
+                failures.append("iOS Simulator artifact must declare signed_ipa=false")
+            if manifest_data.get("apple_signing_verified") is False:
+                checks.append("apple_signing_not_claimed")
+            else:
+                failures.append("iOS Simulator artifact must not claim Apple signing")
+            if manifest_data.get("store_ready") is False:
+                checks.append("not_store_ready")
+            else:
+                failures.append("iOS Simulator artifact must not be marked store-ready")
+
+            expected_bundle = str(manifest_data.get("bundle_identifier") or "").strip()
+            actual_bundle = str(info.get("CFBundleIdentifier") or "").strip()
+            if actual_bundle and expected_bundle == actual_bundle:
+                checks.append("bundle_identifier_manifest")
+            else:
+                failures.append("iOS Simulator manifest bundle identifier does not match")
+
+            expected_executable = str(manifest_data.get("executable") or "").strip()
+            actual_executable = str(info.get("CFBundleExecutable") or "").strip()
+            if actual_executable and expected_executable == actual_executable:
+                checks.append("executable_manifest")
+            else:
+                failures.append("iOS Simulator manifest executable does not match")
+
+        return ArtifactVerification(
+            "ios_simulator_zip",
+            not failures,
+            digest,
+            tuple(checks),
+            tuple(failures),
+        )
 
     def verify_ipa(self, artifact: Path, manifest: Path | None) -> ArtifactVerification:
         checks: list[str] = []
