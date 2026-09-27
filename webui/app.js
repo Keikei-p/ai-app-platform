@@ -61,16 +61,20 @@ async function loadProjects(){
 }
 async function showProject(slug){
   const data=await api('/api/v1/projects/'+encodeURIComponent(slug));
-  const card=data.card||{};const readiness=data.readiness||{};const gaps=(data.gaps||{}).items||[];const evaluation=data.evaluation||{};const release=data.release_manager||{};const visual=data.visual_design||{};
+  const card=data.card||{};const readiness=data.readiness||{};const gaps=(data.gaps||{}).items||[];const evaluation=data.evaluation||{};const release=data.release_manager||{};const visual=data.visual_design||{};const latestRun=(data.agent_runs||[])[0]||null;
   const visualBlock=visual.status==='reviewed'
     ? `<div class="visual-review-card"><div class="visual-review-head"><strong>Vision Design</strong><span>${visual.score}/100</span></div><p>${esc(visual.summary||'')}</p><div class="visual-shots">
         ${['mobile.png','tablet.png','desktop.png'].map(name=>`<figure><img src="/api/v1/projects/${encodeURIComponent(slug)}/screenshots/${name}" alt="${name} screenshot"><figcaption>${name.replace('.png','')}</figcaption></figure>`).join('')}
       </div>${(visual.findings||[]).length?`<div class="visual-findings"><strong>指摘</strong><p>${(visual.findings||[]).map(esc).join('<br>')}</p></div>`:''}</div>`
     : `<div class="plan-step"><div class="step-no">◉</div><div><strong>Vision Design</strong><p>${esc(visual.summary||'スクリーンショット評価はまだありません')}</p></div></div>`;
+  const traceBlock=latestRun
+    ? `<div class="execution-trace"><div class="execution-trace-head"><strong>最新Aivy Execution Trace</strong><span>${esc(latestRun.status||'')}</span></div>${(latestRun.steps||[]).map(x=>`<div class="trace-row ${esc(x.status||'')}"><b>${esc(x.step_id||x.action||'step')}</b><span>${esc(x.status||'')}</span><p>${esc(x.summary||'')}</p></div>`).join('')}</div>`
+    : '<div class="plan-step"><div class="step-no">◎</div><div><strong>Execution Trace</strong><p>まだBuild実行履歴はありません。</p></div></div>';
   $('#agentPlan').innerHTML=`
     <div class="data-card"><h3>${esc(card.name||slug)}</h3><div class="meta"><span>${esc(card.status)}</span><span>${esc(card.quality)}</span>${evaluation.score!=null?`<span>AI評価 ${evaluation.score}/100</span>`:''}</div></div>
     <div class="health-actions"><button class="agent-action secondary" id="runHealthCheck" type="button">Aivy再点検</button><span id="healthStatus" class="meta">Tests / Design / Securityを再確認</span></div>
     ${visualBlock}
+    ${traceBlock}
     <div class="plan-step"><div class="step-no">✓</div><div><strong>プレビュー</strong><p>${readiness.preview_ready?'可能':'まだ準備が必要'}</p></div></div>
     <div class="plan-step"><div class="step-no">⇩</div><div><strong>配布状態</strong><p>${(release.targets||[]).length?(release.targets||[]).map(x=>esc(x.target)+': '+esc(x.artifact_status)+' / '+esc(x.distribution_status)).join('<br>'):'Release Manager未実行'}</p></div></div>
     <div class="plan-step"><div class="step-no">!</div><div><strong>未完了</strong><p>${gaps.length?gaps.map(x=>esc(x.reason||'')).join('<br>'):'大きな未完了項目なし'}</p></div></div>`;
