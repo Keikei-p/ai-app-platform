@@ -720,6 +720,7 @@ class PlatformService:
             "web_build": result.web_build,
             "android_build": result.android_build,
             "ios_source_build": result.ios_source_build,
+            "ios_simulator_build": result.ios_simulator_build,
             "release_report": result.release_report,
         }
 
