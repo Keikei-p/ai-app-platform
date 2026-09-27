@@ -231,6 +231,7 @@ async function runCouncil(){
     });
     const council=report.council||{};
     const execution=report.execution||{};
+    const evidence=report.evidence_review||{};
     if(council.status==='not_connected'){
       target.innerHTML='<div class="council-note">AIモデル未接続のため専門AI会議・Tool実行は行っていません。</div>';
       return;
@@ -251,6 +252,7 @@ async function runCouncil(){
         (executed.length?executed.map(x=>esc(x.specialist)+' → '+esc(x.tool_name)+' ✓').join('<br>'):'実行対象なし')+
         (skipped.length?'<br><span class="muted">保留/拒否: '+skipped.map(x=>esc(x.tool_name)+' ('+esc(x.status)+')').join(' / ')+'</span>':'')+
       '</p></div>'+
+      '<div class="evidence-review '+esc(evidence.evidence_state||'partial')+'"><strong>実Evidence判定: '+esc(evidence.evidence_state||'partial')+'</strong><p>'+esc(evidence.summary||'')+'</p></div>'+
       '<div class="council-final"><strong>まとめ</strong><p>'+esc(council.summary||'')+'</p></div></div>';
   }catch(e){
     target.innerHTML='<div class="council-note error">専門AI＋安全Toolを実行できませんでした: '+esc(e.message)+'</div>';
