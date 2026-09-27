@@ -494,6 +494,19 @@ class ProjectCatalog:
                 continue
         return out
 
+    def screenshot_path(self, slug: str, name: str) -> Path:
+        if name not in {"mobile.png", "tablet.png", "desktop.png"}:
+            raise FileNotFoundError("screenshot is not available")
+        project_dir = safe_child(WORKSPACE_DIR, slug).resolve()
+        path = (project_dir / ".aiapp" / "screenshots" / name).resolve()
+        try:
+            path.relative_to(project_dir)
+        except ValueError as exc:
+            raise ValueError("screenshot path escapes project") from exc
+        if not path.is_file() or path.is_symlink():
+            raise FileNotFoundError("screenshot is not available")
+        return path
+
     def artifact_path(self, slug: str, artifact_id: str) -> Path:
         choices = {x.artifact_id: x for x in self.artifacts(slug)}
         record = choices.get(artifact_id)
