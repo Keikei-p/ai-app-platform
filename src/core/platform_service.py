@@ -514,6 +514,26 @@ class PlatformService:
         preflight_pipeline = dict(result.pipeline_report or {})
         preflight_pipeline["agent_preflight"] = preflight.to_dict()
         result.pipeline_report = preflight_pipeline
+
+        postflight = self.project_health_checker.run(
+            slug,
+            run_id=plan.run_id,
+        )
+        postflight_path = self.project_health_checker.save(
+            project_dir,
+            postflight,
+        )
+        postflight_pipeline = dict(result.pipeline_report or {})
+        postflight_pipeline["agent_postflight"] = postflight.to_dict()
+        postflight_pipeline["agent_postflight_path"] = postflight_path.relative_to(project_dir).as_posix()
+        result.pipeline_report = postflight_pipeline
+        if result.ok and postflight.status != "pass":
+            result.ok = False
+            result.message = (
+                "AICore完了後の独立PostflightでTests / Design / Securityの"
+                "再検証に失敗したため、完成扱いを停止しました。"
+            )
+
         trace = self.build_execution_tracer.create(plan, result, project_dir)
         pipeline_report = dict(result.pipeline_report or {})
         pipeline_report["agent_execution_trace"] = trace.to_dict()
