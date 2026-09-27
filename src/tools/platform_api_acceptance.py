@@ -255,6 +255,8 @@ def main() -> int:
             raise RuntimeError("reviewed tests.run tool is not executable")
         if tool_map.get("release.publish", {}).get("executable"):
             raise RuntimeError("release.publish unexpectedly has an executor binding")
+        if not tool_map.get("package.build", {}).get("executable"):
+            raise RuntimeError("quality-gated package.build is not connected")
 
         names = {x.get("name") for x in agents.get("agents") or []}
         if not {"coordinator", "coding", "design", "test", "security", "build"}.issubset(names):
