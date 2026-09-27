@@ -169,6 +169,51 @@ class AIChatEngine:
             return self._openai_reply(model, key, history, user_text, system_instruction)
         return self._gemini_reply(model, key, history, user_text, system_instruction)
 
+    def vision_reply(
+        self,
+        image_paths: list[Path],
+        prompt: str,
+        system_instruction: str,
+    ) -> str:
+        cfg = self.settings()
+        provider = cfg["provider"]
+        model = cfg["model"]
+        key = self._key(provider)
+        if provider not in {"openai", "gemini"}:
+            raise RuntimeError("AIモデルが未接続です")
+        if not key:
+            raise RuntimeError("APIキーが未設定です")
+        images = self._prepare_images(image_paths)
+        if provider == "openai":
+            return self._openai_vision_reply(model, key, images, prompt, system_instruction)
+        return self._gemini_vision_reply(model, key, images, prompt, system_instruction)
+
+    @staticmethod
+    def _prepare_images(image_paths: list[Path]) -> list[tuple[str, str]]:
+        if not image_paths:
+            raise ValueError("at least one image is required")
+        if len(image_paths) > 3:
+            raise ValueError("at most three screenshots can be reviewed at once")
+        mime_by_suffix = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+        }
+        rows: list[tuple[str, str]] = []
+        for path in image_paths:
+            path = Path(path)
+            mime = mime_by_suffix.get(path.suffix.lower())
+            if mime is None:
+                raise ValueError("unsupported screenshot format")
+            if not path.is_file() or path.is_symlink():
+                raise ValueError("screenshot file is missing or unsafe")
+            raw = path.read_bytes()
+            if len(raw) > 5 * 1024 * 1024:
+                raise ValueError("screenshot exceeds 5MB limit")
+            rows.append((mime, base64.b64encode(raw).decode("ascii")))
+        return rows
+
     @staticmethod
     def _request_json(url: str, headers: dict[str, str], payload: dict, timeout: int = 60) -> dict:
         request = urllib.request.Request(
@@ -217,6 +262,70 @@ class AIChatEngine:
         if pieces:
             return "\n".join(pieces).strip()
         raise RuntimeError("OpenAI response did not contain text")
+
+    def _openai_vision_reply(
+        self,
+        model: str,
+        key: str,
+        images: list[tuple[str, str]],
+        prompt: str,
+        system_instruction: str,
+    ) -> str:
+        content: list[dict] = [{"type": "input_text", "text": prompt}]
+        for mime, encoded in images:
+            content.append({
+                "type": "input_image",
+                "image_url": f"data:{mime};base64,{encoded}",
+                "detail": "auto",
+            })
+        data = self._request_json(
+            "https://api.openai.com/v1/responses",
+            {"Authorization": f"Bearer {key}"},
+            {
+                "model": model,
+                "instructions": system_instruction,
+                "input": [{"role": "user", "content": content}],
+            },
+        )
+        if isinstance(data.get("output_text"), str) and data["output_text"].strip():
+            return data["output_text"].strip()
+        pieces: list[str] = []
+        for item in data.get("output") or []:
+            for part in item.get("content") or []:
+                if part.get("type") == "output_text" and part.get("text"):
+                    pieces.append(str(part["text"]))
+        if pieces:
+            return "\n".join(pieces).strip()
+        raise RuntimeError("OpenAI vision response did not contain text")
+
+    def _gemini_vision_reply(
+        self,
+        model: str,
+        key: str,
+        images: list[tuple[str, str]],
+        prompt: str,
+        system_instruction: str,
+    ) -> str:
+        parts: list[dict] = [{"text": prompt}]
+        for mime, encoded in images:
+            parts.append({"inlineData": {"mimeType": mime, "data": encoded}})
+        data = self._request_json(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            {"x-goog-api-key": key},
+            {
+                "systemInstruction": {"parts": [{"text": system_instruction}]},
+                "contents": [{"role": "user", "parts": parts}],
+                "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1800},
+            },
+        )
+        pieces: list[str] = []
+        for candidate in data.get("candidates") or []:
+            for part in (candidate.get("content") or {}).get("parts") or []:
+                if part.get("text"):
+                    pieces.append(str(part["text"]))
+        if pieces:
+            return "\n".join(pieces).strip()
+        raise RuntimeError("Gemini vision response did not contain text")
 
     def _gemini_reply(self, model: str, key: str, history: list[dict], user_text: str, system_instruction: str) -> str:
         contents = []
