@@ -33,7 +33,7 @@ class SpecialistAgentRegistry:
                 "Coordinator AI",
                 "Understand the user's goal, delegate bounded work, combine evidence and report uncertainty.",
                 "reasoning",
-                ("project.inspect",),
+                ("project.inspect", "evolution.compare"),
                 ("plan", "report"),
             ),
             SpecialistAgent(
