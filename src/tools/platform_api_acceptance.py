@@ -50,6 +50,8 @@ def main() -> int:
             raise RuntimeError("user-triggered specialist council control is missing")
         if "Aivy自律点検" not in web_js or "/api/v1/agent/run-safe" not in web_js:
             raise RuntimeError("safe agent execution control is missing from web UI")
+        if "loadKnowledgeSummary" not in web_js or "/api/v1/knowledge/staged" not in web_js:
+            raise RuntimeError("staged knowledge visibility is missing from web UI")
 
         status, data = request(port, "GET", "/api/v1/status")
         if status != 200 or not data.get("capabilities", {}).get("agent_planning"):
@@ -312,6 +314,9 @@ def main() -> int:
         )
         if status != 200 or candidate_row.get("trust_level") != "candidate":
             raise RuntimeError("official research could not enter candidate stage")
+        status, staged = request(port, "GET", "/api/v1/knowledge/staged?trust=candidate")
+        if status != 200 or knowledge_id not in {str(x.get("knowledge_id") or "") for x in staged.get("knowledge") or []}:
+            raise RuntimeError("candidate knowledge was not visible in staged knowledge endpoint")
         status, rejected_verify = request(
             port,
             "POST",
