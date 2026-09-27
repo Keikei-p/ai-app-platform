@@ -67,7 +67,7 @@ def main() -> int:
             for forbidden in ("業務アプリ", "予約アプリ", "相談から"):
                 if forbidden in visible_copy:
                     raise AssertionError(f"legacy category choice is still visible: {forbidden}")
-            if "つくりたいものを、話すだけ。" not in visible_copy:
+            if "何を作りたいですか？" not in visible_copy:
                 raise AssertionError("AI-first landing headline is missing")
             if app.preview_button.winfo_manager():
                 raise AssertionError("preview action should be hidden before a project exists")
