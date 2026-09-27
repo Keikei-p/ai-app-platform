@@ -20,6 +20,7 @@ from .knowledge_store import VerifiedKnowledgeStore
 from .research_guard import ResearchIntake
 from .specialist_runtime import SpecialistRuntime
 from .llm_chat import AIChatEngine
+from .aivy_identity import AIVY
 
 
 class PlatformService:
@@ -51,6 +52,7 @@ class PlatformService:
     def status(self) -> dict[str, Any]:
         return {
             "service": "ai-app-platform",
+            "identity": AIVY.to_dict(),
             "architecture": "local-first-core-service",
             "project_count": len(list_projects()),
             "capabilities": {
