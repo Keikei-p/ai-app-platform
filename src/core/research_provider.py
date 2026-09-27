@@ -13,6 +13,16 @@ from .research_guard import ResearchGuard
 
 
 MAX_RESEARCH_BYTES = 512 * 1024
+class _GuardedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def __init__(self, validator: Callable[[str], None]):
+        super().__init__()
+        self._validator = validator
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        self._validator(str(newurl))
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 ALLOWED_CONTENT_TYPES = (
     "text/plain",
     "text/html",
@@ -71,7 +81,7 @@ class GuardedResearchProvider:
     ):
         self.guard = guard or ResearchGuard()
         self._resolver = resolver or self._resolve_addresses
-        self._opener = opener or self._default_open
+        self._opener = opener
 
     def fetch(self, url: str, *, timeout: int = 15) -> ResearchFetchResult:
         clean_url = str(url or "").strip()
@@ -85,7 +95,8 @@ class GuardedResearchProvider:
             },
             method="GET",
         )
-        response = self._opener(request, max(1, min(int(timeout), 30)))
+        open_fn = self._opener or self._safe_open
+        response = open_fn(request, max(1, min(int(timeout), 30)))
         try:
             final_url = str(response.geturl() or clean_url)
             self._validate_url(final_url)
@@ -171,9 +182,9 @@ class GuardedResearchProvider:
                 values.append(address)
         return values
 
-    @staticmethod
-    def _default_open(request: urllib.request.Request, timeout: int):
-        return urllib.request.urlopen(request, timeout=timeout)
+    def _safe_open(self, request: urllib.request.Request, timeout: int):
+        opener = urllib.request.build_opener(_GuardedRedirectHandler(self._validate_url))
+        return opener.open(request, timeout=timeout)
 
     @staticmethod
     def _normalize_text(text: str, content_type: str) -> str:
