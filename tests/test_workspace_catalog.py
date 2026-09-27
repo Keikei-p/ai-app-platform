@@ -59,6 +59,34 @@ class ProjectCatalogTests(unittest.TestCase):
             self.assertEqual(rows[0].label, "Web ZIP")
             self.assertTrue(rows[0].path.endswith("demo-web.zip"))
 
+    def test_requested_ios_is_visible_as_pending_not_downloadable(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = root / "demo"
+            project.mkdir()
+            (project / "project.json").write_text(
+                json.dumps({"name": "Demo", "slug": "demo", "targets": ["web", "ios"]}),
+                encoding="utf-8",
+            )
+            (project / "app_spec.json").write_text(
+                json.dumps({"project_name": "Demo", "slug": "demo", "targets": ["web", "ios"]}),
+                encoding="utf-8",
+            )
+            (project / "implementation_gaps.json").write_text(
+                json.dumps({"items": [{
+                    "key": "ios_binary",
+                    "reason": "IPAはまだ生成されていません。",
+                    "next_step": "Apple署名を準備する。",
+                }]}),
+                encoding="utf-8",
+            )
+            with patch("src.core.workspace_catalog.WORKSPACE_DIR", root):
+                rows = ProjectCatalog().delivery_options("demo")
+            ios = next(x for x in rows if x.target == "iOS")
+            self.assertFalse(ios.available)
+            self.assertEqual(ios.status, "準備中")
+            self.assertIn("Apple署名", ios.guide)
+
     def test_missing_artifact_cannot_be_exported(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
