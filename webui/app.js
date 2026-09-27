@@ -219,22 +219,26 @@ function showBuildApproval(instruction){
 async function runCouncil(){
   const button=$('#runCouncil');const target=$('#councilResult');
   if(!button||!target||state.busy)return;
-  button.disabled=true;button.textContent='専門AIが検討中…';
+  button.disabled=true;button.textContent='専門AI＋安全Tool確認中…';
   try{
-    const report=await api('/api/v1/agent/council',{
+    const report=await api('/api/v1/agent/safe-run',{
       method:'POST',
       body:JSON.stringify({
         goal:state.pendingInstruction||state.lastGoal||'',
         project_slug:state.currentThread?.project_slug||null,
-        context:{source:'web-user-requested-council'}
+        context:{source:'web-user-requested-safe-agent-run'}
       })
     });
-    if(report.status==='not_connected'){
-      target.innerHTML='<div class="council-note">AIモデル未接続のため専門AI会議は実行していません。</div>';
+    const council=report.council||{};
+    const execution=report.execution||{};
+    if(council.status==='not_connected'){
+      target.innerHTML='<div class="council-note">AIモデル未接続のため専門AI会議・Tool実行は行っていません。</div>';
       return;
     }
-    const turns=report.turns||[];
-    target.innerHTML='<div class="council-report"><div class="council-head"><strong>Aivy専門AI会議</strong><span>'+esc(report.status)+'</span></div>'+
+    const turns=council.turns||[];
+    const executed=execution.executed||[];
+    const skipped=execution.skipped||[];
+    target.innerHTML='<div class="council-report"><div class="council-head"><strong>Aivy専門AI会議＋安全Tool</strong><span>'+esc(council.status)+'</span></div>'+
       turns.map(x=>{
         const r=x.result||{};
         const findings=(r.findings||[]).slice(0,3);
@@ -243,9 +247,13 @@ async function runCouncil(){
           ((r.uncertainties||[]).length?'<p class="muted">不確実: '+(r.uncertainties||[]).slice(0,2).map(esc).join(' / ')+'</p>':'')+
           '</details>';
       }).join('')+
-      '<div class="council-final"><strong>まとめ</strong><p>'+esc(report.summary||'')+'</p></div></div>';
+      '<div class="council-tools"><strong>安全Tool実行</strong><p>'+
+        (executed.length?executed.map(x=>esc(x.specialist)+' → '+esc(x.tool_name)+' ✓').join('<br>'):'実行対象なし')+
+        (skipped.length?'<br><span class="muted">保留/拒否: '+skipped.map(x=>esc(x.tool_name)+' ('+esc(x.status)+')').join(' / ')+'</span>':'')+
+      '</p></div>'+
+      '<div class="council-final"><strong>まとめ</strong><p>'+esc(council.summary||'')+'</p></div></div>';
   }catch(e){
-    target.innerHTML='<div class="council-note error">専門AI会議を実行できませんでした: '+esc(e.message)+'</div>';
+    target.innerHTML='<div class="council-note error">専門AI＋安全Toolを実行できませんでした: '+esc(e.message)+'</div>';
   }finally{
     button.disabled=false;button.textContent='専門AIで検討';
   }
