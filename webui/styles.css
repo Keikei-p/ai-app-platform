@@ -89,3 +89,9 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 
 .council-tools{padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
 .council-tools p{font-size:12px;line-height:1.6;color:var(--muted);margin:7px 0 0}
+
+
+.evidence-review{padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--panel)}
+.evidence-review p{font-size:12px;line-height:1.6;color:var(--muted);margin:7px 0 0}
+.evidence-review.verified{border-color:#4f9b6b}
+.evidence-review.failed{border-color:#d05b52}
