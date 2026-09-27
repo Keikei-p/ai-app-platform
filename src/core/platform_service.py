@@ -498,7 +498,22 @@ class PlatformService:
             source="agent-orchestrator",
         )
 
+        preflight = self.agent_plan_runner.run_preflight(
+            plan,
+            project_dir=project_dir,
+        )
+        ledger.record(
+            run_id=plan.run_id,
+            stage="inspect",
+            status="pass",
+            summary="project inspection and Verified Knowledge preflight completed",
+            source="agent-plan-runner",
+        )
+
         result = self.core.execute(project_name, slug, project_dir, instruction, progress)
+        preflight_pipeline = dict(result.pipeline_report or {})
+        preflight_pipeline["agent_preflight"] = preflight.to_dict()
+        result.pipeline_report = preflight_pipeline
         trace = self.build_execution_tracer.create(plan, result, project_dir)
         pipeline_report = dict(result.pipeline_report or {})
         pipeline_report["agent_execution_trace"] = trace.to_dict()
