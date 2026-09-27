@@ -24,8 +24,8 @@ class AgentToolDefinition:
 class AgentToolRegistry:
     """Explicit allowlist of agent capabilities.
 
-    Registry entries are metadata/contracts only. Actual execution stays inside
-    reviewed platform engines rather than model-created command strings.
+    Registry entries are metadata/contracts only. A separate reviewed executor
+    may bind a strict subset to Python callables; models never provide command strings.
     """
 
     def __init__(self):
