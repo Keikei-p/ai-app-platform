@@ -61,7 +61,7 @@ async function loadProjects(){
 }
 async function showProject(slug){
   const data=await api('/api/v1/projects/'+encodeURIComponent(slug));
-  const card=data.card||{};const readiness=data.readiness||{};const gaps=(data.gaps||{}).items||[];const evaluation=data.evaluation||{};const release=data.release_manager||{};const visual=data.visual_design||{};const certificate=data.development_certificate||{};const integrity=data.certificate_integrity||{};const latestRun=(data.agent_runs||[])[0]||null;
+  const card=data.card||{};const readiness=data.readiness||{};const gaps=(data.gaps||{}).items||[];const evaluation=data.evaluation||{};const release=data.release_manager||{};const visual=data.visual_design||{};const certificate=data.development_certificate||{};const integrity=data.certificate_integrity||{};const latestRun=data.latest_build_trace||(data.agent_runs||[])[0]||null;
   const visualBlock=visual.status==='reviewed'
     ? `<div class="visual-review-card"><div class="visual-review-head"><strong>Vision Design</strong><span>${visual.score}/100</span></div><p>${esc(visual.summary||'')}</p><div class="visual-shots">
         ${['mobile.png','tablet.png','desktop.png'].map(name=>`<figure><img src="/api/v1/projects/${encodeURIComponent(slug)}/screenshots/${name}" alt="${name} screenshot"><figcaption>${name.replace('.png','')}</figcaption></figure>`).join('')}
