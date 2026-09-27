@@ -351,6 +351,13 @@ class ProjectCatalog:
         version_count = len([x for x in versions_dir.iterdir() if x.is_dir()]) if versions_dir.is_dir() else 0
         artifacts = self.artifacts(slug)
         status, quality = self._status(project_dir, readiness, bool(artifacts))
+        certificate_path = project_dir / ".aiapp" / "reports" / "development_certificate.json"
+        if certificate_path.is_file():
+            from .completion_certificate import DevelopmentCertificateBuilder
+            integrity = DevelopmentCertificateBuilder().verify_saved(project_dir)
+            if not integrity.valid:
+                status = "Evidence要確認"
+                quality = "BLOCKED"
         updated = self._updated_at(project_dir)
         return ProjectCard(
             name=str(meta.get("name") or spec.get("project_name") or slug),
