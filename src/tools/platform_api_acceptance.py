@@ -47,6 +47,8 @@ def main() -> int:
         status, data = request(port, "GET", "/api/v1/status")
         if status != 200 or not data.get("capabilities", {}).get("agent_planning"):
             raise RuntimeError("status endpoint did not expose platform capabilities")
+        if not data.get("capabilities", {}).get("specialist_council"):
+            raise RuntimeError("specialist council capability is missing")
         if (data.get("identity") or {}).get("name") != "Aivy":
             raise RuntimeError("Aivy identity was not exposed by platform core")
         csrf = str(data.get("csrf") or "")
@@ -87,6 +89,18 @@ def main() -> int:
         )
         if status != 200 or consultation.get("status") not in {"not_connected", "ok"}:
             raise RuntimeError("specialist consultation endpoint failed")
+
+        status, council = request(
+            port,
+            "POST",
+            "/api/v1/agent/council",
+            {"goal": "design and test a secure todo app", "context": {"source": "acceptance"}},
+            csrf,
+        )
+        if status != 200 or council.get("status") not in {"not_connected", "ok"}:
+            raise RuntimeError("specialist council endpoint failed")
+        if council.get("advisory_only") is not True:
+            raise RuntimeError("specialist council unexpectedly gained execution authority")
 
         status, knowledge = request(port, "GET", "/api/v1/knowledge")
         if status != 200 or not isinstance(knowledge.get("knowledge"), list):
