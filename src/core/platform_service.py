@@ -18,6 +18,7 @@ from .specialist_agents import SpecialistAgentRegistry
 from .model_router import ModelRouter
 from .knowledge_store import VerifiedKnowledgeStore
 from .research_guard import ResearchIntake
+from .research_provider import GuardedResearchProvider
 from .specialist_runtime import SpecialistRuntime
 from .specialist_council import SpecialistCouncil
 from .llm_chat import AIChatEngine
@@ -43,6 +44,7 @@ class PlatformService:
         self.model_router = ModelRouter(self.ai_engine)
         self.knowledge = VerifiedKnowledgeStore()
         self.research = ResearchIntake(self.knowledge)
+        self.research_provider = GuardedResearchProvider()
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -68,6 +70,7 @@ class PlatformService:
                 "registered_agent_tools": len(self.tools.list()),
                 "specialist_agents": len(self.specialists.list()),
                 "verified_knowledge": True,
+                "guarded_web_research": True,
                 "model_router": True,
                 "specialist_consultation": True,
                 "specialist_council": True,
@@ -136,6 +139,9 @@ class PlatformService:
             statement=statement,
             sources=sources,
         ).to_dict()
+
+    def fetch_research_source(self, url: str) -> dict[str, Any]:
+        return self.research_provider.fetch(url).to_dict()
 
     def list_project_cards(self) -> list[dict[str, Any]]:
         return [asdict(x) for x in self.catalog.list_cards()]
