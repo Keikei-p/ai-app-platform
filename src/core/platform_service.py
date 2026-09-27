@@ -41,11 +41,6 @@ class PlatformService:
         self.model_router = ModelRouter(self.ai_engine)
         self.knowledge = VerifiedKnowledgeStore()
         self.research = ResearchIntake(self.knowledge)
-        self.specialist_runtime = SpecialistRuntime(
-            engine=self.ai_engine,
-            registry=self.specialists,
-            router=self.model_router,
-        )
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -84,7 +79,12 @@ class PlatformService:
         task: str,
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        return self.specialist_runtime.consult(
+        runtime = SpecialistRuntime(
+            engine=self.ai_engine,
+            registry=self.specialists,
+            router=self.model_router,
+        )
+        return runtime.consult(
             specialist_name,
             task,
             context or {},
