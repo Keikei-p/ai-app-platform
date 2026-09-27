@@ -378,6 +378,7 @@ class ProjectCatalog:
         release_manager = self._json(project_dir / ".aiapp" / "reports" / "release_manager.json")
         development_certificate = self._json(project_dir / ".aiapp" / "reports" / "development_certificate.json")
         agent_runs = self._agent_runs(project_dir)
+        latest_build_trace = self._latest_build_trace(project_dir)
         try:
             from .code_vault import CodeVault
             versions = [asdict(x) for x in CodeVault().list_versions(slug)[:30]]
@@ -400,11 +401,50 @@ class ProjectCatalog:
             "release_manager": release_manager,
             "development_certificate": development_certificate,
             "agent_runs": agent_runs,
+            "latest_build_trace": latest_build_trace,
             "gaps": self._json(project_dir / "implementation_gaps.json"),
             "versions": versions,
             "audit": [dict(x) for x in audit],
             "artifacts": [asdict(x) for x in self.artifacts(slug)],
         }
+
+    def _latest_build_trace(self, project_dir: Path) -> dict[str, Any] | None:
+        root = project_dir / ".aiapp" / "agent" / "runs"
+        if not root.is_dir():
+            return None
+        candidates = [
+            path for path in root.glob("*-build.json")
+            if path.is_file() and not path.is_symlink()
+        ]
+        candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+        for path in candidates:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    continue
+                return {
+                    "run_id": str(data.get("run_id") or ""),
+                    "status": str(data.get("status") or ""),
+                    "created_at": str(data.get("created_at") or ""),
+                    "history_path": str(
+                        data.get("history_path")
+                        or path.relative_to(project_dir).as_posix()
+                    ),
+                    "steps": [
+                        {
+                            "step_id": str(row.get("step_id") or ""),
+                            "action": str(row.get("action") or ""),
+                            "tool_name": row.get("tool_name"),
+                            "status": str(row.get("status") or ""),
+                            "summary": str(row.get("summary") or "")[:1200],
+                        }
+                        for row in data.get("steps") or []
+                        if isinstance(row, dict)
+                    ],
+                }
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+        return None
 
     def _agent_runs(self, project_dir: Path, limit: int = 10) -> list[dict[str, Any]]:
         root = project_dir / ".aiapp" / "agent" / "runs"
