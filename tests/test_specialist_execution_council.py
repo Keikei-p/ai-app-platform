@@ -1,5 +1,7 @@
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from src.core.agent_tool_executor import AgentToolExecution
 from src.core.agent_tools import AgentToolRegistry
@@ -133,6 +135,31 @@ class SpecialistExecutionCouncilTests(unittest.TestCase):
                 executor=executor,
             ).run("publish", "demo", roles=("release",))
 
+
+    def test_each_execution_council_run_has_unique_audit_id(self):
+        executor = FakeExecutor()
+        council = SpecialistExecutionCouncil(
+            engine=EvidenceSeekingEngine(),
+            executor=executor,
+        )
+        first = council.run("inspect demo", "demo", roles=("architect",))
+        second = council.run("inspect demo", "demo", roles=("architect",))
+        self.assertNotEqual(first.run_id, second.run_id)
+        self.assertTrue(first.run_id.startswith("council-"))
+
+    def test_persisted_history_omits_raw_tool_results(self):
+        executor = FakeExecutor()
+        report = SpecialistExecutionCouncil(
+            engine=EvidenceSeekingEngine(),
+            executor=executor,
+        ).run("password=super-secret-value inspect demo", "demo", roles=("architect",))
+        with tempfile.TemporaryDirectory() as td:
+            path = SpecialistExecutionCouncil.save(Path(td), report)
+            text = path.read_text(encoding="utf-8")
+            self.assertIn(report.run_id, text)
+            self.assertNotIn("super-secret-value", text)
+            self.assertNotIn('"result"', text)
+            self.assertIn("[REDACTED]", text)
 
 if __name__ == "__main__":
     unittest.main()
