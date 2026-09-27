@@ -108,6 +108,13 @@ def main() -> int:
         if status != 400 or "approval" not in str(denied_build.get("error") or "").lower():
             raise RuntimeError("Web build endpoint bypassed explicit approval")
 
+        status, routes = request(port, "GET", "/api/v1/models/routes")
+        if status != 200 or len(routes.get("routes") or []) < 6:
+            raise RuntimeError("model route endpoint failed")
+        capabilities = {x.get("capability") for x in routes.get("routes") or []}
+        if not {"coding", "vision", "research", "reasoning"}.issubset(capabilities):
+            raise RuntimeError("required model routes are missing")
+
         status, agents = request(port, "GET", "/api/v1/agents")
         if status != 200 or len(agents.get("agents") or []) < 8:
             raise RuntimeError("specialist agent endpoint failed")
