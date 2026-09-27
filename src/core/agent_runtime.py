@@ -206,6 +206,7 @@ class AgentOrchestrator:
             "policy": {
                 "arbitrary_shell": False,
                 "max_repair_attempts": 2,
+                "max_tool_calls": 16,
                 "human_approval_for_external_actions": True,
                 "evidence_required_for_completion": True,
                 "untrusted_web_never_directly_verified": True,
