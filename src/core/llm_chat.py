@@ -84,6 +84,7 @@ class AIChatEngine:
     def __init__(self, settings_path: Path | None = None):
         self.settings_path = settings_path or SETTINGS_PATH
         self._session_key = ""
+        self._session_keys: dict[str, str] = {}
 
     def _read(self) -> dict:
         if not self.settings_path.exists():
@@ -104,7 +105,57 @@ class AIChatEngine:
     def settings(self) -> dict:
         data = self._read()
         provider = str(data.get("ai_provider") or "none")
-        model = str(data.get("ai_model") or self.DEFAULT_MODELS.get(provider, ""))
+        profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+        profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
+        model = str(
+            data.get("ai_model")
+            or profile.get("model")
+            or self.DEFAULT_MODELS.get(provider, "")
+        )
+        routes = data.get("ai_routes") if isinstance(data.get("ai_routes"), dict) else {}
+        return {"provider": provider, "model": model, "routes": routes}
+
+    def provider_settings(self, provider: str) -> dict:
+        provider = provider.strip().lower()
+        data = self._read()
+        profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+        profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
+        model = str(profile.get("model") or self.DEFAULT_MODELS.get(provider, ""))
+        return {"provider": provider, "model": model}
+
+    def configure_route(self, capability: str, provider: str, model: str = "") -> None:
+        capability = capability.strip().lower()
+        provider = provider.strip().lower()
+        allowed_capabilities = {"fast", "reasoning", "coding", "vision", "research", "security"}
+        if capability not in allowed_capabilities:
+            raise ValueError("unsupported model-route capability")
+        if provider not in {"none", "openai", "gemini"}:
+            raise ValueError("unsupported provider")
+        data = self._read()
+        routes = data.get("ai_routes") if isinstance(data.get("ai_routes"), dict) else {}
+        if provider == "none":
+            routes.pop(capability, None)
+        else:
+            profile = self.provider_settings(provider)
+            routes[capability] = {
+                "provider": provider,
+                "model": model.strip() or str(profile.get("model") or ""),
+            }
+        data["ai_routes"] = routes
+        self._write(data)
+
+    def route_config(self, capability: str) -> dict | None:
+        data = self._read()
+        routes = data.get("ai_routes") if isinstance(data.get("ai_routes"), dict) else {}
+        row = routes.get(capability.strip().lower())
+        if not isinstance(row, dict):
+            return None
+        provider = str(row.get("provider") or "").strip().lower()
+        model = str(row.get("model") or "").strip()
+        if provider not in {"openai", "gemini"}:
+            return None
+        if not model:
+            model = self.DEFAULT_MODELS.get(provider, "")
         return {"provider": provider, "model": model}
 
     def configure(self, provider: str, model: str, api_key: str = "", *, remember_key: bool = True) -> None:
@@ -114,15 +165,59 @@ class AIChatEngine:
         data = self._read()
         data["ai_provider"] = provider
         data["ai_model"] = model.strip() or self.DEFAULT_MODELS.get(provider, "")
-        if api_key:
-            self._session_key = api_key.strip()
-            if remember_key and os.name == "nt":
-                data["ai_key_cipher"] = _dpapi_protect(self._session_key)
-            elif not remember_key:
-                data.pop("ai_key_cipher", None)
+        profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+        if provider in {"openai", "gemini"}:
+            profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
+            profile["model"] = data["ai_model"]
+            if api_key:
+                clean_key = api_key.strip()
+                self._session_key = clean_key
+                self._session_keys[provider] = clean_key
+                if remember_key and os.name == "nt":
+                    cipher = _dpapi_protect(clean_key)
+                    profile["key_cipher"] = cipher
+                    data["ai_key_cipher"] = cipher
+                elif not remember_key:
+                    profile.pop("key_cipher", None)
+                    data.pop("ai_key_cipher", None)
+            profiles[provider] = profile
+            data["ai_profiles"] = profiles
         elif provider == "none":
             data.pop("ai_key_cipher", None)
             self._session_key = ""
+        self._write(data)
+
+    def configure_provider(
+        self,
+        provider: str,
+        model: str,
+        api_key: str = "",
+        *,
+        remember_key: bool = True,
+        make_default: bool = False,
+    ) -> None:
+        provider = provider.strip().lower()
+        if provider not in {"openai", "gemini"}:
+            raise ValueError("unsupported provider")
+        data = self._read()
+        profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+        profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
+        profile["model"] = model.strip() or self.DEFAULT_MODELS.get(provider, "")
+        if api_key:
+            clean_key = api_key.strip()
+            self._session_keys[provider] = clean_key
+            if remember_key and os.name == "nt":
+                profile["key_cipher"] = _dpapi_protect(clean_key)
+            elif not remember_key:
+                profile.pop("key_cipher", None)
+        profiles[provider] = profile
+        data["ai_profiles"] = profiles
+        if make_default or str(data.get("ai_provider") or "none") == "none":
+            data["ai_provider"] = provider
+            data["ai_model"] = profile["model"]
+            self._session_key = self._session_keys.get(provider, "")
+            if profile.get("key_cipher"):
+                data["ai_key_cipher"] = profile["key_cipher"]
         self._write(data)
 
     def clear_key(self) -> None:
@@ -136,9 +231,16 @@ class AIChatEngine:
         env = os.environ.get(env_name, "").strip()
         if env:
             return env
-        if self._session_key:
-            return self._session_key
-        cipher = str(self._read().get("ai_key_cipher") or "")
+        if self._session_keys.get(provider):
+            return self._session_keys[provider]
+        data = self._read()
+        profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+        profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
+        cipher = str(profile.get("key_cipher") or "")
+        if not cipher and str(data.get("ai_provider") or "") == provider:
+            if self._session_key:
+                return self._session_key
+            cipher = str(data.get("ai_key_cipher") or "")
         if cipher and os.name == "nt":
             try:
                 return _dpapi_unprotect(cipher)
@@ -146,12 +248,14 @@ class AIChatEngine:
                 return ""
         return ""
 
-    def status(self) -> ChatProviderStatus:
+    def status(self, provider: str | None = None, model: str | None = None) -> ChatProviderStatus:
         cfg = self.settings()
-        provider = cfg["provider"]
-        model = cfg["model"]
+        provider = (provider or str(cfg["provider"])).strip().lower()
+        model = (model or (str(cfg["model"]) if provider == cfg["provider"] else self.provider_settings(provider)["model"])).strip()
         if provider == "none":
             return ChatProviderStatus(provider, model, False, "AIモデル未接続")
+        if provider not in {"openai", "gemini"}:
+            return ChatProviderStatus(provider, model, False, "未対応プロバイダ")
         if not self._key(provider):
             return ChatProviderStatus(provider, model, False, "APIキー未設定")
         return ChatProviderStatus(provider, model, True, f"{provider} / {model}")
@@ -168,6 +272,43 @@ class AIChatEngine:
         if provider == "openai":
             return self._openai_reply(model, key, history, user_text, system_instruction)
         return self._gemini_reply(model, key, history, user_text, system_instruction)
+
+    def reply_routed(
+        self,
+        provider: str,
+        model: str,
+        history: list[dict],
+        user_text: str,
+        system_instruction: str,
+    ) -> str:
+        provider = provider.strip().lower()
+        key = self._key(provider)
+        if provider not in {"openai", "gemini"}:
+            raise RuntimeError("AIモデルが未接続です")
+        if not key:
+            raise RuntimeError("APIキーが未設定です")
+        if provider == "openai":
+            return self._openai_reply(model, key, history, user_text, system_instruction)
+        return self._gemini_reply(model, key, history, user_text, system_instruction)
+
+    def vision_reply_routed(
+        self,
+        provider: str,
+        model: str,
+        image_paths: list[Path],
+        prompt: str,
+        system_instruction: str,
+    ) -> str:
+        provider = provider.strip().lower()
+        key = self._key(provider)
+        if provider not in {"openai", "gemini"}:
+            raise RuntimeError("AIモデルが未接続です")
+        if not key:
+            raise RuntimeError("APIキーが未設定です")
+        images = self._prepare_images(image_paths)
+        if provider == "openai":
+            return self._openai_vision_reply(model, key, images, prompt, system_instruction)
+        return self._gemini_vision_reply(model, key, images, prompt, system_instruction)
 
     def vision_reply(
         self,
