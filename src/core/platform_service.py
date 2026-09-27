@@ -65,6 +65,7 @@ class PlatformService:
             research=self.research_provider,
             projects=self.projects,
             evolution=self.evolution,
+            project_resolver=lambda slug: safe_child(WORKSPACE_DIR, slug),
         )
         self.project_health_checker = ProjectHealthCheck(self.tool_executor)
         self.agent_plan_runner = AgentPlanRunner(self.tool_executor, registry=self.tools)
