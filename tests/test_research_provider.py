@@ -7,11 +7,22 @@ import urllib.request
 
 
 class FakeResponse:
-    def __init__(self, body: bytes, url: str, content_type: str = "text/html; charset=utf-8"):
+    def __init__(
+        self,
+        body: bytes,
+        url: str,
+        content_type: str = "text/html; charset=utf-8",
+        last_modified: str = "",
+        etag: str = "",
+    ):
         self._body = io.BytesIO(body)
         self._url = url
         self.headers = Message()
         self.headers["Content-Type"] = content_type
+        if last_modified:
+            self.headers["Last-Modified"] = last_modified
+        if etag:
+            self.headers["ETag"] = etag
 
     def read(self, size=-1):
         return self._body.read(size)
@@ -38,6 +49,8 @@ class GuardedResearchProviderTests(unittest.TestCase):
             return FakeResponse(
                 b"<html><head><title>Docs</title></head><body><h1>API</h1><p>Use POST /v2/items.</p></body></html>",
                 "https://docs.example.test/api",
+                last_modified="Sun, 27 Sep 2026 12:00:00 GMT",
+                etag='"abc123"',
             )
         provider = GuardedResearchProvider(
             resolver=lambda host: ["93.184.216.34"],
@@ -48,6 +61,9 @@ class GuardedResearchProviderTests(unittest.TestCase):
         self.assertEqual(result.title, "Docs")
         self.assertIn("POST /v2/items", result.content)
         self.assertNotIn("<html>", result.content)
+        self.assertTrue(result.retrieved_at)
+        self.assertEqual(result.last_modified, "Sun, 27 Sep 2026 12:00:00 GMT")
+        self.assertEqual(result.etag, '"abc123"')
 
     def test_prompt_injection_is_quarantined_and_content_hidden(self):
         def opener(request, timeout):
