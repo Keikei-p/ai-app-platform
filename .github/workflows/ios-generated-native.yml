@@ -7,6 +7,8 @@ on:
     paths:
       - "src/core/mobile_generator.py"
       - "src/core/ios_source_packager.py"
+      - "src/core/ios_simulator_packager.py"
+      - "src/core/artifact_verifier.py"
       - "src/core/ai_core.py"
       - "src/core/platform_service.py"
       - "src/core/agent_execution_trace.py"
