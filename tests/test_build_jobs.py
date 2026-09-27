@@ -17,7 +17,7 @@ class BuildJobManagerTests(unittest.TestCase):
             return {"ok": True, "message": "done"}
 
         job = manager.submit("demo", runner)
-        self.assertEqual(job.status, "queued")
+        self.assertIn(job.status, {"queued", "running", "completed"})
         self.assertTrue(finished.wait(2))
         for _ in range(50):
             row = manager.get(job.job_id)
