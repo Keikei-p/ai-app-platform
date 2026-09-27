@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+import json
 
 from .agent_runtime import AgentPlan, AgentStep, EvidenceLedger
 from .agent_tool_executor import AgentToolExecutor
 from .agent_tools import AgentToolRegistry
+from .redaction import redact_sensitive
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,7 @@ class AgentRunReport:
     approval_required: tuple[str, ...]
     steps: tuple[AgentStepExecution, ...]
     arbitrary_shell: bool = False
+    history_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -213,7 +216,11 @@ class AgentPlanRunner:
         else:
             overall = "completed"
 
-        return AgentRunReport(
+        history_path = None
+        if project_dir is not None:
+            history_path = f".aiapp/agent/runs/{plan.run_id}.json"
+
+        report = AgentRunReport(
             run_id=plan.run_id,
             goal=plan.goal,
             project_slug=plan.project_slug,
@@ -223,7 +230,40 @@ class AgentPlanRunner:
             approval_required=tuple(dict.fromkeys(waiting)),
             steps=tuple(rows),
             arbitrary_shell=False,
+            history_path=history_path,
         )
+        if project_dir is not None:
+            self._persist_summary(Path(project_dir), report)
+        return report
+
+    @staticmethod
+    def _persist_summary(project_dir: Path, report: AgentRunReport) -> None:
+        root = Path(project_dir)
+        target = root / ".aiapp" / "agent" / "runs" / f"{report.run_id}.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "run_id": report.run_id,
+            "goal": redact_sensitive(report.goal)[:3000],
+            "project_slug": report.project_slug,
+            "status": report.status,
+            "executed_tools": list(report.executed_tools),
+            "delegated_tools": list(report.delegated_tools),
+            "approval_required": list(report.approval_required),
+            "arbitrary_shell": False,
+            "steps": [
+                {
+                    "step_id": row.step_id,
+                    "action": row.action,
+                    "tool_name": row.tool_name,
+                    "status": row.status,
+                    "summary": redact_sensitive(row.summary)[:1200],
+                }
+                for row in report.steps
+            ],
+        }
+        tmp = target.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(target)
 
     @staticmethod
     def _result_passed(tool_name: str, result: dict[str, Any]) -> bool | None:
