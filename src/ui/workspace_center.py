@@ -34,6 +34,7 @@ class WorkspaceCenter(tk.Toplevel):
         on_open_thread: Callable[[str], None],
         on_open_project: Callable[[str], None],
         on_preview_project: Callable[[str], None],
+        on_restore_project: Callable[[str], None],
         initial_tab: str = "conversations",
     ):
         super().__init__(parent)
@@ -43,6 +44,7 @@ class WorkspaceCenter(tk.Toplevel):
         self.on_open_thread = on_open_thread
         self.on_open_project = on_open_project
         self.on_preview_project = on_preview_project
+        self.on_restore_project = on_restore_project
         self.title("AI App Platform — ライブラリ")
         self.geometry("1060x700")
         self.minsize(760, 520)
@@ -320,6 +322,7 @@ class WorkspaceCenter(tk.Toplevel):
             row.slug,
             on_open_project=self.on_open_project,
             on_preview_project=self.on_preview_project,
+            on_restore_project=self.on_restore_project,
         )
 
     def _update_download_hint(self):
@@ -349,12 +352,13 @@ class WorkspaceCenter(tk.Toplevel):
 
 
 class ProjectDetailWindow(tk.Toplevel):
-    def __init__(self, parent, catalog: ProjectCatalog, slug: str, *, on_open_project, on_preview_project):
+    def __init__(self, parent, catalog: ProjectCatalog, slug: str, *, on_open_project, on_preview_project, on_restore_project):
         super().__init__(parent)
         self.catalog = catalog
         self.slug = slug
         self.on_open_project = on_open_project
         self.on_preview_project = on_preview_project
+        self.on_restore_project = on_restore_project
         self.data = catalog.detail(slug)
         card = self.data["card"]
         self.title(str(card["name"]) + " — アプリ詳細")
@@ -440,6 +444,16 @@ class ProjectDetailWindow(tk.Toplevel):
             if audit else "・まだ作業履歴はありません。"
         )
         self._text_panel(history, "変更とバージョン", history_text)
+        restore_bar = tk.Frame(history, bg="#FFFFFF")
+        restore_bar.pack(fill="x", padx=18, pady=(0, 16))
+        tk.Label(
+            restore_bar,
+            text="以前の状態へ戻す場合も、現在の状態を自動保存してから復元します。",
+            bg="#FFFFFF", fg="#6B7280", font=("Segoe UI", 8)
+        ).pack(side="left")
+        ttk.Button(
+            restore_bar, text="履歴から復元", command=lambda: self.on_restore_project(self.slug)
+        ).pack(side="right")
 
         artifact_rows = self.catalog.artifacts(slug)
         if not artifact_rows:
