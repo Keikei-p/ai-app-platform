@@ -2,6 +2,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from src.core.app_spec import AppSpec
@@ -9,6 +10,11 @@ from src.core.release_manager import ReleaseManager
 
 
 class ReleaseManagerTests(unittest.TestCase):
+    def _write_zip(self, path: Path, files: dict[str, bytes | str]):
+        with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for name, content in files.items():
+                archive.writestr(name, content)
+
     def _spec(self, targets):
         return AppSpec("Release Demo", "release-demo", "demo", "todo", [], targets)
 
@@ -24,8 +30,8 @@ class ReleaseManagerTests(unittest.TestCase):
             folder = root / "artifacts/web"
             folder.mkdir(parents=True)
             artifact = folder / "release-demo-web.zip"
-            artifact.write_bytes(b"zip")
-            digest = hashlib.sha256(b"zip").hexdigest()
+            self._write_zip(artifact, {"index.html": "<!doctype html><title>Demo</title>"})
+            digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
             (folder / "release-demo-web.manifest.json").write_text(
                 json.dumps({"artifact": artifact.name, "sha256": digest}),
                 encoding="utf-8",
@@ -42,7 +48,11 @@ class ReleaseManagerTests(unittest.TestCase):
             self._ready(root)
             folder = root / "artifacts/android"
             folder.mkdir(parents=True)
-            (folder / "release-demo-debug.apk").write_bytes(b"apk")
+            artifact = folder / "release-demo-debug.apk"
+            self._write_zip(artifact, {
+                "AndroidManifest.xml": b"manifest",
+                "classes.dex": b"dex",
+            })
             report = ReleaseManager().assess(root, self._spec(["android"]))
             state = report.targets[0]
             self.assertEqual(state.artifact_status, "debug_apk")
@@ -81,6 +91,36 @@ class ReleaseManagerTests(unittest.TestCase):
             for state in report.targets:
                 self.assertNotEqual(state.distribution_status, "published")
 
+
+    def test_fake_apk_extension_is_not_release_ready(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._ready(root)
+            folder = root / "artifacts/android"
+            folder.mkdir(parents=True)
+            (folder / "release-demo-debug.apk").write_bytes(b"not-an-apk")
+            report = ReleaseManager().assess(root, self._spec(["android"]))
+            state = report.targets[0]
+            self.assertEqual(state.artifact_status, "not_ready")
+            self.assertEqual(state.artifacts, ())
+            self.assertTrue(any("structural" in x.lower() for x in state.blockers))
+
+    def test_fake_web_zip_is_not_release_ready_even_with_matching_sha(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._ready(root)
+            folder = root / "artifacts/web"
+            folder.mkdir(parents=True)
+            artifact = folder / "release-demo-web.zip"
+            artifact.write_bytes(b"not-a-zip")
+            digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+            (folder / "release-demo-web.manifest.json").write_text(
+                json.dumps({"artifact": artifact.name, "sha256": digest}),
+                encoding="utf-8",
+            )
+            report = ReleaseManager().assess(root, self._spec(["web"]))
+            self.assertEqual(report.targets[0].artifact_status, "not_ready")
+            self.assertFalse(report.all_requested_artifacts_ready)
 
 if __name__ == "__main__":
     unittest.main()
