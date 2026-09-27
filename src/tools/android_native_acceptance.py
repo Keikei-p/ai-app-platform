@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -54,6 +55,14 @@ def main() -> int:
         raise RuntimeError("AndroidPackager failed: " + result.detail)
     if not result.artifact.is_file() or result.artifact.stat().st_size <= 0:
         raise RuntimeError("AndroidPackager did not produce an artifact")
+
+    if result.manifest is None or not result.manifest.is_file():
+        raise RuntimeError("AndroidPackager did not persist checksum/build-variant evidence")
+    manifest = json.loads(result.manifest.read_text(encoding="utf-8"))
+    if manifest.get("sha256") != result.sha256 or manifest.get("build_variant") != "debug":
+        raise RuntimeError("Android evidence manifest is inconsistent")
+    if manifest.get("store_ready") is not False or manifest.get("production_signing_verified") is not False:
+        raise RuntimeError("debug APK was incorrectly marked production/store ready")
 
     print(
         f"ANDROID DEBUG APK ACCEPTANCE PASS: {result.artifact} "
