@@ -53,6 +53,16 @@ class ReleaseManagerTests(unittest.TestCase):
                 "AndroidManifest.xml": b"manifest",
                 "classes.dex": b"dex",
             })
+            (folder / "release-demo-debug.manifest.json").write_text(
+                json.dumps({
+                    "artifact": artifact.name,
+                    "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+                    "build_variant": "debug",
+                    "production_signing_verified": False,
+                    "store_ready": False,
+                }),
+                encoding="utf-8",
+            )
             report = ReleaseManager().assess(root, self._spec(["android"]))
             state = report.targets[0]
             self.assertEqual(state.artifact_status, "debug_apk")
