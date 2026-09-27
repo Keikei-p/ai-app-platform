@@ -107,6 +107,40 @@ class DevelopmentCertificateTests(unittest.TestCase):
                 handle.write('{"run_id":"later-run","status":"pass"}\n')
             self.assertTrue(builder.verify_saved(root).valid)
 
+    def test_postflight_evidence_is_hash_bound_when_supplied(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            trace = self._passing_project(root)
+            postflight = self._json(root, ".aiapp/agent/runs/run-1-postflight.json", {
+                "run_id": "run-1",
+                "status": "pass",
+                "tests_passed": True,
+                "design_passed": True,
+                "security_passed": True,
+            })
+            builder = DevelopmentCertificateBuilder()
+            cert = builder.create(
+                root,
+                run_id="run-1",
+                project_slug="demo",
+                execution_trace_path=trace,
+                agent_completion={"complete": True},
+                postflight_path=postflight.relative_to(root).as_posix(),
+            )
+            self.assertTrue(cert.postflight_verified)
+            self.assertTrue(any(x.kind == "agent_postflight" for x in cert.evidence))
+            builder.save(root, cert)
+            self.assertTrue(builder.verify_saved(root).valid)
+
+            postflight.write_text(json.dumps({
+                "run_id": "run-1",
+                "status": "attention_required",
+                "tests_passed": True,
+                "design_passed": True,
+                "security_passed": False,
+            }), encoding="utf-8")
+            self.assertFalse(builder.verify_saved(root).valid)
+
     def test_release_ready_still_requires_external_approval(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
