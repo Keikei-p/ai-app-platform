@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from tkinter import font as tkfont
 import webbrowser
-from ..core.ai_core import AICore
+from ..core.platform_service import PlatformService
 from ..core.config import APP_NAME, VERSION, WORKSPACE_DIR, LOG_DIR
 from ..core.database import init_db, list_projects
 from ..core.environment import diagnose
@@ -33,7 +33,7 @@ class MainWindow(tk.Tk):
         self.title(f"{APP_NAME} v{VERSION}")
         self.geometry("1140x780")
         self.minsize(920, 660)
-        self.core = AICore()
+        self.platform = PlatformService()
         self.pm = ProjectManager()
         self.maintenance = MaintenanceInspector()
         self.backup = BackupManager()
@@ -1503,8 +1503,10 @@ class MainWindow(tk.Tk):
 
     def _run_build_background(self, project: dict, slug: str, path, instruction: str, learning_enabled: bool):
         try:
-            result = self.core.execute(
-                project["name"], slug, path, instruction,
+            result = self.platform.build_project(
+                slug,
+                instruction,
+                approved=True,
                 progress=self._progress_from_core,
             )
             self._ui_queue.put(("result", result, learning_enabled))
