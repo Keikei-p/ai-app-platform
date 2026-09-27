@@ -178,6 +178,40 @@ class VerifiedEvolutionEngine:
             requested_actions=requested_actions,
         )
 
+    @staticmethod
+    def report_from_dict(data: dict[str, Any]) -> EvaluationReport:
+        if not isinstance(data, dict):
+            raise ValueError("evaluation report must be an object")
+        required = (
+            "score",
+            "tests_passed",
+            "test_pass_ratio",
+            "design_passed",
+            "design_score",
+            "security_passed",
+            "preview_ready",
+            "release_ready",
+            "artifact_count",
+            "learning_eligible",
+        )
+        missing = [x for x in required if x not in data]
+        if missing:
+            raise ValueError("evaluation report missing: " + ", ".join(missing))
+        return EvaluationReport(
+            score=max(0, min(100, int(data["score"]))),
+            tests_passed=bool(data["tests_passed"]),
+            test_pass_ratio=max(0.0, min(1.0, float(data["test_pass_ratio"]))),
+            design_passed=bool(data["design_passed"]),
+            design_score=max(0, min(100, int(data["design_score"]))),
+            security_passed=bool(data["security_passed"]),
+            preview_ready=bool(data["preview_ready"]),
+            release_ready=bool(data["release_ready"]),
+            artifact_count=max(0, int(data["artifact_count"])),
+            learning_eligible=bool(data["learning_eligible"]),
+            regressions=tuple(str(x) for x in data.get("regressions") or ()),
+            created_at=str(data.get("created_at") or datetime.now(timezone.utc).isoformat()),
+        )
+
     def save(self, project_dir: Path, decision: EvolutionDecision) -> Path:
         path = Path(project_dir) / ".aiapp" / "reports" / "evolution_decision.json"
         path.parent.mkdir(parents=True, exist_ok=True)
