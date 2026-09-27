@@ -16,9 +16,40 @@ class CapabilityGap:
 class CapabilityAssessor:
     def assess(self, spec: AppSpec, project_dir: Path) -> list[CapabilityGap]:
         gaps: list[CapabilityGap] = []
+        if spec.app_type == "social_automation" or "social_publish" in spec.features:
+            required = ["social_runtime.py", "social_provider_contract.json", "server.py"]
+            missing = [name for name in required if not (project_dir / name).exists()]
+            if missing:
+                gaps.append(
+                    CapabilityGap(
+                        "social_automation_runtime",
+                        "high",
+                        "SNS自動投稿ランタイムが未生成です。",
+                        "不足: " + ", ".join(missing),
+                        "SNS専用ランタイムを再生成する。",
+                    )
+                )
+            else:
+                gaps.append(
+                    CapabilityGap(
+                        "social_provider_credentials",
+                        "info",
+                        "実投稿には各SNS公式APIの認証情報が必要です。",
+                        "認証情報は安全のため生成コードへ保存しません。",
+                        "DRY RUN確認後、利用するSNSの認証情報を環境変数へ設定する。",
+                        False,
+                    )
+                )
         mobile_dir = project_dir / "mobile"
         if any(t in spec.targets for t in ("android", "ios")) and not mobile_dir.exists():
             gaps.append(CapabilityGap("mobile_source", "high", "スマホ向けソースが未生成です。", "mobile/ が存在しません。", "React Native/Expoプロジェクトを生成する。"))
+        if "windows" in spec.targets:
+            expected = project_dir / "artifacts" / "windows" / f"{spec.slug}.exe"
+            prepared = (project_dir / "windows" / "package_manifest.json").exists() and (project_dir / "BUILD_GENERATED_WINDOWS.bat").exists()
+            if not prepared:
+                gaps.append(CapabilityGap("windows_package_prep", "high", "Windowsビルド準備が未生成です。", "Windows package manifest/build script がありません。", "Windowsパッケージ準備を生成する。"))
+            elif not expected.exists():
+                gaps.append(CapabilityGap("windows_binary", "medium", "Windows EXEはまだ生成されていません。", f"{expected.name} がありません。", "Windows PCでBUILD_GENERATED_WINDOWS.batを実行し、起動確認する。"))
         if "android" in spec.targets and not (project_dir / "artifacts" / "android").exists():
             gaps.append(CapabilityGap("android_binary", "medium", "APK/AABはまだ生成されていません。", "Androidビルド成果物がありません。", "署名設定とビルド環境を確認してAAB/APKを生成する。"))
         if "ios" in spec.targets and not (project_dir / "artifacts" / "ios").exists():

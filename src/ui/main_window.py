@@ -21,7 +21,9 @@ from ..core.chat_partner import ChatPartner
 from ..core.learning_mode import LearningCoach
 from ..core.preview_runtime import PreviewRuntime
 from ..core.llm_chat import AIChatEngine
+from ..core.workspace_catalog import ConversationStore, ProjectCatalog
 from .remote_window import RemoteWindow
+from .workspace_center import WorkspaceCenter
 
 class MainWindow(tk.Tk):
     def __init__(self):
@@ -41,11 +43,14 @@ class MainWindow(tk.Tk):
         self.remote_controller = RemoteServerController()
         self.chat_partner = ChatPartner()
         self.chat_engine = AIChatEngine()
+        self.conversations = ConversationStore()
+        self.catalog = ProjectCatalog()
         self.learning_coach = LearningCoach()
         self.learning_mode = tk.BooleanVar(value=False)
         self.preview_runtime = PreviewRuntime()
         self.remote_window = None
         self.current_slug: str | None = None
+        self.current_thread_id: str | None = None
         self._busy = False
         self._build_thread = None
         self._ui_queue = queue.Queue()
@@ -146,9 +151,18 @@ class MainWindow(tk.Tk):
         self.new_app_button = ttk.Button(
             sidebar, text="＋  新しいチャット", style="Sidebar.TButton", command=self.new_project
         )
-        self.new_app_button.pack(fill="x", padx=10, pady=(4, 12))
+        self.new_app_button.pack(fill="x", padx=10, pady=(4, 8))
 
-        tk.Label(sidebar, text="プロジェクト", bg="#F4F5F7", fg="#8E8E8E",
+        nav = tk.Frame(sidebar, bg="#F4F5F7")
+        nav.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(nav, text="⌕  最近の会話", style="Sidebar.TButton",
+                   command=lambda: self.open_workspace_center("conversations")).pack(fill="x", pady=1)
+        ttk.Button(nav, text="▦  作成したアプリ", style="Sidebar.TButton",
+                   command=lambda: self.open_workspace_center("projects")).pack(fill="x", pady=1)
+        ttk.Button(nav, text="↓  ダウンロード", style="Sidebar.TButton",
+                   command=lambda: self.open_workspace_center("downloads")).pack(fill="x", pady=1)
+
+        tk.Label(sidebar, text="最近のプロジェクト", bg="#F4F5F7", fg="#8E8E8E",
                  font=(self.ui_font_semibold, 9, "bold")).pack(anchor="w", padx=16, pady=(4, 5))
         self.projects = tk.Listbox(
             sidebar, activestyle="none", borderwidth=0, highlightthickness=0,
@@ -160,20 +174,8 @@ class MainWindow(tk.Tk):
 
         sidebar_bottom = tk.Frame(sidebar, bg="#F4F5F7")
         sidebar_bottom.pack(fill="x", padx=10, pady=12)
-        ttk.Checkbutton(
-            sidebar_bottom, text="学習モード  —  理由も説明", variable=self.learning_mode,
-            style="Sidebar.TCheckbutton"
-        ).pack(anchor="w", padx=4, pady=(0, 8))
-        ttk.Button(sidebar_bottom, text="履歴・復元", style="Sidebar.TButton",
-                   command=self.vault_history).pack(fill="x", pady=2)
-        ttk.Button(sidebar_bottom, text="プロジェクト名を変更", style="Sidebar.TButton",
-                   command=self.rename_project).pack(fill="x", pady=2)
-        ttk.Button(sidebar_bottom, text="設定・診断", style="Sidebar.TButton",
+        ttk.Button(sidebar_bottom, text="⚙  設定", style="Sidebar.TButton",
                    command=self._toggle_details).pack(fill="x", pady=2)
-        self.sidebar_ai_button = ttk.Button(
-            sidebar_bottom, text="AI接続", style="Sidebar.TButton", command=self._open_ai_settings
-        )
-        self.sidebar_ai_button.pack(fill="x", pady=2)
 
         main = tk.Frame(shell, bg="#FBFBFC")
         self.main_frame = main
@@ -193,7 +195,7 @@ class MainWindow(tk.Tk):
             font=(self.ui_font_semibold, 12, "bold")
         )
         self.project_label.pack(anchor="w", pady=(13, 0))
-        self.activity_var = tk.StringVar(value="何を作りたいか、そのまま話してください")
+        self.activity_var = tk.StringVar(value="何を作りたいですか？ そのまま話してください")
         self.activity_label = tk.Label(
             header_left, textvariable=self.activity_var, bg="#FBFBFC", fg="#8E8E8E",
             font=(self.ui_font_family, 9)
@@ -221,6 +223,12 @@ class MainWindow(tk.Tk):
         )
         self.details_button.pack(side="left", padx=3)
         self.details_button.pack_forget()
+        self.download_button = ttk.Button(
+            header_right, text="ダウンロード", style="Secondary.TButton",
+            command=lambda: self.open_workspace_center("downloads")
+        )
+        self.download_button.pack(side="left", padx=3)
+        self.download_button.pack_forget()
         self.ai_button = ttk.Button(
             header_right, text="AI接続", style="Secondary.TButton", command=self._open_ai_settings
         )
@@ -257,6 +265,19 @@ class MainWindow(tk.Tk):
             label.pack(anchor="w", pady=(3, 0))
             self._progress_segments.append(bar)
             self._progress_labels.append(label)
+
+        self._next_actions_ready = False
+        self.next_actions = tk.Frame(main, bg="#F5F3FF", highlightbackground="#E4E0FF", highlightthickness=1)
+        tk.Label(
+            self.next_actions, text="アプリの確認ができます",
+            bg="#F5F3FF", fg="#2F2A5F", font=(self.ui_font_semibold, 9, "bold")
+        ).pack(side="left", padx=(14, 10), pady=9)
+        ttk.Button(self.next_actions, text="プレビューを見る", style="Secondary.TButton",
+                   command=self.preview).pack(side="left", padx=3, pady=5)
+        ttk.Button(self.next_actions, text="修正を依頼する", style="Secondary.TButton",
+                   command=lambda: self.instruction.focus_force()).pack(side="left", padx=3, pady=5)
+        ttk.Button(self.next_actions, text="ダウンロード", style="Secondary.TButton",
+                   command=lambda: self.open_workspace_center("downloads")).pack(side="left", padx=3, pady=5)
 
         workspace = tk.Frame(main, bg="#FBFBFC")
         self.workspace = workspace
@@ -321,14 +342,14 @@ class MainWindow(tk.Tk):
         hero_mark.create_text(48, 48, text="AI", fill="#FFFFFF",
                               font=(self.ui_font_semibold, 11, "bold"))
         tk.Label(
-            self.welcome_panel, text="つくりたいものを、話すだけ。",
+            self.welcome_panel, text="何を作りたいですか？",
             bg="#FBFBFC", fg="#151618",
             font=(self.ui_font_semibold, 24, "bold")
         ).pack()
         tk.Label(
             self.welcome_panel,
-            text="アイデア整理から設計・実装・テストまで。\n"
-                 "難しい言葉やテンプレート選択は必要ありません。",
+            text="思いついたことを、そのまま話してください。\n"
+                 "設計・生成・テスト・ダウンロードまで、会話の続きで進められます。",
             bg="#FBFBFC", fg="#73767D", justify="center",
             font=(self.ui_font_family, 10)
         ).pack(pady=(10, 0))
@@ -407,6 +428,14 @@ class MainWindow(tk.Tk):
         self._enable_readonly_copy(self.output)
         actions = tk.Frame(self.details_panel, bg="#F4F5F7")
         actions.pack(fill="x", padx=12, pady=12)
+        ttk.Checkbutton(
+            actions, text="学習モード  —  理由も説明", variable=self.learning_mode,
+            style="Sidebar.TCheckbutton"
+        ).pack(anchor="w", padx=4, pady=(0, 8))
+        ttk.Button(actions, text="AI接続", style="Secondary.TButton",
+                   command=self._open_ai_settings).pack(fill="x", pady=2)
+        ttk.Button(actions, text="アプリ名を変更", style="Secondary.TButton",
+                   command=self.rename_project).pack(fill="x", pady=2)
         ttk.Button(actions, text="公開前チェック", style="Secondary.TButton",
                    command=self.show_release_risk).pack(fill="x", pady=2)
         ttk.Button(actions, text="準備状況を確認", style="Secondary.TButton",
@@ -421,7 +450,7 @@ class MainWindow(tk.Tk):
                    command=self.check_update).pack(fill="x", pady=2)
 
         self._show_empty_chat()
-        self._set_progress("idle", "準備完了", "何を作りたいか、そのまま話してください")
+        self._set_progress("idle", "準備完了", "何を作りたいですか？ そのまま話してください")
         self.bind("<Configure>", self._on_window_resize, add=True)
         self.after(120, self.instruction.focus_force)
         self.after(180, self._refresh_ai_status)
@@ -435,9 +464,13 @@ class MainWindow(tk.Tk):
                 self.preview_button.pack(side="left", padx=3, before=self.ai_button)
             if not self.details_button.winfo_manager():
                 self.details_button.pack(side="left", padx=3, before=self.ai_button)
+            if hasattr(self, "download_button") and not self.download_button.winfo_manager():
+                self.download_button.pack(side="left", padx=3, before=self.ai_button)
         else:
             self.preview_button.pack_forget()
             self.details_button.pack_forget()
+            if hasattr(self, "download_button"):
+                self.download_button.pack_forget()
 
     def _refresh_ai_status(self):
         status = self.chat_engine.status()
@@ -522,16 +555,36 @@ class MainWindow(tk.Tk):
                    command=win.destroy).pack(side="right", padx=(0, 8))
 
     def _conversation_history(self) -> list[dict]:
+        if self.current_thread_id:
+            rows = self.conversations.messages(self.current_thread_id)
+            if rows:
+                return rows
         if self.current_slug:
             return self.chat_partner.history(WORKSPACE_DIR / self.current_slug)
         return list(self._blank_chat_history)
 
+    def _ensure_thread(self) -> str:
+        if self.current_thread_id:
+            return self.current_thread_id
+        if self.current_slug:
+            project = self._current()
+            title = project["name"] if project else self.current_slug
+            self.current_thread_id = self.conversations.ensure_for_project(
+                self.current_slug,
+                title,
+                self.chat_partner.history(WORKSPACE_DIR / self.current_slug),
+            )
+        else:
+            self.current_thread_id = self.conversations.create_thread()
+        return self.current_thread_id
+
     def _record_chat_message(self, role: str, content: str):
+        thread_id = self._ensure_thread()
         if self.current_slug:
             self.chat_partner.append_external_message(WORKSPACE_DIR / self.current_slug, role, content)
-        else:
-            self._blank_chat_history.append({"role": role, "content": content})
-            self._blank_chat_history = self._blank_chat_history[-100:]
+        self.conversations.append(thread_id, role, content)
+        if not self.current_slug:
+            self._blank_chat_history = self.conversations.messages(thread_id)[-100:]
 
     def _start_ai_conversation(self, text: str):
         history = self._conversation_history()
@@ -627,6 +680,8 @@ class MainWindow(tk.Tk):
             self.project_label.pack_configure(pady=(13, 0))
 
         if compact:
+            if hasattr(self, "next_actions") and self.next_actions.winfo_manager():
+                self.next_actions.pack_forget()
             self.history_wrap.grid_configure(padx=(14, 8), pady=(4, 0))
             self.chat_history.tag_configure("user_label", lmargin1=70, rmargin=8)
             self.chat_history.tag_configure("user", lmargin1=70, lmargin2=70, rmargin=8)
@@ -638,6 +693,8 @@ class MainWindow(tk.Tk):
                 self.details_visible = False
                 self.details_button.configure(text="テスト結果")
         else:
+            if getattr(self, "_next_actions_ready", False) and not self.next_actions.winfo_manager():
+                self.next_actions.pack(fill="x", padx=24, pady=(8, 0), before=self.workspace)
             self.history_wrap.grid_configure(padx=(56, 34), pady=(8, 0))
             self.composer_area.grid_configure(padx=(72, 54), pady=(4, 18))
             self.chat_history.tag_configure("user_label", lmargin1=155, rmargin=12)
@@ -714,6 +771,8 @@ class MainWindow(tk.Tk):
         has_history = False
         if self.current_slug:
             has_history = bool(self.chat_partner.history(WORKSPACE_DIR / self.current_slug))
+        elif self.current_thread_id:
+            has_history = bool(self.conversations.messages(self.current_thread_id))
         else:
             has_history = bool(self._blank_chat_history)
         self._showing_welcome = not has_history
@@ -1061,18 +1120,80 @@ class MainWindow(tk.Tk):
             failed = [c.key for c in report.checks if c.status == "fail"]
             self.write("⚠ 初回準備チェック: 要確認 → " + ", ".join(failed))
 
+    def open_workspace_center(self, initial_tab: str = "conversations"):
+        WorkspaceCenter(
+            self,
+            self.conversations,
+            self.catalog,
+            on_open_thread=self._open_thread_from_library,
+            on_open_project=self._open_project_slug,
+            on_preview_project=self._preview_project_from_library,
+            on_restore_project=self._restore_project_from_library,
+            initial_tab=initial_tab,
+        )
+
+    def _open_thread_from_library(self, thread_id: str):
+        row = self.conversations.get(thread_id)
+        if not row:
+            messagebox.showerror("会話", "この会話を開けませんでした。")
+            return
+        if row.project_slug:
+            self._open_project_slug(row.project_slug)
+            return
+        self.current_slug = None
+        self.current_thread_id = thread_id
+        self.projects.selection_clear(0, "end")
+        self.project_label.configure(text=row.title)
+        self._set_project_actions_visible(False)
+        self._set_build_confirmation(False)
+        self._load_chat_history()
+        self._set_progress("idle", "会話を再開しました", "続きからそのまま話せます")
+        self.instruction.configure(state="normal")
+        self.instruction.focus_force()
+
+    def _preview_project_from_library(self, slug: str):
+        self._open_project_slug(slug)
+        self.preview()
+
+    def _restore_project_from_library(self, slug: str):
+        self._open_project_slug(slug)
+        self.vault_history()
+
     def refresh_projects(self):
         self.project_rows = list_projects()
         self.projects.delete(0, "end")
-        for p in self.project_rows: self.projects.insert("end", p["name"])
+        for p in self.project_rows:
+            self.projects.insert("end", p["name"])
+
+    def _select_project_slug(self, slug: str):
+        for i, row in enumerate(self.project_rows):
+            if row["slug"] == slug:
+                self.projects.selection_clear(0, "end")
+                self.projects.selection_set(i)
+                self.projects.see(i)
+                return
 
     def on_project_select(self, _event=None):
         sel = self.projects.curselection()
         if not sel:
             return
         row = self.project_rows[sel[0]]
-        self.current_slug = row["slug"]
+        self._open_project_slug(row["slug"])
+
+    def _open_project_slug(self, slug: str):
+        row = next((x for x in self.project_rows if x["slug"] == slug), None)
+        if row is None:
+            self.refresh_projects()
+            row = next((x for x in self.project_rows if x["slug"] == slug), None)
+        if row is None:
+            messagebox.showerror("アプリ", "このプロジェクトを開けませんでした。")
+            return
+        self.current_slug = slug
+        history = self.chat_partner.history(WORKSPACE_DIR / slug)
+        self.current_thread_id = self.conversations.ensure_for_project(slug, row["name"], history)
+        self.conversations.replace_messages(self.current_thread_id, history)
         self.project_label.configure(text=row["name"])
+        self._select_project_slug(slug)
         self._set_project_actions_visible(True)
         self._load_chat_history()
         self._sync_welcome_visibility()
@@ -1084,14 +1205,19 @@ class MainWindow(tk.Tk):
             self._set_progress("idle", "会話を続けられます", "修正したいことをそのまま送ってください")
 
     def new_project(self):
-        """Start a blank chat immediately; the first message creates and names the project."""
+        """Start a persistent blank chat; project creation still waits for project intent."""
         if self._busy:
             return
+        self.conversations.prune_empty()
         self.current_slug = None
+        self.current_thread_id = self.conversations.create_thread()
         self._blank_chat_history = []
         self.projects.selection_clear(0, "end")
         self.project_label.configure(text="新しいチャット")
         self._set_project_actions_visible(False)
+        self._next_actions_ready = False
+        if hasattr(self, "next_actions") and self.next_actions.winfo_manager():
+            self.next_actions.pack_forget()
         self.chat_history.configure(state="normal")
         self.chat_history.delete("1.0", "end")
         self.chat_history.configure(state="disabled")
@@ -1101,7 +1227,7 @@ class MainWindow(tk.Tk):
         self.instruction.configure(state="normal")
         self.instruction.delete("1.0", "end")
         self._sync_welcome_visibility()
-        self._set_progress("idle", "準備完了", "何を作りたいか、そのまま話してください")
+        self._set_progress("idle", "準備完了", "何を作りたいですか？ そのまま話してください")
         self.instruction.focus_force()
 
     def rename_project(self):
@@ -1129,6 +1255,9 @@ class MainWindow(tk.Tk):
             self.pm.rename(self.current_slug, name)
             dialog.destroy()
             self.refresh_projects()
+            linked = self.conversations.find_for_project(self.current_slug)
+            if linked:
+                self.conversations.rename(linked.thread_id, name)
             self.project_label.configure(text=name)
             self.instruction.configure(state="normal")
             self.instruction.focus_force()
@@ -1169,15 +1298,22 @@ class MainWindow(tk.Tk):
         if self.current_slug:
             path = WORKSPACE_DIR / self.current_slug
             rows = self.chat_partner.history(path)
-            if rows:
-                self._showing_welcome = False
-            for row in rows:
-                if row.get("role") == "user":
-                    self.chat_history.insert("end", "あなた\n", "user_label")
-                    self.chat_history.insert("end", f"{row.get('content','')}\n", "user")
-                else:
-                    self.chat_history.insert("end", "AI App Platform\n", "assistant_label")
-                    self.chat_history.insert("end", f"{row.get('content','')}\n", "assistant")
+            project = self._current()
+            title = project["name"] if project else self.current_slug
+            self.current_thread_id = self.conversations.ensure_for_project(self.current_slug, title, rows)
+            self.conversations.replace_messages(self.current_thread_id, rows)
+        elif self.current_thread_id:
+            rows = self.conversations.messages(self.current_thread_id)
+            self._blank_chat_history = list(rows[-100:])
+        if rows:
+            self._showing_welcome = False
+        for row in rows:
+            if row.get("role") == "user":
+                self.chat_history.insert("end", "あなた\n", "user_label")
+                self.chat_history.insert("end", f"{row.get('content','')}\n", "user")
+            else:
+                self.chat_history.insert("end", "AI App Platform\n", "assistant_label")
+                self.chat_history.insert("end", f"{row.get('content','')}\n", "assistant")
         self.chat_history.configure(state="disabled")
         if not rows:
             self._show_empty_chat()
@@ -1188,19 +1324,24 @@ class MainWindow(tk.Tk):
         if self.current_slug:
             return self._current()
         name = self.chat_partner.suggest_project_name(first_message)
-        slug, _ = self.pm.create(name)
+        prior_rows = self.conversations.messages(self.current_thread_id) if self.current_thread_id else []
+        slug, project_dir = self.pm.create(name)
+        for row in prior_rows:
+            self.chat_partner.append_external_message(
+                project_dir,
+                str(row.get("role") or "user"),
+                str(row.get("content") or ""),
+            )
+        if self.current_thread_id:
+            self.conversations.link_project(self.current_thread_id, slug, name)
+        else:
+            self.current_thread_id = self.conversations.ensure_for_project(slug, name, prior_rows)
         self.refresh_projects()
         self.current_slug = slug
         self.project_label.configure(text=name)
         self._set_project_actions_visible(True)
-        # Select the newly created row when possible.
-        for i, row in enumerate(self.project_rows):
-            if row["slug"] == slug:
-                self.projects.selection_clear(0, "end")
-                self.projects.selection_set(i)
-                self.projects.see(i)
-                break
-        self.write(f"✓ 新しいアプリを自動作成: {name}")
+        self._select_project_slug(slug)
+        self.write(f"✓ 新しいアプリを作成準備: {name}")
         return self._current()
 
     def _progress_from_core(self, stage: str, message: str):
@@ -1213,6 +1354,10 @@ class MainWindow(tk.Tk):
             "build": "アプリを作成中",
             "design": "デザインを確認中",
             "test": "自動テスト中",
+            "security": "安全確認中",
+            "enhance": "AIコード改善中",
+            "repair": "自動修正中",
+            "package": "ビルド準備中",
             "done": "確認完了",
             "issue": "確認が必要です",
         }
@@ -1295,6 +1440,12 @@ class MainWindow(tk.Tk):
             decision = self.chat_partner.handle(
                 path, p["name"], self.current_slug, text, has_generated=has_generated
             )
+            self.current_thread_id = self.conversations.ensure_for_project(
+                self.current_slug, p["name"], self.chat_partner.history(path)
+            )
+            self.conversations.replace_messages(
+                self.current_thread_id, self.chat_partner.history(path)
+            )
             self._load_chat_history()
 
             if decision.action == "ask":
@@ -1371,6 +1522,56 @@ class MainWindow(tk.Tk):
                 f"Design AI: {result.design_review.score}/100 "
                 f"{'PASS' if result.design_review.passed else '要改善'}"
             )
+        if result.ai_enhancement:
+            ai_status = result.ai_enhancement.get("status", "unknown")
+            if ai_status == "applied":
+                self.write(f"AIコード生成: 適用済み / {result.ai_enhancement.get('summary', '')}")
+            elif ai_status == "fallback":
+                self.write(f"AIコード生成: 安全フォールバック / {result.ai_enhancement.get('summary', '')}")
+            elif ai_status == "not_connected":
+                self.write("AIコード生成: 未接続のため安定テンプレートを使用")
+            else:
+                self.write(f"AIコード生成: {ai_status}")
+        if result.web_build:
+            if result.web_build.get("built"):
+                self.write(
+                    f"Web配布ZIP: BUILD PASS / {result.web_build.get('artifact')} / "
+                    f"SHA-256 {str(result.web_build.get('sha256') or '')[:16]}…"
+                )
+            else:
+                self.write(f"Web配布ZIP: BUILD FAIL / {result.web_build.get('detail', '')}")
+        if result.windows_build:
+            if result.windows_build.get("built"):
+                self.write(f"Windows EXE: BUILD PASS / {result.windows_build.get('artifact')}")
+            elif result.windows_build.get("attempted"):
+                self.write(f"Windows EXE: BUILD FAIL / {result.windows_build.get('detail', '')}")
+            else:
+                self.write("Windows EXE: PyInstaller未導入のため自動ビルド未実行（ビルドBATは生成済み）")
+        if result.repair_attempts:
+            successful_repairs = sum(1 for row in result.repair_attempts if row.get("preview_ready"))
+            self.write(
+                f"自動修正: {len(result.repair_attempts)}回実行"
+                + (f" / {successful_repairs}回目で品質ゲート合格" if successful_repairs else "")
+            )
+            for row in result.repair_attempts:
+                coding = row.get("coding") or {}
+                self.write(
+                    f"  修正{row.get('attempt')}: {coding.get('status', 'unknown')} / "
+                    f"{coding.get('summary', '')}"
+                )
+        if result.pipeline_report:
+            security = result.pipeline_report.get("security") or {}
+            findings = security.get("findings") or []
+            self.write(
+                "品質ゲート: "
+                + ("PASS" if result.pipeline_report.get("preview_ready") else "BLOCKED")
+                + f" / Security {'PASS' if security.get('passed') else 'FAIL'}"
+                + f" / findings {len(findings)}"
+            )
+            self.write(
+                "公開準備: "
+                + ("READY（要明示承認）" if result.pipeline_report.get("release_ready") else "未完了項目あり")
+            )
         blockers = result.capability_gaps or []
         if blockers:
             self.write("未完了項目:")
@@ -1385,8 +1586,14 @@ class MainWindow(tk.Tk):
         self._set_build_confirmation(False)
         self._set_project_actions_visible(True)
         if result.ok:
-            self._set_progress("done", "作成とテストが完了", "「アプリを確認」で実際の画面を開けます")
+            self._next_actions_ready = True
+            self._set_progress("done", "作成とテストが完了", "次にプレビュー・修正・ダウンロードへ進めます")
+            if not self._compact_layout and not self.next_actions.winfo_manager():
+                self.next_actions.pack(fill="x", padx=24, pady=(8, 0), before=self.workspace)
         else:
+            self._next_actions_ready = False
+            if self.next_actions.winfo_manager():
+                self.next_actions.pack_forget()
             self._set_progress("issue", "確認が必要です", "「テスト結果」を開くと原因を確認できます")
         self._set_busy(False)
         self.instruction.focus_force()
@@ -1394,6 +1601,9 @@ class MainWindow(tk.Tk):
     def _handle_build_error(self, exc: Exception):
         message = f"処理中にエラーが起きました。\n{type(exc).__name__}: {exc}"
         self._set_build_confirmation(False)
+        self._next_actions_ready = False
+        if hasattr(self, "next_actions") and self.next_actions.winfo_manager():
+            self.next_actions.pack_forget()
         self._append_chat("assistant", message)
         self.write("⚠ " + message.replace("\n", " / "))
         self._set_progress("issue", "エラーが発生しました", "「テスト結果」を開くと詳細を確認できます")
@@ -1587,6 +1797,7 @@ class MainWindow(tk.Tk):
             messagebox.showinfo("プレビュー", "まだアプリがありません。先にAIへ作りたい内容を送ってください。")
             return
         try:
+            self.preview_runtime.assert_verified(project)
             if (project / "server.py").exists():
                 session = self.preview_runtime.start(project)
                 webbrowser.open(session.url)

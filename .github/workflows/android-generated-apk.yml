@@ -1,0 +1,38 @@
+name: Generated Android APK Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/core/mobile_generator.py"
+      - "src/tools/android_native_acceptance.py"
+      - ".github/workflows/android-generated-apk.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/core/mobile_generator.py"
+      - "src/tools/android_native_acceptance.py"
+      - ".github/workflows/android-generated-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+      - name: Build generated Android debug APK
+        run: python -m src.tools.android_native_acceptance

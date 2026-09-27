@@ -1,12 +1,17 @@
-# Current limits - v0.4.8
+# Current limits - v0.8.0
 
-- AI Core is still an application-development orchestration skeleton, not a ChatGPT-class general model.
-- Generated login UI is not yet a complete production authentication backend unless a real auth adapter is connected.
-- LAN Remote Beta is enabled only after local user action. It is not an internet remote-access solution.
-- LAN Remote Beta uses HTTP inside the trusted LAN; do not use it on public/untrusted Wi-Fi and never port-forward it to the internet.
-- Remote Windows build is not exposed yet; v0.4.8 remote actions are safe task-level operations only.
-- Hosted Worker, production billing, app-store submission, and production cloud deployment are not enabled.
-- Code Vault stores full project-source snapshots and may consume more disk space as history grows.
-- Local update packages are integrity-checked, but automatic HTTPS update download remains disabled until publisher-signature verification is implemented.
-- PyInstaller EXE self-update is not enabled yet; use source/START.bat mode for in-app update testing.
-- Legal/Safety checks are guardrails, not legal guarantees.
+- The desktop shell is still Tkinter. The information architecture and compact behavior are substantially improved, but a web-rendered desktop shell could provide richer transitions and component styling.
+- Design AI performs stronger deterministic layout/usability checks and writes a screenshot-review contract, but it does not yet capture/render screenshots or run visual-diff model critique.
+- The created-app library currently uses project metadata/status rather than automatically captured preview thumbnails.
+- Conversation removal from the recent list is non-destructive for project-linked work; the project and Code Vault remain recoverable.
+- Live SNS publishing requires the user's provider registrations, permissions, OAuth/access tokens and any provider-specific review or paid API access.
+- X generation currently covers text posts; X media upload needs a dedicated adapter.
+- Instagram generation currently covers public image-URL publishing; Reels/video/carousel flows need dedicated adapters and current Meta API verification.
+- YouTube upload generation uses an OAuth access token, but interactive OAuth setup and token refresh are not yet automated.
+- Android debug APK generation is verified; production signing/AAB/Google Play submission is not fully automated.
+- iOS source/bundle generation is verified; production IPA signing/App Store submission requires Apple credentials/tooling.
+- LAN Remote remains a trusted-LAN feature, not a public-internet remote-control solution.
+- Hosted production deployment adapters and full subscription billing remain incomplete.
+- Code Vault full-source history can consume increasing disk space.
+- Publisher-signed automatic HTTPS self-update for packaged desktop releases remains future work.
+- Legal, safety, dependency and provider checks are guardrails rather than guarantees.

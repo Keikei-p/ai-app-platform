@@ -14,7 +14,7 @@ class StarterGenerator:
         safe_name = html.escape(spec.project_name)
         context = spec.usage_context.strip() or spec.summary.splitlines()[0].strip()
         safe_context = html.escape(context[:500])
-        theme = spec.design_style if spec.design_style in {"minimal", "premium", "modern", "friendly", "business"} else "modern"
+        theme = self._resolve_theme(spec)
         feature_labels = {
             "authentication": "ログイン", "database": "データ保存", "search": "検索", "notifications": "通知",
             "payments": "決済", "admin": "管理者", "analytics": "分析", "multi_language": "多言語", "offline": "オフライン"
@@ -51,6 +51,7 @@ class StarterGenerator:
     <div class="nav-actions">
       {chips}
       <span class="status-badge"><span class="status-dot"></span>利用可能</span>
+      <button class="icon-button" id="themeToggle" type="button" aria-label="表示テーマを切り替える" title="テーマ: システム">◐</button>
     </div>
   </div>
 </header>
@@ -64,6 +65,18 @@ class StarterGenerator:
   </section>
   {app_body}
 </main>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<dialog id="confirmDialog" class="confirm-dialog">
+  <form method="dialog">
+    <div class="dialog-icon">?</div>
+    <h2>確認</h2>
+    <p id="confirmMessage">この操作を続けますか？</p>
+    <div class="dialog-actions">
+      <button value="cancel" class="ghost">キャンセル</button>
+      <button value="ok">続ける</button>
+    </div>
+  </form>
+</dialog>
 <footer class="shell app-footer">© {safe_name}</footer>
 <script src="app.js"></script>
 </body>
@@ -94,17 +107,52 @@ class StarterGenerator:
 
         generated_manifest = project_dir / "generated_manifest.json"
         generated_manifest.write_text(json.dumps({
-            "generator": "fullstack-v0.6",
+            "generator": "fullstack-v0.8",
             "type": spec.app_type,
             "features": spec.features,
             "targets": spec.targets,
             "design_style": spec.design_style,
+            "resolved_theme": theme,
             "usage_context": spec.usage_context,
             "runtime": "python-http-sqlite" if database else "static-pwa",
         }, ensure_ascii=False, indent=2), encoding="utf-8")
         files.append(generated_manifest)
         log_event("generator.web", f"Generated {spec.app_type} app", spec.slug)
         return files
+
+    @staticmethod
+    def _resolve_theme(spec: AppSpec) -> str:
+        style = (spec.design_style or "").strip().lower()
+        context = " ".join([spec.summary or "", spec.usage_context or "", spec.app_type or ""]).lower()
+        direct = {
+            "minimal": "minimal",
+            "premium": "premium",
+            "modern": "modern",
+            "friendly": "friendly",
+            "business": "business",
+            "soft": "soft",
+            "finance": "finance",
+            "youthful": "youthful",
+            "future": "future",
+            "dark": "dark",
+        }
+        if spec.app_type == "social_automation" and style in {"", "modern", "custom"}:
+            return "youthful"
+        if style in direct:
+            return direct[style]
+        if any(word in style + context for word in ("美容", "サロン", "女性向け", "やわらか", "柔らか", "上品")):
+            return "soft"
+        if any(word in style + context for word in ("金融", "投資", "資産", "会計", "請求", "bank", "finance")):
+            return "finance"
+        if any(word in style + context for word in ("若者", "学生", "ポップ", "カジュアル", "creator")):
+            return "youthful"
+        if any(word in style + context for word in ("未来的", "近未来", "aiっぽ", "futur", "cyber")):
+            return "future"
+        if any(word in style + context for word in ("ダーク", "dark mode", "darkmode")):
+            return "dark"
+        if any(word in style + context for word in ("apple", "アップル")):
+            return "minimal"
+        return "modern"
 
     @staticmethod
     def _headline_for_type(app_type: str) -> tuple[str, str]:
@@ -149,31 +197,135 @@ class StarterGenerator:
         return auth_block + body
 
     def _styles(self) -> str:
-        return '''
-:root{--color-bg:#F5F6F8;--color-surface:#FFFFFF;--color-text:#111827;--color-muted:#6B7280;--color-border:#E5E7EB;--color-accent:#111827;--color-accent-soft:#EEF2FF;--space-1:6px;--space-2:10px;--space-3:14px;--space-4:20px;--space-5:28px;--space-6:40px;--radius-sm:12px;--radius:20px;--shadow:0 18px 50px rgba(17,24,39,.06)}
-*{box-sizing:border-box}html{color-scheme:light}body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:Inter,"Yu Gothic UI","Hiragino Sans",system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
-body[data-theme="premium"]{--color-bg:#F6F3EE;--color-text:#211D18;--color-border:#E5DED3;--color-accent:#211D18;--color-accent-soft:#EFE7DB}
-body[data-theme="friendly"]{--color-bg:#FFF8F3;--color-text:#342A27;--color-border:#F0DDD2;--color-accent:#8B5E4B;--color-accent-soft:#FBE9DF}
-body[data-theme="business"]{--color-bg:#F3F6F9;--color-text:#122033;--color-border:#DCE3EA;--color-accent:#183B66;--color-accent-soft:#E7EEF7}
-body[data-theme="minimal"]{--color-bg:#FAFAFA;--color-text:#181818;--color-border:#E7E7E7;--color-accent:#181818;--color-accent-soft:#F0F0F0}
-.shell{width:min(1120px,calc(100% - 36px));margin-inline:auto}.topbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.88);backdrop-filter:blur(18px);border-bottom:1px solid rgba(229,231,235,.85)}.nav{min-height:68px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{color:var(--color-text);text-decoration:none;font-weight:800;letter-spacing:-.03em;font-size:1.05rem}.nav-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.feature-chip,.status-badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--color-border);background:#fff;border-radius:999px;padding:7px 10px;font-size:.76rem;font-weight:700;color:#4B5563}.status-dot{width:7px;height:7px;border-radius:50%;background:#22C55E}
-.hero{padding:72px 0 34px}.hero-copy{max-width:850px}.eyebrow,.section-kicker{font-size:.72rem;font-weight:900;letter-spacing:.14em;color:#7C8290}.hero h1{font-size:clamp(2.45rem,6vw,4.9rem);line-height:1.02;letter-spacing:-.06em;margin:12px 0 18px;max-width:900px}.hero p{margin:0;color:var(--color-muted);font-size:clamp(1rem,2vw,1.16rem);max-width:760px}
-.stats-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:10px 0 18px}.stat-card{background:rgba(255,255,255,.72);border:1px solid var(--color-border);border-radius:var(--radius);padding:20px;box-shadow:0 8px 30px rgba(17,24,39,.035)}.stat-card span,.stat-card small{display:block;color:var(--color-muted);font-size:.82rem}.stat-card strong{font-size:2rem;line-height:1.1;letter-spacing:-.04em}.stat-card .text-stat{font-size:1.15rem;margin-top:7px}.content-grid{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:18px;align-items:start}.panel{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow);margin-bottom:18px}.section-heading{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:20px}.section-heading h2{margin:3px 0 0;font-size:1.28rem;letter-spacing:-.025em}.section-heading p{margin:0;max-width:290px;color:var(--color-muted);font-size:.88rem}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.form-grid .wide{grid-column:1/-1}label{display:grid;gap:7px;color:#374151;font-size:.88rem;font-weight:750}input,select,button{font:inherit;border-radius:var(--radius-sm)}input,select{width:100%;min-height:50px;border:1px solid #D1D5DB;background:#FBFBFC;color:var(--color-text);padding:12px 14px}input:hover,select:hover{border-color:#B9BEC7}input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid #A5B4FC;outline-offset:2px}button{min-height:48px;border:0;background:var(--color-accent);color:#fff;padding:11px 17px;font-weight:800;cursor:pointer;transition:transform .14s ease,opacity .14s ease}button:hover{transform:translateY(-1px)}button.secondary{background:#374151}button.ghost{background:#F3F4F6;color:#374151}.button-row{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}.full-button{width:100%;margin-top:16px}.feedback{min-height:1.5em;color:var(--color-muted);font-size:.88rem}.clean-list{list-style:none;padding:0;margin:0;display:grid;gap:9px}.clean-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px;border:1px solid var(--color-border);border-radius:14px;background:#FCFCFD}.clean-list li span{min-width:0;overflow-wrap:anywhere}.clean-list li button{min-height:44px;padding:7px 11px;background:#FFF1F1;color:#A12525}.empty-state{border:1px dashed #D7DAE0;border-radius:14px;padding:28px;text-align:center;color:#8A909B;background:#FAFAFB}.app-footer{padding:25px 0 55px;color:#9CA3AF;font-size:.78rem}
-@media(max-width:800px){.nav{min-height:60px}.nav-actions .feature-chip{display:none}.hero{padding:46px 0 24px}.hero h1{font-size:clamp(2.15rem,12vw,3.5rem)}.stats-grid{grid-template-columns:1fr}.content-grid{grid-template-columns:1fr}.section-heading{display:block}.section-heading p{margin-top:7px}.form-grid{grid-template-columns:1fr}.form-grid .wide{grid-column:auto}.panel{padding:18px}.shell{width:min(100% - 24px,1120px)}}
+        return r'''
+:root{
+  --color-bg:#F7F7F8;--color-surface:#FFFFFF;--color-surface-soft:#FBFBFC;--color-text:#18181B;
+  --color-muted:#71717A;--color-border:#E8E8EC;--color-accent:#6558F5;--color-accent-hover:#5749E8;
+  --color-accent-soft:#F0EEFF;--color-success:#15803D;--color-danger:#B42318;--focus:#A7A0FF;
+  --space-1:6px;--space-2:10px;--space-3:14px;--space-4:20px;--space-5:28px;--space-6:40px;
+  --radius-xs:10px;--radius-sm:14px;--radius:22px;--radius-lg:28px;
+  --shadow:0 16px 45px rgba(24,24,27,.055);--shadow-soft:0 6px 22px rgba(24,24,27,.04);
+}
+*{box-sizing:border-box}html{color-scheme:light dark;scroll-behavior:smooth}
+body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:Inter,"Yu Gothic UI","Hiragino Sans",system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.62;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body[data-theme="premium"]{--color-bg:#F8F5F0;--color-text:#211D18;--color-muted:#776B5F;--color-border:#E7DED4;--color-accent:#6F563A;--color-accent-hover:#5E472F;--color-accent-soft:#F0E8DC}
+body[data-theme="friendly"]{--color-bg:#FFF8FA;--color-text:#33282D;--color-muted:#816B74;--color-border:#F0DDE4;--color-accent:#C65F82;--color-accent-hover:#AF4E70;--color-accent-soft:#FCEAF1}
+body[data-theme="business"]{--color-bg:#F5F7FA;--color-text:#172033;--color-muted:#667085;--color-border:#DEE4EC;--color-accent:#356AE6;--color-accent-hover:#2859C7;--color-accent-soft:#EAF0FF}
+body[data-theme="minimal"]{--color-bg:#FAFAFA;--color-text:#171717;--color-muted:#737373;--color-border:#E7E7E7;--color-accent:#171717;--color-accent-hover:#2A2A2A;--color-accent-soft:#F0F0F0}
+body[data-theme="soft"]{--color-bg:#FCF9FF;--color-text:#2B2432;--color-muted:#786C82;--color-border:#EAE2F0;--color-accent:#8A6CC7;--color-accent-hover:#7658B4;--color-accent-soft:#F1EBFA}
+body[data-theme="finance"]{--color-bg:#F4F8F7;--color-text:#102A2A;--color-muted:#5D7775;--color-border:#D8E5E2;--color-accent:#176B66;--color-accent-hover:#125954;--color-accent-soft:#E4F1EF}
+body[data-theme="youthful"]{--color-bg:#FFF9F7;--color-text:#30272A;--color-muted:#7D6B70;--color-border:#F0E0DC;--color-accent:#E46572;--color-accent-hover:#CD515E;--color-accent-soft:#FCECEF}
+body[data-theme="future"]{--color-bg:#F7F8FF;--color-text:#1E2033;--color-muted:#6D708D;--color-border:#E1E3F2;--color-accent:#5C63E8;--color-accent-hover:#4A50CF;--color-accent-soft:#EDEEFF}
+body[data-theme="dark"]{--color-bg:#111114;--color-surface:#19191D;--color-surface-soft:#202026;--color-text:#F4F4F5;--color-muted:#A1A1AA;--color-border:#2E2E35;--color-accent:#8B83FF;--color-accent-hover:#9A93FF;--color-accent-soft:#28264A;--shadow:0 20px 50px rgba(0,0,0,.22)}
+html[data-color-mode="dark"] body:not([data-theme="dark"]){--color-bg:#111114;--color-surface:#19191D;--color-surface-soft:#202026;--color-text:#F4F4F5;--color-muted:#A1A1AA;--color-border:#2E2E35;--color-accent:#8B83FF;--color-accent-hover:#9A93FF;--color-accent-soft:#28264A;--shadow:0 20px 50px rgba(0,0,0,.22)}
+@media(prefers-color-scheme:dark){html[data-color-mode="system"] body:not([data-theme="dark"]){--color-bg:#111114;--color-surface:#19191D;--color-surface-soft:#202026;--color-text:#F4F4F5;--color-muted:#A1A1AA;--color-border:#2E2E35;--color-accent:#8B83FF;--color-accent-hover:#9A93FF;--color-accent-soft:#28264A;--shadow:0 20px 50px rgba(0,0,0,.22)}}
+button,input,select,textarea{font:inherit}
+button{touch-action:manipulation}
+.shell{width:min(1160px,calc(100% - 40px));margin-inline:auto}
+.topbar{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--color-surface) 88%,transparent);backdrop-filter:blur(18px);border-bottom:1px solid color-mix(in srgb,var(--color-border) 88%,transparent)}
+.nav{min-height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{color:var(--color-text);text-decoration:none;font-weight:800;letter-spacing:-.025em;font-size:1.03rem}
+.nav-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.feature-chip,.status-badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--color-border);background:var(--color-surface);border-radius:999px;padding:7px 10px;font-size:.75rem;font-weight:700;color:var(--color-muted)}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#22C55E}
+.icon-button{min-height:38px;min-width:38px;width:38px;padding:0;border-radius:999px;background:var(--color-surface-soft);color:var(--color-text);border:1px solid var(--color-border);display:inline-grid;place-items:center}
+.hero{padding:54px 0 28px}.hero-copy{max-width:820px}
+.eyebrow,.section-kicker{font-size:.7rem;font-weight:850;letter-spacing:.13em;color:var(--color-muted)}
+.hero h1{font-size:clamp(2rem,5vw,3.7rem);line-height:1.06;letter-spacing:-.05em;margin:10px 0 14px;max-width:900px}
+.hero p{margin:0;color:var(--color-muted);font-size:clamp(.98rem,2vw,1.1rem);max-width:720px}
+.stats-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:8px 0 16px}
+.stat-card{min-width:0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:19px;box-shadow:var(--shadow-soft)}
+.stat-card span,.stat-card small{display:block;color:var(--color-muted);font-size:.8rem}.stat-card strong{font-size:1.9rem;line-height:1.1;letter-spacing:-.035em}.stat-card .text-stat{font-size:1.08rem;margin-top:7px}
+.content-grid{display:grid;grid-template-columns:minmax(0,.94fr) minmax(0,1.06fr);gap:16px;align-items:start}
+.panel{min-width:0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:23px;box-shadow:var(--shadow);margin-bottom:16px}
+.section-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}.section-heading h2{margin:3px 0 0;font-size:1.22rem;letter-spacing:-.022em}.section-heading p{margin:0;max-width:290px;color:var(--color-muted);font-size:.86rem}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.form-grid .wide{grid-column:1/-1}
+label{display:grid;gap:7px;color:var(--color-text);font-size:.86rem;font-weight:700;min-width:0}
+input,select,textarea{width:100%;min-width:0;min-height:50px;border:1px solid var(--color-border);background:var(--color-surface-soft);color:var(--color-text);padding:12px 14px;border-radius:var(--radius-sm);transition:border-color .15s ease,box-shadow .15s ease,background .15s ease}
+textarea{resize:vertical;min-height:116px}
+input::placeholder,textarea::placeholder{color:color-mix(in srgb,var(--color-muted) 72%,transparent)}
+input:hover,select:hover,textarea:hover{border-color:color-mix(in srgb,var(--color-muted) 52%,var(--color-border))}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:3px solid color-mix(in srgb,var(--focus) 72%,transparent);outline-offset:2px}
+button{min-height:48px;border:0;background:var(--color-accent);color:#fff;padding:11px 17px;border-radius:var(--radius-sm);font-weight:760;cursor:pointer;transition:transform .14s ease,opacity .14s ease,background .14s ease}
+button:hover{transform:translateY(-1px);background:var(--color-accent-hover)}button:active{transform:translateY(0)}button:disabled{opacity:.55;cursor:not-allowed;transform:none}
+button.secondary{background:var(--color-surface-soft);color:var(--color-text);border:1px solid var(--color-border)}button.secondary:hover,button.ghost:hover{background:var(--color-accent-soft)}
+button.ghost{background:transparent;color:var(--color-muted);border:1px solid var(--color-border)}
+.button-row{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}.full-button{width:100%;margin-top:16px}
+.feedback{min-height:1.5em;color:var(--color-muted);font-size:.86rem;overflow-wrap:anywhere}
+.clean-list{list-style:none;padding:0;margin:0;display:grid;gap:9px}.clean-list li{min-width:0;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px;border:1px solid var(--color-border);border-radius:15px;background:var(--color-surface-soft)}
+.clean-list li span{min-width:0;overflow-wrap:anywhere}.clean-list li button{min-height:42px;padding:7px 11px;background:transparent;color:var(--color-danger);border:1px solid color-mix(in srgb,var(--color-danger) 28%,var(--color-border))}
+.empty-state{border:1px dashed color-mix(in srgb,var(--color-muted) 28%,var(--color-border));border-radius:16px;padding:30px 20px;text-align:center;color:var(--color-muted);background:var(--color-surface-soft)}
+.toast{position:fixed;right:20px;bottom:20px;z-index:80;max-width:min(420px,calc(100% - 32px));padding:12px 15px;border-radius:14px;background:#18181B;color:#fff;box-shadow:0 16px 44px rgba(0,0,0,.2);font-size:.88rem;opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+.toast.show{opacity:1;transform:translateY(0)}.toast[data-type="error"]{background:#8F1D18}.toast[data-type="success"]{background:#166534}
+.confirm-dialog{width:min(430px,calc(100% - 32px));border:1px solid var(--color-border);border-radius:22px;padding:0;background:var(--color-surface);color:var(--color-text);box-shadow:0 30px 90px rgba(0,0,0,.22)}.confirm-dialog::backdrop{background:rgba(15,15,18,.36);backdrop-filter:blur(3px)}
+.confirm-dialog form{padding:24px}.confirm-dialog h2{margin:10px 0 7px;font-size:1.18rem}.confirm-dialog p{margin:0;color:var(--color-muted)}.dialog-icon{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;background:var(--color-accent-soft);color:var(--color-accent);font-weight:900}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}
+.app-footer{padding:24px 0 50px;color:var(--color-muted);font-size:.76rem}
+@media(max-width:800px){.shell{width:min(100% - 24px,1160px)}.nav{min-height:58px}.nav-actions .feature-chip,.status-badge{display:none}.hero{padding:36px 0 20px}.hero h1{font-size:clamp(2rem,11vw,3.15rem)}.stats-grid,.content-grid{grid-template-columns:1fr}.section-heading{display:block}.section-heading p{margin-top:6px;max-width:none}.form-grid{grid-template-columns:1fr}.form-grid .wide{grid-column:auto}.panel{padding:17px;border-radius:18px}.stat-card{padding:16px}.button-row button{flex:1 1 140px}.clean-list li{align-items:flex-start;flex-wrap:wrap}.clean-list li button{width:100%}.toast{right:12px;bottom:12px}}
+@media(max-width:430px){.shell{width:min(100% - 18px,1160px)}.hero{padding-top:28px}.panel{padding:15px}.nav-actions{gap:4px}.icon-button{width:36px;min-width:36px;min-height:36px}}
 '''
 
     def _script_for_type(self, app_type: str, auth: bool, database: bool) -> str:
         return f'''
 const appType={json.dumps(app_type)};
 const authRequired={str(auth).lower()};
+const hasDatabase={str(database).lower()};
 const list=document.querySelector('#itemList');
 const title=document.querySelector('#itemTitle');
 const value=document.querySelector('#itemValue');
 const status=document.querySelector('#status');
 const emptyState=document.querySelector('#emptyState');
 const statPrimary=document.querySelector('#statPrimary');
+const toast=document.querySelector('#toast');
+const confirmDialog=document.querySelector('#confirmDialog');
+const confirmMessage=document.querySelector('#confirmMessage');
+const themeToggle=document.querySelector('#themeToggle');
 let csrf='';
 let localRows=[];
+let toastTimer=null;
+
+function showToast(message,type='info'){{
+  if(!toast)return;
+  toast.textContent=message;
+  toast.dataset.type=type;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);
+}}
+function setStatus(message,type='info'){{
+  if(status)status.textContent=message;
+  if(message)showToast(message,type);
+}}
+function setBusy(button,busy,label='処理中…'){{
+  if(!button)return;
+  if(busy){{button.dataset.label=button.textContent;button.textContent=label;button.disabled=true;}}
+  else{{button.textContent=button.dataset.label||button.textContent;button.disabled=false;}}
+}}
+function confirmAction(message){{
+  if(!confirmDialog||typeof confirmDialog.showModal!=='function')return Promise.resolve(window.confirm(message));
+  confirmMessage.textContent=message;
+  return new Promise(resolve=>{{
+    const close=()=>{{confirmDialog.removeEventListener('close',close);resolve(confirmDialog.returnValue==='ok');}};
+    confirmDialog.addEventListener('close',close);
+    confirmDialog.showModal();
+  }});
+}}
+function initTheme(){{
+  const saved=localStorage.getItem('color-mode')||'system';
+  document.documentElement.dataset.colorMode=saved;
+  if(themeToggle)themeToggle.title='テーマ: '+({{system:'システム',light:'ライト',dark:'ダーク'}}[saved]||'システム');
+}}
+function cycleTheme(){{
+  const order=['system','light','dark'];
+  const current=document.documentElement.dataset.colorMode||'system';
+  const next=order[(order.indexOf(current)+1)%order.length];
+  document.documentElement.dataset.colorMode=next;
+  localStorage.setItem('color-mode',next);
+  if(themeToggle)themeToggle.title='テーマ: '+({{system:'システム',light:'ライト',dark:'ダーク'}}[next]);
+  showToast('表示テーマ: '+({{system:'システム',light:'ライト',dark:'ダーク'}}[next]));
+}}
+if(themeToggle)themeToggle.addEventListener('click',cycleTheme);
+initTheme();
+
 function extra(id){{const node=document.querySelector(id);return node?node.value.trim():'';}}
 function payload(){{
   const baseTitle=title?.value.trim()||'';
@@ -202,19 +354,21 @@ function render(rows){{
     const b=document.createElement('button');
     b.textContent='削除';
     b.setAttribute('aria-label',r.title+'を削除');
-    b.onclick=()=>removeItem(r.id);
+    b.onclick=()=>removeItem(r.id,r.title);
     li.append(text,b);
     list.append(li);
   }}
 }}
-async function removeItem(id){{
-  if({str(database).lower()}){{
-    try{{await api('/api/items/'+id,{{method:'DELETE'}});await load();}}
-    catch(e){{status.textContent=e.message;}}
+async function removeItem(id,label){{
+  if(!(await confirmAction((label||'この項目')+'を削除しますか？')))return;
+  if(hasDatabase){{
+    try{{await api('/api/items/'+id,{{method:'DELETE'}});await load();setStatus('削除しました','success');}}
+    catch(e){{setStatus(e.message,'error');}}
   }}else{{
     localRows=localRows.filter((_,index)=>index!==id);
     localStorage.setItem('rows',JSON.stringify(localRows));
     render(localRows.map((row,index)=>({{...row,id:index}})));
+    setStatus('削除しました','success');
   }}
 }}
 async function api(path,options={{}}){{
@@ -226,7 +380,7 @@ async function api(path,options={{}}){{
   return data;
 }}
 async function load(){{
-  if(!{str(database).lower()}){{
+  if(!hasDatabase){{
     localRows=JSON.parse(localStorage.getItem('rows')||'[]');
     render(localRows.map((row,index)=>({{...row,id:index}})));
     return;
@@ -240,24 +394,29 @@ async function load(){{
     if(status)status.textContent=authRequired?'ログインするとデータを保存できます':e.message;
   }}
 }}
-document.querySelector('#addItem').onclick=async()=>{{
+const addButton=document.querySelector('#addItem');
+if(addButton)addButton.onclick=async()=>{{
   const item=payload();
-  if(!item.title){{status.textContent='必須項目を入力してください';return;}}
-  if({str(database).lower()}){{
-    try{{
+  if(!item.title){{setStatus('必須項目を入力してください','error');title?.focus();return;}}
+  setBusy(addButton,true,'保存中…');
+  try{{
+    if(hasDatabase){{
       await api('/api/items',{{method:'POST',body:JSON.stringify(item)}});
-      clearForm();await load();status.textContent='登録しました';
-    }}catch(e){{status.textContent=e.message;}}
-  }}else{{
-    localRows.push(item);localStorage.setItem('rows',JSON.stringify(localRows));
-    clearForm();render(localRows.map((row,index)=>({{...row,id:index}})));status.textContent='保存しました';
-  }}
+      clearForm();await load();
+    }}else{{
+      localRows.push(item);localStorage.setItem('rows',JSON.stringify(localRows));
+      clearForm();render(localRows.map((row,index)=>({{...row,id:index}})));
+    }}
+    setStatus('保存しました','success');
+  }}catch(e){{setStatus(e.message,'error');}}
+  finally{{setBusy(addButton,false);}}
 }};
 const email=document.querySelector('#email'),password=document.querySelector('#password'),authStatus=document.querySelector('#authStatus');
+function authMessage(message,type='info'){{if(authStatus)authStatus.textContent=message;showToast(message,type);}}
 if(email){{
-  document.querySelector('#register').onclick=async()=>{{try{{await api('/api/register',{{method:'POST',body:JSON.stringify({{email:email.value,password:password.value}})}});authStatus.textContent='登録しました';await load();}}catch(e){{authStatus.textContent=e.message;}}}};
-  document.querySelector('#login').onclick=async()=>{{try{{await api('/api/login',{{method:'POST',body:JSON.stringify({{email:email.value,password:password.value}})}});authStatus.textContent='ログインしました';await load();}}catch(e){{authStatus.textContent=e.message;}}}};
-  document.querySelector('#logout').onclick=async()=>{{try{{await api('/api/logout',{{method:'POST'}});csrf='';authStatus.textContent='ログアウトしました';render([]);}}catch(e){{authStatus.textContent=e.message;}}}};
+  document.querySelector('#register').onclick=async()=>{{try{{await api('/api/register',{{method:'POST',body:JSON.stringify({{email:email.value,password:password.value}})}});authMessage('登録しました','success');await load();}}catch(e){{authMessage(e.message,'error');}}}};
+  document.querySelector('#login').onclick=async()=>{{try{{await api('/api/login',{{method:'POST',body:JSON.stringify({{email:email.value,password:password.value}})}});authMessage('ログインしました','success');await load();}}catch(e){{authMessage(e.message,'error');}}}};
+  document.querySelector('#logout').onclick=async()=>{{try{{await api('/api/logout',{{method:'POST'}});csrf='';authMessage('ログアウトしました','success');render([]);}}catch(e){{authMessage(e.message,'error');}}}};
 }}
 load();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{{}});

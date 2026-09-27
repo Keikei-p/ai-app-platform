@@ -30,5 +30,7 @@ jobs:
         run: python -m src.tools.remote_acceptance_test
       - name: Chat composer GUI acceptance
         run: python -m src.tools.chat_gui_acceptance_test
+      - name: SNS automation acceptance
+        run: python -m src.tools.social_automation_acceptance
       - name: Production smoke test
         run: python -m src.tools.smoke_test

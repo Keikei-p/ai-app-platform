@@ -41,6 +41,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="ai-app-platform-chat-gui-") as td:
         os.environ["AI_APP_PLATFORM_STATE_DIR"] = td
         from src.ui.main_window import MainWindow
+        from src.ui.workspace_center import WorkspaceCenter
         from src.core.config import WORKSPACE_DIR
 
         app = MainWindow()
@@ -67,12 +68,17 @@ def main() -> int:
             for forbidden in ("業務アプリ", "予約アプリ", "相談から"):
                 if forbidden in visible_copy:
                     raise AssertionError(f"legacy category choice is still visible: {forbidden}")
-            if "つくりたいものを、話すだけ。" not in visible_copy:
+            if "何を作りたいですか？" not in visible_copy:
                 raise AssertionError("AI-first landing headline is missing")
             if app.preview_button.winfo_manager():
                 raise AssertionError("preview action should be hidden before a project exists")
             if app.details_button.winfo_manager():
                 raise AssertionError("test-details action should be hidden before a project exists")
+            if app.download_button.winfo_manager():
+                raise AssertionError("download action should be hidden before a project exists")
+            for expected_nav in ("最近の会話", "作成したアプリ", "ダウンロード"):
+                if expected_nav not in visible_copy:
+                    raise AssertionError(f"workspace navigation is missing: {expected_nav}")
             if not app.ai_button.winfo_manager():
                 raise AssertionError("AI connection control should remain available on landing")
 
@@ -93,9 +99,14 @@ def main() -> int:
             app.run_ai(); app.update()
             if app.current_slug is not None:
                 raise AssertionError("greeting unexpectedly created a project")
+            if not app.current_thread_id:
+                raise AssertionError("standalone chat was not assigned a persistent thread")
             greeting_text = app.chat_history.get("1.0", "end-1c")
             if "こんにちは" not in greeting_text or "作りたい" not in greeting_text:
                 raise AssertionError("natural opening conversation was not rendered")
+            persisted = app.conversations.messages(app.current_thread_id)
+            if len(persisted) < 2 or persisted[0].get("role") != "user":
+                raise AssertionError("standalone chat was not persisted")
 
             # Direct creation from a fresh blank chat must gather/review requirements first.
             app.new_project(); app.update()
@@ -117,6 +128,13 @@ def main() -> int:
                 raise AssertionError("preview action did not appear after project creation")
             if not app.details_button.winfo_manager():
                 raise AssertionError("test-details action did not appear after project creation")
+            if not app.download_button.winfo_manager():
+                raise AssertionError("download action did not appear after project creation")
+            if not app.current_thread_id:
+                raise AssertionError("project chat is not linked to a persistent conversation")
+            linked = app.conversations.find_for_project(app.current_slug)
+            if not linked or linked.thread_id != app.current_thread_id:
+                raise AssertionError("conversation/project link is missing")
             project = WORKSPACE_DIR / app.current_slug
             if (project / "app_spec.json").exists():
                 raise AssertionError("app generated before explicit approval")
@@ -152,6 +170,49 @@ def main() -> int:
                 raise AssertionError("final progress state was not surfaced")
             if app.send_button.instate(["disabled"]):
                 raise AssertionError("send button did not recover after background build")
+            artifacts = app.catalog.artifacts(app.current_slug)
+            if not any(row.target == "Web" and row.path.endswith(".zip") for row in artifacts):
+                raise AssertionError("verified Web artifact was not exposed in download catalog")
+            for row in artifacts:
+                if not Path(row.path).is_file():
+                    raise AssertionError("download catalog exposed a missing artifact")
+            cards = app.catalog.list_cards()
+            card = next((x for x in cards if x.slug == app.current_slug), None)
+            if not card or card.quality != "PASS":
+                raise AssertionError("generated app was not surfaced with verified quality state")
+
+            center = WorkspaceCenter(
+                app,
+                app.conversations,
+                app.catalog,
+                on_open_thread=lambda _thread_id: None,
+                on_open_project=lambda _slug: None,
+                on_preview_project=lambda _slug: None,
+                on_restore_project=lambda _slug: None,
+                initial_tab="projects",
+            )
+            center.update()
+            try:
+                if len(center.tabs.tabs()) != 3:
+                    raise AssertionError("workspace center does not expose conversation/project/download tabs")
+                if not any(row.project_slug == app.current_slug for row in center._thread_rows):
+                    raise AssertionError("workspace center did not show the linked conversation")
+                if not any(row.slug == app.current_slug for row in center._project_rows):
+                    raise AssertionError("workspace center did not show the generated app")
+                if not any(row.project_slug == app.current_slug for row in center._artifact_rows):
+                    raise AssertionError("workspace center did not show the real generated artifact")
+            finally:
+                center.destroy()
+
+            if not app.next_actions.winfo_manager():
+                raise AssertionError("post-build next-action bar was not shown")
+            app.geometry("680x440"); app.update()
+            app._apply_responsive_layout(680, 440); app.update()
+            _assert_chat_visible(app, "680x440 after build")
+            if app.next_actions.winfo_manager():
+                raise AssertionError("post-build actions should collapse before the composer on compact windows")
+            app.geometry("1280x820"); app.update()
+            app._apply_responsive_layout(1280, 820); app.update()
 
             app.instruction.delete("1.0", "end")
             app.instruction.insert("1.0", "1行目")

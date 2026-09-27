@@ -5,6 +5,7 @@ class IntentPlanner:
     """Deterministic v0.3 planner. A future local model may enrich this plan, but policy remains outside the model."""
 
     APP_TYPES = [
+        ("social_automation", ["sns", "自動投稿", "予約投稿", "social automation", "social posting", "threads", "instagram", "youtube投稿", "x投稿"]),
         ("booking", ["予約", "booking", "appointment"]),
         ("todo", ["todo", "タスク", "やること"]),
         ("inventory", ["在庫", "inventory"]),
@@ -22,6 +23,8 @@ class IntentPlanner:
         ("analytics", ["分析", "集計", "レポート"]),
         ("multi_language", ["多言語", "英語", "海外"]),
         ("offline", ["オフライン"]),
+        ("scheduler", ["自動投稿", "予約投稿", "スケジュール", "schedule", "scheduler"]),
+        ("social_publish", ["sns", "threads", "instagram", "youtube投稿", "x投稿", "自動投稿", "social posting"]),
     ]
     TARGETS = [
         ("windows", ["windows", "ウィンドウズ", "exe", "msix"]),
@@ -46,6 +49,8 @@ class IntentPlanner:
         kinds = self._matches(instruction, self.APP_TYPES)
         app_type = kinds[0] if kinds else "generic"
         features = list(dict.fromkeys(self._matches(instruction, self.FEATURES)))
+        if app_type == "social_automation":
+            features = list(dict.fromkeys(features + ["scheduler", "social_publish"]))
         targets = list(dict.fromkeys(self._matches(instruction, self.TARGETS))) or ["web"]
         spec = AppSpec(
             project_name=project_name,

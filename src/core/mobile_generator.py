@@ -44,6 +44,7 @@ class MobileGenerator:
                 "android": "expo start --android",
                 "ios": "expo start --ios",
                 "web": "expo start --web",
+                "typecheck": "tsc --noEmit",
             },
             "dependencies": {
                 "expo": "~57.0.0",
@@ -69,6 +70,30 @@ class MobileGenerator:
                 "# Mobile app\n\n"
                 "AI App Platform generated Expo/React Native source for Android/iOS.\n"
                 "Build/signing remains approval-gated until credentials and store requirements are confirmed.\n"
+            ),
+            "build_readiness.json": json.dumps(
+                {
+                    "source": "ready",
+                    "typecheck": "npm run typecheck",
+                    "bundle_checks": {
+                        "android": "npx expo export --platform android --output-dir dist-android",
+                        "ios": "npx expo export --platform ios --output-dir dist-ios",
+                    },
+                    "android": {
+                        "debug_apk": "native prebuild + Gradle supported when Java/Android SDK are available",
+                        "production_aab": "requires production signing configuration before store use",
+                    },
+                    "ios": {
+                        "native_build": "requires macOS/Xcode or a compatible remote build service",
+                        "production_ipa": "requires Apple signing credentials and provisioning",
+                    },
+                    "store_submission": {
+                        "status": "approval_required",
+                        "note": "AI App Platform does not submit to stores without explicit human approval.",
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
             ),
         }
         out: list[Path] = []

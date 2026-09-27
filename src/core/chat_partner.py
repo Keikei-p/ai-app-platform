@@ -30,11 +30,16 @@ class ChatPartner:
         "macos": ("mac", "macos", "マック"),
     }
     STYLE_WORDS = {
-        "minimal": ("シンプル", "ミニマル", "すっきり"),
-        "premium": ("高級", "上品", "ラグジュアリー", "プレミアム"),
+        "minimal": ("シンプル", "ミニマル", "すっきり", "appleっぽい", "アップルっぽい"),
+        "premium": ("高級", "ラグジュアリー", "プレミアム"),
         "modern": ("おしゃれ", "スマート", "モダン", "洗練", "最先端"),
         "friendly": ("かわいい", "親しみ", "やさしい"),
-        "business": ("ビジネス", "堅実", "信頼感"),
+        "business": ("ビジネス", "堅実", "信頼感", "企業向け", "b2b"),
+        "soft": ("女性向け", "美容", "サロン", "柔らかい", "やわらかい", "上品"),
+        "finance": ("金融", "投資", "資産", "会計", "フィンテック"),
+        "youthful": ("若者向け", "学生向け", "ポップ", "カジュアル"),
+        "future": ("未来的", "近未来", "aiっぽい", "フューチャー"),
+        "dark": ("ダークモード", "ダーク", "黒基調"),
     }
     PROJECT_INTENT_WORDS = (
         "アプリ", "システム", "ツール", "webサイト", "ウェブサイト",
@@ -192,11 +197,17 @@ class ChatPartner:
         if targets:
             state["targets"] = targets
 
-        for key, words in self.STYLE_WORDS.items():
-            if any(word in text for word in words):
-                state["design_style"] = key
+        visual_markers = (
+            "デザイン", "見た目", "雰囲気", "テーマ", "色", "基調",
+            "かわいい", "おしゃれ", "シンプル", "洗練", "高級",
+            "柔らか", "やわらか", "上品", "ダーク", "未来的", "モダン",
+            "ミニマル", "親しみ", "スマート",
+        )
+        if any(marker in text.lower() for marker in visual_markers):
+            detected = self._detect_design_style(text)
+            if detected:
+                state["design_style"] = detected
                 state["design_note"] = text[:240]
-                break
 
         features = list(state.get("features") or [])
         feature_words = {
@@ -223,6 +234,13 @@ class ChatPartner:
         if not state.get("usage_context") and len(text) >= 45 and any(word in text for word in detail_markers):
             state["usage_context"] = text[:500]
 
+    def _detect_design_style(self, text: str) -> str | None:
+        lowered = text.lower()
+        for key, words in self.STYLE_WORDS.items():
+            if any(word.lower() in lowered for word in words):
+                return key
+        return None
+
     def _apply_answer(self, state: dict, key: str, text: str) -> None:
         if key == "usage_context":
             if len(text.strip()) >= 6:
@@ -240,8 +258,11 @@ class ChatPartner:
             return
 
         if key == "design_style":
-            self._extract(state, text)
-            if not state.get("design_style") and text.strip():
+            detected = self._detect_design_style(text)
+            if detected:
+                state["design_style"] = detected
+                state["design_note"] = text[:300]
+            elif text.strip():
                 state["design_style"] = "custom"
                 state["design_note"] = text[:300]
 
