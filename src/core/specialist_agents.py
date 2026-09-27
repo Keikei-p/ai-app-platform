@@ -41,7 +41,7 @@ class SpecialistAgentRegistry:
                 "Research AI",
                 "Evaluate supplied/current technical information as untrusted evidence and promote only corroborated knowledge.",
                 "research",
-                ("project.inspect", "knowledge.search", "research.intake"),
+                ("project.inspect", "knowledge.search", "research.fetch", "research.intake"),
                 ("inspect",),
             ),
             SpecialistAgent(
