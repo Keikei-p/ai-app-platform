@@ -289,6 +289,10 @@ def main() -> int:
             raise RuntimeError("specialist execution council endpoint failed")
         if execution_council.get("execution_mode") != "reviewed_local_validation_only":
             raise RuntimeError("specialist execution council escaped reviewed execution mode")
+        if not str(execution_council.get("run_id") or "").startswith("council-"):
+            raise RuntimeError("specialist execution council did not issue a unique run id")
+        if not str(execution_council.get("history_path") or "").startswith(".aiapp/agent/councils/"):
+            raise RuntimeError("specialist execution council history was not persisted")
         if "release.publish" in (execution_council.get("executed_tools") or []):
             raise RuntimeError("specialist execution council unexpectedly published externally")
         if "code.generate" in (execution_council.get("executed_tools") or []):
