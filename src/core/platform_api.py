@@ -59,6 +59,19 @@ class PlatformAPI:
                 self.end_headers()
                 self.wfile.write(raw)
 
+            def _artifact(self, project_slug: str, artifact_id: str):
+                path = api.service.catalog.artifact_path(project_slug, artifact_id)
+                raw = path.read_bytes()
+                safe_name = path.name.replace('"', "").replace("\r", "").replace("\n", "")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(len(raw)))
+                self.send_header("Content-Disposition", f'attachment; filename="{safe_name}"')
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(raw)
+
             def _body(self) -> dict[str, Any]:
                 size = int(self.headers.get("Content-Length") or 0)
                 if size < 0 or size > MAX_BODY:
@@ -114,6 +127,14 @@ class PlatformAPI:
                     if path == "/api/v1/conversations":
                         query = parse_qs(parsed.query).get("q", [""])[0]
                         self._json(200, {"conversations": api.service.list_conversations(query)})
+                        return
+                    if path == "/api/v1/artifacts/download":
+                        query = parse_qs(parsed.query)
+                        project_slug = str((query.get("project") or [""])[0]).strip()
+                        artifact_id = str((query.get("id") or [""])[0]).strip()
+                        if not project_slug or not artifact_id:
+                            raise ValueError("project and id are required")
+                        self._artifact(project_slug, artifact_id)
                         return
 
                     parts = [x for x in path.split("/") if x]
