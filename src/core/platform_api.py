@@ -151,6 +151,19 @@ class PlatformAPI:
                         row = api.service.agent_plan(goal, str(data.get("project_slug") or "") or None)
                         self._json(200, row)
                         return
+                    if path == "/api/v1/research/intake":
+                        topic = str(data.get("topic") or "").strip()
+                        statement = str(data.get("statement") or "").strip()
+                        sources = data.get("sources")
+                        if not topic or not statement or not isinstance(sources, list):
+                            raise ValueError("topic, statement and sources are required")
+                        row = api.service.research_intake(
+                            topic=topic,
+                            statement=statement,
+                            sources=sources,
+                        )
+                        self._json(202 if row.get("accepted") else 422, row)
+                        return
                     self._json(404, {"error": "not_found"})
                 except Exception as exc:
                     self._json(400, {"error": str(exc)})
