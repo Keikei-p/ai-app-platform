@@ -376,6 +376,7 @@ class ProjectCatalog:
         evaluation = self._json(project_dir / ".aiapp" / "reports" / "agent_evaluation.json")
         visual_design = self._json(project_dir / ".aiapp" / "reports" / "visual_design_review.json")
         release_manager = self._json(project_dir / ".aiapp" / "reports" / "release_manager.json")
+        development_certificate = self._json(project_dir / ".aiapp" / "reports" / "development_certificate.json")
         agent_runs = self._agent_runs(project_dir)
         try:
             from .code_vault import CodeVault
@@ -397,6 +398,7 @@ class ProjectCatalog:
             "evaluation": evaluation,
             "visual_design": visual_design,
             "release_manager": release_manager,
+            "development_certificate": development_certificate,
             "agent_runs": agent_runs,
             "gaps": self._json(project_dir / "implementation_gaps.json"),
             "versions": versions,
