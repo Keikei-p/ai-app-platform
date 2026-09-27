@@ -348,6 +348,39 @@ class AICore:
         else:
             message = "生成は完了しましたが、自動テストに失敗しました。完成扱いにはしません。"
 
+        try:
+            if final_ok:
+                verified_lesson = (
+                    f"検証済み成功: app_type={plan.spec.app_type}, "
+                    f"targets={','.join(plan.spec.targets)}, design={plan.spec.design_style}. "
+                    "Design/Test/Securityの品質ゲートを通過した構成。"
+                )
+                self.memory.record(
+                    category="verified_generation_success",
+                    input_text=instruction,
+                    lesson=verified_lesson,
+                    outcome="preview_ready",
+                    project_slug=slug,
+                    verified=True,
+                    evidence_source="generation-pipeline",
+                )
+            else:
+                reasons = list(pipeline_report.blocking_reasons)[:6]
+                if not design_review.passed:
+                    reasons += list(design_review.findings)[:4]
+                verified_lesson = "検証済み失敗要因: " + (" / ".join(reasons) if reasons else message)
+                self.memory.record(
+                    category="verified_generation_failure",
+                    input_text=instruction,
+                    lesson=verified_lesson,
+                    outcome="quality_gate_failed",
+                    project_slug=slug,
+                    verified=True,
+                    evidence_source="generation-pipeline",
+                )
+        except Exception as exc:
+            log_event("memory.verified_outcome_failed", str(exc), slug, "ai-core")
+
         emit("done" if final_ok else "issue", "確認が完了しました" if final_ok else "確認が必要な項目があります")
         finish_job(job_id, "completed" if final_ok else "quality_gate_failed", message)
         return CoreResult(
