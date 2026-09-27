@@ -140,8 +140,14 @@ class ReleaseManager:
         if target == "android":
             aab_candidates = self._files(root / "artifacts" / "android", {".aab"})
             apk_candidates = self._files(root / "artifacts" / "android", {".apk"})
-            aabs = tuple(x for x in aab_candidates if self.verifier.verify_android_aab(x).valid)
-            apks = tuple(x for x in apk_candidates if self.verifier.verify_android_apk(x).valid)
+            aabs = tuple(
+                x for x in aab_candidates
+                if self.verifier.verify_android_aab(x, x.with_name(x.stem + ".manifest.json")).valid
+            )
+            apks = tuple(
+                x for x in apk_candidates
+                if self.verifier.verify_android_apk(x, x.with_name(x.stem + ".manifest.json")).valid
+            )
             blockers: list[str] = []
             if not quality:
                 blockers.append("quality gates have not verified preview readiness")
@@ -161,7 +167,7 @@ class ReleaseManager:
                 artifacts = ()
                 distribution = "blocked"
                 if aab_candidates or apk_candidates:
-                    blockers.append("Android artifact failed structural verification")
+                    blockers.append("Android artifact failed structure, checksum, or release-evidence verification")
                 else:
                     blockers.append("Android APK/AAB does not exist")
                 next_step = "Prepare Android build dependencies and build a verified debug APK."
@@ -170,7 +176,10 @@ class ReleaseManager:
         if target == "ios":
             folder = root / "artifacts" / "ios"
             ipa_candidates = self._files(folder, {".ipa"})
-            ipas = tuple(x for x in ipa_candidates if self.verifier.verify_ipa(x).valid)
+            ipas = tuple(
+                x for x in ipa_candidates
+                if self.verifier.verify_ipa(x, x.with_name(x.stem + ".manifest.json")).valid
+            )
             source_candidates = tuple(x for x in self._files(folder, {".zip"}) if "source" in x.stem.lower())
             source_zips: list[Path] = []
             for source in source_candidates:
@@ -187,7 +196,7 @@ class ReleaseManager:
                     "Verify Apple signing/provisioning and request explicit distribution/App Store approval.",
                 )
             if ipa_candidates and not ipas:
-                blockers.append("iOS IPA failed structural verification")
+                blockers.append("iOS IPA failed structure, checksum, or signing-evidence verification")
             else:
                 blockers.append("signed iOS IPA does not exist")
             if source_zips and quality:
