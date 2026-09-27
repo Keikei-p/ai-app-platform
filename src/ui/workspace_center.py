@@ -291,9 +291,7 @@ class WorkspaceCenter(tk.Toplevel):
         row = self._selected(self.chat_tree, self._thread_rows)
         if not row:
             return
-        extra = "
-
-アプリ本体やCode Vaultの履歴は削除しません。" if row.project_slug else ""
+        extra = "\n\nアプリ本体やCode Vaultの履歴は削除しません。" if row.project_slug else ""
         if not messagebox.askyesno("履歴から削除", "この会話を最近の履歴から削除しますか？" + extra, parent=self):
             return
         self.conversations.archive(row.thread_id)
