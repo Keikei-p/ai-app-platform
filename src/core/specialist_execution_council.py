@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 import json
+import uuid
 
 from .agent_budget import AgentBudget, AgentBudgetTracker
 from .agent_tool_executor import AgentToolExecutor
@@ -64,6 +66,7 @@ class ExecutionCouncilTurn:
 
 @dataclass(frozen=True)
 class ExecutionCouncilReport:
+    run_id: str
     goal: str
     project_slug: str
     status: str
@@ -75,9 +78,11 @@ class ExecutionCouncilReport:
     tool_executions: tuple[CouncilToolExecution, ...]
     budget: dict[str, Any]
     summary: str
+    history_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "run_id": self.run_id,
             "goal": self.goal,
             "project_slug": self.project_slug,
             "status": self.status,
@@ -89,6 +94,7 @@ class ExecutionCouncilReport:
             "tool_executions": [x.to_dict() for x in self.tool_executions],
             "budget": self.budget,
             "summary": self.summary,
+            "history_path": self.history_path,
         }
 
 
@@ -133,6 +139,7 @@ class SpecialistExecutionCouncil:
             raise ValueError("goal is required")
         if not slug:
             raise ValueError("project_slug is required")
+        run_id = "council-" + uuid.uuid4().hex
 
         selected = tuple(roles or DEFAULT_EXECUTION_COUNCIL)
         if not selected or len(selected) > len(DEFAULT_EXECUTION_COUNCIL):
@@ -191,6 +198,7 @@ class SpecialistExecutionCouncil:
             except Exception as exc:
                 summary = f"specialist execution council stopped safely: {type(exc).__name__}: {exc}"
                 return self._report(
+                    run_id,
                     clean_goal,
                     slug,
                     "blocked",
@@ -206,6 +214,7 @@ class SpecialistExecutionCouncil:
             if result.status == "not_connected":
                 turns.append(ExecutionCouncilTurn(order, name, result, ()))
                 return self._report(
+                    run_id,
                     clean_goal,
                     slug,
                     "not_connected",
@@ -296,7 +305,7 @@ class SpecialistExecutionCouncil:
                         tool_name,
                         self._tool_args(tool_name, clean_goal, slug),
                         approved=False,
-                        run_id="council-" + slug,
+                        run_id=run_id,
                     )
                 except Exception as exc:
                     blocked = True
@@ -352,6 +361,7 @@ class SpecialistExecutionCouncil:
             else f"{len(turns)} specialists completed with {len(executed_once)} reviewed tool executions."
         )
         return self._report(
+            run_id,
             clean_goal,
             slug,
             status,
@@ -366,6 +376,7 @@ class SpecialistExecutionCouncil:
 
     def _report(
         self,
+        run_id: str,
         goal: str,
         project_slug: str,
         status: str,
@@ -383,6 +394,7 @@ class SpecialistExecutionCouncil:
         })
         budget["budget"]["max_tool_executions"] = self.MAX_TOOL_EXECUTIONS
         return ExecutionCouncilReport(
+            run_id=run_id,
             goal=goal,
             project_slug=project_slug,
             status=status,
@@ -395,6 +407,46 @@ class SpecialistExecutionCouncil:
             budget=budget,
             summary=summary,
         )
+
+    @staticmethod
+    def save(project_dir: Path, report: ExecutionCouncilReport) -> Path:
+        root = Path(project_dir)
+        target = root / ".aiapp" / "agent" / "councils" / f"{report.run_id}.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "run_id": report.run_id,
+            "goal": redact_sensitive(report.goal)[:3000],
+            "project_slug": report.project_slug,
+            "status": report.status,
+            "execution_mode": report.execution_mode,
+            "executed_tools": list(report.executed_tools),
+            "delegated_tools": list(report.delegated_tools),
+            "approval_required_tools": list(report.approval_required_tools),
+            "budget": report.budget,
+            "summary": redact_sensitive(report.summary)[:3000],
+            "turns": [
+                {
+                    "order": turn.order,
+                    "specialist": turn.specialist,
+                    "status": turn.result.status,
+                    "summary": redact_sensitive(turn.result.summary)[:2000],
+                    "requested_tools": list(turn.result.requested_tools),
+                    "tool_executions": [
+                        {
+                            "tool_name": row.tool_name,
+                            "status": row.status,
+                            "summary": redact_sensitive(row.summary)[:1000],
+                        }
+                        for row in turn.tool_executions
+                    ],
+                }
+                for turn in report.turns
+            ],
+        }
+        tmp = target.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(target)
+        return target
 
     @staticmethod
     def _tool_args(tool_name: str, goal: str, project_slug: str) -> dict[str, Any]:
