@@ -137,5 +137,29 @@ class ProjectCatalogTests(unittest.TestCase):
                 with self.assertRaises(FileNotFoundError):
                     catalog.screenshot_path("demo", "other.png")
 
+    def test_project_detail_exposes_only_summary_agent_runs(self):
+        with tempfile.TemporaryDirectory() as td:
+            from unittest.mock import patch
+            root = Path(td)
+            project = root / "demo"
+            runs = project / ".aiapp" / "agent" / "runs"
+            runs.mkdir(parents=True)
+            (project / "project.json").write_text('{"name":"Demo","slug":"demo"}', encoding="utf-8")
+            (runs / "run-build.json").write_text(json.dumps({
+                "run_id": "run-1",
+                "status": "verified",
+                "created_at": "2026-09-27T00:00:00+00:00",
+                "steps": [{"step_id":"validate-tests","action":"validate","tool_name":"tests.run","status":"pass","summary":"ok","result":{"secret":"must-not-leak"}}],
+                "unexpected_secret": "must-not-leak"
+            }), encoding="utf-8")
+            catalog = ProjectCatalog()
+            with patch("src.core.workspace_catalog.WORKSPACE_DIR", root), patch("src.core.workspace_catalog.connect") as conn:
+                fake_conn = conn.return_value.__enter__.return_value
+                fake_conn.execute.return_value.fetchall.return_value = []
+                detail = catalog.detail("demo")
+            self.assertEqual(detail["agent_runs"][0]["run_id"], "run-1")
+            self.assertNotIn("unexpected_secret", detail["agent_runs"][0])
+            self.assertNotIn("result", detail["agent_runs"][0]["steps"][0])
+
 if __name__ == "__main__":
     unittest.main()
