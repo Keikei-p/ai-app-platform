@@ -82,6 +82,10 @@ def main() -> int:
             raise RuntimeError("evidence-backed knowledge promotion capability is missing")
         if not data.get("capabilities", {}).get("development_certificate"):
             raise RuntimeError("development certificate capability is missing")
+        if not data.get("capabilities", {}).get("ios_simulator_native_build"):
+            raise RuntimeError("iOS Simulator native build capability is missing")
+        if data.get("capabilities", {}).get("ios_signed_ipa") is not False:
+            raise RuntimeError("platform falsely claims signed IPA capability")
         if (data.get("identity") or {}).get("name") != "Aivy":
             raise RuntimeError("Aivy identity was not exposed by platform core")
         csrf = str(data.get("csrf") or "")
