@@ -822,7 +822,7 @@ if __name__ == "__main__":
     def _styles() -> str:
         return """textarea{width:100%;border:1px solid #D1D5DB;background:#FBFBFC;color:var(--color-text);padding:12px 14px;border-radius:var(--radius-sm);font:inherit;resize:vertical;min-height:130px}
 textarea:focus-visible{outline:3px solid #A5B4FC;outline-offset:2px}
-.clean-list li{align-items:flex-start;flex-wrap:wrap}.clean-list li>span{flex:1 1 320px;white-space:pre-wrap}.clean-list .button-row{margin-top:0}
+.clean-list li{align-items:flex-start;flex-wrap:wrap}.clean-list .button-row{margin-top:0}.post-info{flex:1 1 320px;min-width:0}.post-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:7px}.post-content{white-space:pre-wrap;overflow-wrap:anywhere}.platform-badge,.post-status,.post-time{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;font-size:.72rem;font-weight:750}.platform-badge{background:var(--color-accent-soft);color:var(--color-accent)}.post-time{background:var(--color-surface-soft);color:var(--color-muted);border:1px solid var(--color-border)}.post-status{background:#F3F4F6;color:#4B5563}.status-posted{background:#ECFDF3;color:#067647}.status-failed{background:#FEF3F2;color:#B42318}.status-pending_approval{background:#FFF7ED;color:#B54708}.status-queued,.status-retry{background:#EFF8FF;color:#175CD3}.status-posting{background:#F4F3FF;color:#5925DC}.status-cancelled{background:#F2F4F7;color:#667085}
 #providerStatus{overflow-wrap:anywhere}.status-badge{white-space:nowrap}
 @media(max-width:800px){.clean-list .button-row{width:100%}.clean-list .button-row button{flex:1}}
 """
@@ -897,8 +897,18 @@ function render(posts){
   emptyState.hidden=posts.length>0;
   for(const post of posts){
     const li=document.createElement('li');
-    const info=document.createElement('span');
-    info.textContent=post.platform.toUpperCase()+' · '+post.status+' · '+fmt(post.scheduled_at)+' · '+(post.text||post.video_path||post.media_url||'');
+    const info=document.createElement('div');
+    info.className='post-info';
+    const top=document.createElement('div');
+    top.className='post-meta';
+    const platform=document.createElement('span');platform.className='platform-badge';platform.textContent=post.platform.toUpperCase();
+    const state=document.createElement('span');state.className='post-status status-'+String(post.status).replace(/[^a-z_]/g,'');state.textContent=({
+      pending_approval:'承認待ち',queued:'予約中',posting:'投稿中',posted:'投稿済み',retry:'再試行待ち',failed:'失敗',cancelled:'取消'
+    }[post.status]||post.status);
+    const schedule=document.createElement('span');schedule.className='post-time';schedule.textContent=fmt(post.scheduled_at);
+    top.append(platform,state,schedule);
+    const content=document.createElement('div');content.className='post-content';content.textContent=post.text||post.video_path||post.media_url||'内容なし';
+    info.append(top,content);
     const actions=document.createElement('div');
     actions.className='button-row';
     if(post.status==='pending_approval'){
