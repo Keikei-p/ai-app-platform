@@ -374,6 +374,7 @@ class ProjectCatalog:
         spec = self._json(project_dir / "app_spec.json")
         approval = self._json(project_dir / ".aiapp" / "approval_state.json")
         evaluation = self._json(project_dir / ".aiapp" / "reports" / "agent_evaluation.json")
+        visual_design = self._json(project_dir / ".aiapp" / "reports" / "visual_design_review.json")
         try:
             from .code_vault import CodeVault
             versions = [asdict(x) for x in CodeVault().list_versions(slug)[:30]]
@@ -392,6 +393,7 @@ class ProjectCatalog:
             "readiness": readiness,
             "approval": approval,
             "evaluation": evaluation,
+            "visual_design": visual_design,
             "gaps": self._json(project_dir / "implementation_gaps.json"),
             "versions": versions,
             "audit": [dict(x) for x in audit],
