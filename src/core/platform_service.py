@@ -23,6 +23,7 @@ from .specialist_runtime import SpecialistRuntime
 from .specialist_council import SpecialistCouncil
 from .llm_chat import AIChatEngine
 from .aivy_identity import AIVY
+from .evolution_engine import VerifiedEvolutionEngine
 
 
 class PlatformService:
@@ -45,6 +46,7 @@ class PlatformService:
         self.knowledge = VerifiedKnowledgeStore()
         self.research = ResearchIntake(self.knowledge)
         self.research_provider = GuardedResearchProvider()
+        self.evolution = VerifiedEvolutionEngine()
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -76,6 +78,7 @@ class PlatformService:
                 "multimodal_design_review": True,
                 "automatic_screenshot_capture": True,
                 "specialist_council": True,
+                "verified_evolution_engine": True,
             },
         }
 
@@ -114,6 +117,39 @@ class PlatformService:
     def configure_model_route(self, capability: str, provider: str, model: str = "") -> dict[str, Any]:
         self.ai_engine.configure_route(capability, provider, model)
         return self.model_routes()
+
+    def evolution_policy(self) -> dict[str, Any]:
+        return {
+            "policy": self.evolution.policy.to_dict(),
+            "protected_paths": sorted([
+                "src/core/safety.py",
+                "src/core/permissions.py",
+                "src/core/approval.py",
+                "src/core/agent_tools.py",
+                "src/core/agent_runtime.py",
+                "src/tools/security_selfcheck.py",
+                ".github/workflows/*",
+            ]),
+            "rule": "Aivy may compare self-improvements, but eligible candidates still require human review and can never auto-merge main.",
+        }
+
+    def compare_evolution_candidate(
+        self,
+        *,
+        baseline: dict[str, Any],
+        candidate: dict[str, Any],
+        changed_paths: list[str],
+        evidence_refs: list[str],
+        requested_actions: list[str] | None = None,
+    ) -> dict[str, Any]:
+        decision = self.evolution.compare(
+            self.evolution.report_from_dict(baseline),
+            self.evolution.report_from_dict(candidate),
+            changed_paths=changed_paths,
+            evidence_refs=evidence_refs,
+            requested_actions=requested_actions or [],
+        )
+        return decision.to_dict()
 
     def consult_specialist(
         self,
