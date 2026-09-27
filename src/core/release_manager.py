@@ -200,12 +200,26 @@ class ReleaseManager:
                 x for x in ipa_candidates
                 if self.verifier.verify_ipa(x, x.with_name(x.stem + ".manifest.json")).valid
             )
-            source_candidates = tuple(x for x in self._files(folder, {".zip"}) if "source" in x.stem.lower())
+            simulator_candidates = tuple(
+                x for x in self._files(folder, {".zip"})
+                if "simulator.app" in x.name.lower()
+            )
+            simulator_zips: list[Path] = []
+            for simulator in simulator_candidates:
+                manifest = simulator.with_name(simulator.stem + ".manifest.json")
+                if self.verifier.verify_ios_simulator_zip(simulator, manifest).valid:
+                    simulator_zips.append(simulator)
+
+            source_candidates = tuple(
+                x for x in self._files(folder, {".zip"})
+                if "source" in x.stem.lower()
+            )
             source_zips: list[Path] = []
             for source in source_candidates:
                 manifest = folder / (source.stem + ".manifest.json")
                 if self.verifier.verify_ios_source_zip(source, manifest).valid:
                     source_zips.append(source)
+
             blockers: list[str] = []
             if not quality:
                 blockers.append("quality gates have not verified preview readiness")
@@ -215,10 +229,27 @@ class ReleaseManager:
                     blockers,
                     "Verify Apple signing/provisioning and request explicit distribution/App Store approval.",
                 )
+
             if ipa_candidates and not ipas:
                 blockers.append("iOS IPA failed structure, checksum, or signing-evidence verification")
             else:
                 blockers.append("signed iOS IPA does not exist")
+
+            if simulator_zips and quality:
+                blockers.append("Simulator build is not installable on a physical iPhone/iPad")
+                return self._state(
+                    target,
+                    quality,
+                    "simulator_bundle",
+                    tuple(simulator_zips),
+                    "simulator_only",
+                    blockers,
+                    "Native iOS compilation is verified for Simulator. Apple signing and a device IPA remain separate approval-gated steps.",
+                )
+
+            if simulator_candidates and not simulator_zips:
+                blockers.append("iOS Simulator bundle failed checksum or structure verification")
+
             if source_zips and quality:
                 return self._state(
                     target, quality, "source_bundle", tuple(source_zips), "source_only",
