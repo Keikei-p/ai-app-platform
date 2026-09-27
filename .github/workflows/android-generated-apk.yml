@@ -7,6 +7,13 @@ on:
     paths:
       - "src/core/mobile_generator.py"
       - "src/core/android_packager.py"
+      - "src/core/ai_core.py"
+      - "src/core/platform_service.py"
+      - "src/core/agent_execution_trace.py"
+      - "src/core/agent_runtime.py"
+      - "src/core/generation_pipeline.py"
+      - "src/core/release_manager.py"
+      - "src/core/test_runner.py"
       - "src/tools/android_native_acceptance.py"
       - ".github/workflows/android-generated-apk.yml"
   pull_request:
@@ -14,6 +21,13 @@ on:
     paths:
       - "src/core/mobile_generator.py"
       - "src/core/android_packager.py"
+      - "src/core/ai_core.py"
+      - "src/core/platform_service.py"
+      - "src/core/agent_execution_trace.py"
+      - "src/core/agent_runtime.py"
+      - "src/core/generation_pipeline.py"
+      - "src/core/release_manager.py"
+      - "src/core/test_runner.py"
       - "src/tools/android_native_acceptance.py"
       - ".github/workflows/android-generated-apk.yml"
 
