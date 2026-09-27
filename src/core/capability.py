@@ -3,6 +3,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 import json
 from .app_spec import AppSpec
+from .artifact_verifier import ArtifactVerifier
 
 @dataclass(frozen=True)
 class CapabilityGap:
@@ -14,6 +15,9 @@ class CapabilityGap:
     blocking: bool = True
 
 class CapabilityAssessor:
+    def __init__(self, verifier: ArtifactVerifier | None = None):
+        self.verifier = verifier or ArtifactVerifier()
+
     def assess(self, spec: AppSpec, project_dir: Path) -> list[CapabilityGap]:
         gaps: list[CapabilityGap] = []
         if spec.app_type == "social_automation" or "social_publish" in spec.features:
@@ -52,8 +56,47 @@ class CapabilityAssessor:
                 gaps.append(CapabilityGap("windows_binary", "medium", "Windows EXEはまだ生成されていません。", f"{expected.name} がありません。", "Windows PCでBUILD_GENERATED_WINDOWS.batを実行し、起動確認する。"))
         if "android" in spec.targets and not (project_dir / "artifacts" / "android").exists():
             gaps.append(CapabilityGap("android_binary", "medium", "APK/AABはまだ生成されていません。", "Androidビルド成果物がありません。", "署名設定とビルド環境を確認してAAB/APKを生成する。"))
-        if "ios" in spec.targets and not (project_dir / "artifacts" / "ios").exists():
-            gaps.append(CapabilityGap("ios_binary", "medium", "IPA/App Store用アーカイブはまだ生成されていません。", "iOSビルド成果物がありません。", "Apple署名とmacOS/Xcodeまたは対応ビルドサービスを準備する。"))
+        if "ios" in spec.targets:
+            ios_artifacts = project_dir / "artifacts" / "ios"
+            verified_ipas: list[Path] = []
+            verified_simulators: list[Path] = []
+            verified_sources: list[Path] = []
+            if ios_artifacts.is_dir():
+                for artifact in sorted(ios_artifacts.glob("*.ipa")):
+                    manifest = artifact.with_name(artifact.stem + ".manifest.json")
+                    if self.verifier.verify_ipa(artifact, manifest).valid:
+                        verified_ipas.append(artifact)
+                for artifact in sorted(ios_artifacts.glob("*-simulator.app.zip")):
+                    manifest = artifact.with_name(artifact.stem + ".manifest.json")
+                    if self.verifier.verify_ios_simulator_zip(artifact, manifest).valid:
+                        verified_simulators.append(artifact)
+                for artifact in sorted(ios_artifacts.glob("*-ios-source.zip")):
+                    manifest = artifact.with_name(artifact.stem + ".manifest.json")
+                    if self.verifier.verify_ios_source_zip(artifact, manifest).valid:
+                        verified_sources.append(artifact)
+
+            if not verified_ipas:
+                if verified_simulators:
+                    reason = "iOS Simulator向けNativeビルドは検証済みですが、実機配布用の署名済みIPAはまだありません。"
+                    evidence = "Simulator Evidence: " + ", ".join(x.name for x in verified_simulators)
+                    next_step = "Apple署名・Provisioningを人が承認した上で、実機IPAを生成して署名Evidenceを検証する。"
+                elif verified_sources:
+                    reason = "iOSソースは検証済みですが、実機配布用の署名済みIPAはまだありません。"
+                    evidence = "Source Evidence: " + ", ".join(x.name for x in verified_sources)
+                    next_step = "macOS/XcodeでNativeビルドを確認し、Apple署名・Provisioning承認後に実機IPAを生成する。"
+                else:
+                    reason = "iOS実機配布用の署名済みIPAはまだ生成・検証されていません。"
+                    evidence = "有効なsigned IPA Evidenceがありません。"
+                    next_step = "macOS/Xcode環境でNativeビルドを確認し、Apple署名・Provisioningを人が承認してIPAを生成する。"
+                gaps.append(
+                    CapabilityGap(
+                        "ios_binary",
+                        "medium",
+                        reason,
+                        evidence,
+                        next_step,
+                    )
+                )
         if "payments" in spec.features:
             gaps.append(CapabilityGap("payments_provider", "high", "決済事業者・商品・返金条件の確定が必要です。", "決済プロバイダ設定が自動確定できません。", "利用する決済事業者と商品/価格/返金ルールを人間が承認する。"))
         return gaps
