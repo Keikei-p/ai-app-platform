@@ -82,7 +82,16 @@ Current v0.8 integration evidence includes:
 
 The release PR also runs the dedicated Android native APK acceptance before main is updated.
 
+## Mission Control
+
+Aivy now includes a persistent Mission Control foundation for long-horizon work. Missions preserve their goal, project, plan, phase, approval state, evidence references and history across restarts.
+
+Mission execution starts with reviewed preflight and specialist checks. Code generation still stops at an explicit approval boundary, and approved builds continue through the existing test, security, recovery, certificate and learning pipeline.
+
+This is durable local orchestration, not unlimited background computing: a powered-off PC cannot continue local work, and an interrupted in-memory build must resume from a safe reinspection boundary.
+
 ## Aivy Learning Flywheel
+
 
 Verified successful builds now feed a dedicated Learning Flywheel. Aivy records only evidence-backed outcomes that pass Tests, Security, Design and Preview learning gates, together with the Development Certificate/Postflight evidence, the model route used, repair count and safe source-file hashes.
 
