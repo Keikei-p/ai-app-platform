@@ -8,6 +8,7 @@ import json
 import re
 
 from .evaluation_engine import EvaluationEngine, EvaluationReport
+from .stop_escalation import StopEscalationJudge
 
 
 FAILURE_KINDS = {
@@ -91,8 +92,9 @@ class RecoverySupervisor:
 
     MAX_REPAIR_ATTEMPTS = 2
 
-    def __init__(self, evaluation: EvaluationEngine | None = None):
+    def __init__(self, evaluation: EvaluationEngine | None = None, escalation: StopEscalationJudge | None = None):
         self.evaluation = evaluation or EvaluationEngine()
+        self.escalation = escalation or StopEscalationJudge()
 
     def capture(self, project_dir: Path) -> EvaluationReport:
         return self.evaluation.evaluate(Path(project_dir))
@@ -187,18 +189,25 @@ class RecoverySupervisor:
         elif candidate.learning_eligible and candidate.preview_ready:
             action = "accept"
             reason = "all quality gates pass without a critical regression"
-        elif repeated:
-            action = "stop"
-            reason = "the same failure repeated across consecutive repair attempts"
-        elif len(attempts) >= self.MAX_REPAIR_ATTEMPTS:
-            action = "stop"
-            reason = "bounded repair-attempt budget is exhausted"
-        elif classification.retryable:
-            action = "retry"
-            reason = "failure is classified as locally repairable within the remaining budget"
         else:
-            action = "stop"
-            reason = "failure needs evidence or human/environment intervention"
+            escalation = self.escalation.decide(
+                failure_kind=classification.kind,
+                attempts_used=len(attempts),
+                prior_fingerprints=fingerprints[:-1] if fingerprints else (),
+                signals=classification.signals,
+            )
+            if repeated or escalation.action == "STOP":
+                action = "stop"
+                reason = escalation.reason
+            elif escalation.action == "ESCALATE":
+                action = "stop"
+                reason = "human escalation required: " + escalation.reason
+            elif classification.retryable and escalation.action == "CONTINUE":
+                action = "retry"
+                reason = "failure is classified as locally repairable within the remaining budget"
+            else:
+                action = "stop"
+                reason = "failure needs evidence or human/environment intervention"
 
         return RecoveryDecision(
             action=action,
