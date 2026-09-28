@@ -234,6 +234,9 @@ class AgentToolExecutor:
         if not query:
             raise ValueError("query is required")
         limit = max(1, min(int(args.get("limit") or 8), 20))
+        if not hasattr(self.knowledge, "list"):
+            rows = self.knowledge.search(query, verified_only=True, limit=limit)
+            return {"knowledge": [x.to_dict() for x in rows], "ranking": []}
         rows = self.knowledge_search.search(
             query,
             verified_only=True,
