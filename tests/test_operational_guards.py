@@ -5,6 +5,7 @@ import unittest
 from src.core.cost_guard import CostGuard
 from src.core.secrets_guard import SecretsGuard
 from src.core.stop_escalation import StopEscalationJudge
+from src.core.platform_service import PlatformService
 
 
 class SecretsGuardTests(unittest.TestCase):
@@ -104,6 +105,39 @@ class StopEscalationJudgeTests(unittest.TestCase):
         self.assertEqual(decision.action, "CONTINUE")
         self.assertFalse(decision.requires_human)
 
+
+
+
+class PlatformOperationalSafetyTests(unittest.TestCase):
+    def test_service_exposes_secret_cost_and_autonomy_state(self):
+        with tempfile.TemporaryDirectory() as td:
+            service = PlatformService()
+            service.ai_engine.settings_path = Path(td) / "settings.json"
+            service.ai_engine.settings_path.write_text(
+                '{"ai_profiles":{"openai":{"key_cipher":"dpapi:abc"}}}',
+                encoding="utf-8",
+            )
+            state = service.operational_safety()
+            self.assertTrue(state["secrets"]["settings"]["passed"])
+            self.assertTrue(state["secrets"]["settings"]["protected_storage_detected"])
+            self.assertEqual(state["cost"]["session"]["budget_yen"], "0.00")
+            self.assertTrue(state["autonomy"]["repeated_failure_stops"])
+
+    def test_service_requires_approval_before_enabling_paid_budget(self):
+        service = PlatformService()
+        with self.assertRaises(PermissionError):
+            service.configure_cost_budget(100, approved=False)
+        configured = service.configure_cost_budget(100, approved=True)
+        self.assertEqual(configured["budget_yen"], "100.00")
+        decision = service.check_cost_operation(
+            billing_mode="metered",
+            estimated_cost_yen=25,
+            approved=True,
+            commit=True,
+        )
+        self.assertTrue(decision["allowed"])
+        self.assertEqual(decision["committed_total_yen"], "25.00")
+        self.assertEqual(decision["session"]["remaining_yen"], "75.00")
 
 if __name__ == "__main__":
     unittest.main()
