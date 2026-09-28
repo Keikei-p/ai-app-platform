@@ -77,12 +77,11 @@ class KnowledgeFactory:
         if len(rows) > self.MAX_BATCH_ITEMS:
             raise ValueError(f"knowledge batch exceeds {self.MAX_BATCH_ITEMS} items")
 
-        accepted = 0
         rejected = 0
         deduplicated = 0
-        candidate_promotions = 0
-        ids: list[str] = []
         rejection_reasons: list[str] = []
+        prepared: list[dict[str, Any]] = []
+        existing_hashes = {item.content_hash for item in self.knowledge.list()}
         seen_hashes: set[str] = set()
 
         for index, row in enumerate(rows):
@@ -102,7 +101,7 @@ class KnowledgeFactory:
                     raise ValueError("at least one source is required")
 
                 digest = self.knowledge._hash(topic[:180], statement[:4000])
-                if digest in seen_hashes:
+                if digest in seen_hashes or digest in existing_hashes:
                     deduplicated += 1
                 seen_hashes.add(digest)
 
@@ -136,42 +135,48 @@ class KnowledgeFactory:
                 self._reject_secret_like_payload(topic, statement, safe_sources)
                 if self._contains_sensitive_content(statement):
                     raise ValueError("statement contains secret or PII-like content")
-                item: KnowledgeItem | None = None
-                for source in safe_sources:
-                    item = self.knowledge.ingest(
-                        topic=topic,
-                        statement=statement,
-                        source_kind=source["kind"],
-                        source_locator=source["locator"],
-                        source_title=source["title"],
-                        source_version=source.get("version", ""),
-                        retrieved_at=source.get("retrieved_at", ""),
-                    )
-                assert item is not None
-                accepted += 1
-                ids.append(item.knowledge_id)
-
-                locators = {
-                    str(source.get("locator") or "").strip()
-                    for source in item.sources
-                    if str(source.get("locator") or "").strip()
-                }
-                if item.trust_level == "untrusted" and len(locators) >= 2:
-                    item = self.knowledge.promote_candidate(item.knowledge_id)
-                    candidate_promotions += 1
-
+                prepared.append({
+                    "topic": topic,
+                    "statement": statement,
+                    "sources": safe_sources,
+                })
             except Exception as exc:
                 rejected += 1
                 rejection_reasons.append(
-                    f"item[{index}]:" + redact_sensitive(f"{type(exc).__name__}:{exc}")[:300]
+                    f"item[{index}]:" + redact_sensitive(
+                        f"{type(exc).__name__}:{exc}"
+                    )[:300]
                 )
 
+        items = self.knowledge.ingest_many(prepared) if prepared else []
+        knowledge_ids = tuple(dict.fromkeys(item.knowledge_id for item in items))
+        requested_ids = set(knowledge_ids)
+        stored = {
+            item.knowledge_id: item
+            for item in self.knowledge.list()
+            if item.knowledge_id in requested_ids
+        }
+        promotable: list[str] = []
+        for knowledge_id, item in stored.items():
+            if item.trust_level != "untrusted":
+                continue
+            locators = {
+                str(source.get("locator") or "").strip()
+                for source in item.sources
+                if str(source.get("locator") or "").strip()
+            }
+            if len(locators) >= 2:
+                promotable.append(knowledge_id)
+        promoted = self.knowledge.promote_candidates(promotable)
+
         result = KnowledgeBatchResult(
-            accepted=accepted,
+            accepted=len(prepared),
             rejected=rejected,
             deduplicated=deduplicated,
-            candidate_promotions=candidate_promotions,
-            knowledge_ids=tuple(dict.fromkeys(ids)),
+            candidate_promotions=sum(
+                1 for item in promoted if item.trust_level == "candidate"
+            ),
+            knowledge_ids=knowledge_ids,
             rejections=tuple(rejection_reasons[:100]),
             created_at=datetime.now(timezone.utc).isoformat(),
         )
