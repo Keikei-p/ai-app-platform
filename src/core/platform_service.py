@@ -675,10 +675,12 @@ class PlatformService:
         if not project_dir.is_dir():
             raise FileNotFoundError(slug)
         plan = self.agent.plan(clean_goal, slug)
+        plan_payload = plan.to_dict()
+        plan_payload["squad"] = self.specialist_squad(clean_goal, slug)
         return self.missions.create(
             project_slug=slug,
             goal=clean_goal,
-            plan=plan.to_dict(),
+            plan=plan_payload,
             max_cycles=max_cycles,
         ).to_dict()
 
