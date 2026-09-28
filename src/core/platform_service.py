@@ -485,6 +485,20 @@ class PlatformService:
             )
         ]
 
+    def knowledge_index_status(self) -> dict[str, Any]:
+        stats = dict(self.knowledge_search.index_stats())
+        stats["source_items"] = len(self.knowledge.list())
+        stats["verified_items"] = len(self.knowledge.list("verified"))
+        stats["candidate_items"] = len(self.knowledge.list("candidate"))
+        stats["untrusted_items"] = len(self.knowledge.list("untrusted"))
+        stats["search_mode"] = (
+            "sqlite_fts_plus_local_semantic"
+            if bool(stats.get("fts"))
+            else "local_semantic_fallback"
+        )
+        stats["external_embedding_cost"] = False
+        return stats
+
     def ingest_knowledge_batch(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
         return self.knowledge_factory.ingest_batch(rows).to_dict()
 
