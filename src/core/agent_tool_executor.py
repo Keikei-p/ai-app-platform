@@ -12,6 +12,7 @@ from .design_ai import DesignAI
 from .evolution_engine import VerifiedEvolutionEngine
 from .generation_pipeline import GeneratedArtifactSecurityScanner
 from .knowledge_store import VerifiedKnowledgeStore
+from .knowledge_intelligence import KnowledgeSearchEngine
 from .local_artifact_builder import LocalArtifactBuilder
 from .path_security import safe_child
 from .project_manager import ProjectManager
@@ -76,6 +77,7 @@ class AgentToolExecutor:
         self.registry = registry or AgentToolRegistry()
         self.catalog = catalog or ProjectCatalog()
         self.knowledge = knowledge or VerifiedKnowledgeStore()
+        self.knowledge_search = KnowledgeSearchEngine(self.knowledge)
         self.research = research or GuardedResearchProvider()
         self.projects = projects or ProjectManager()
         self.tests = tests or ProjectTestRunner()
@@ -232,8 +234,24 @@ class AgentToolExecutor:
         if not query:
             raise ValueError("query is required")
         limit = max(1, min(int(args.get("limit") or 8), 20))
-        rows = self.knowledge.search(query, verified_only=True, limit=limit)
-        return {"knowledge": [x.to_dict() for x in rows]}
+        rows = self.knowledge_search.search(
+            query,
+            verified_only=True,
+            limit=limit,
+            minimum_confidence=0.45,
+        )
+        return {
+            "knowledge": [row.item.to_dict() for row in rows],
+            "ranking": [
+                {
+                    "knowledge_id": row.item.knowledge_id,
+                    "relevance": round(row.relevance, 4),
+                    "confidence": round(row.confidence, 4),
+                    "score": round(row.score, 4),
+                }
+                for row in rows
+            ],
+        }
 
     def _research_fetch(self, args: dict[str, Any]) -> dict[str, Any]:
         url = str(args.get("url") or "").strip()
