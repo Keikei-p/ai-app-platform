@@ -35,6 +35,9 @@ from .agent_execution_trace import BuildExecutionTracer
 from .knowledge_verifier import ProjectKnowledgeVerifier
 from .completion_certificate import DevelopmentCertificateBuilder
 from .recovery_supervisor import RecoverySupervisor
+from .secrets_guard import SecretsGuard
+from .cost_guard import CostGuard
+from .stop_escalation import StopEscalationJudge
 
 
 class PlatformService:
@@ -81,7 +84,10 @@ class PlatformService:
         self.agent_plan_runner = AgentPlanRunner(self.tool_executor, registry=self.tools)
         self.build_execution_tracer = BuildExecutionTracer()
         self.development_certificates = DevelopmentCertificateBuilder()
-        self.recovery_supervisor = RecoverySupervisor()
+        self.secrets_guard = SecretsGuard()
+        self.cost_guard = CostGuard(0)
+        self.stop_escalation = StopEscalationJudge()
+        self.recovery_supervisor = RecoverySupervisor(escalation=self.stop_escalation)
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -130,8 +136,67 @@ class PlatformService:
                 "recovery_supervisor": True,
                 "independent_recovery_review": True,
                 "validated_recovery_learning": True,
+                "secrets_guard": True,
+                "cost_guard": True,
+                "stop_escalation_judge": True,
             },
         }
+
+    def operational_safety(self, project_slug: str | None = None) -> dict[str, Any]:
+        settings_path = self.ai_engine.settings_path
+        raw_settings: dict[str, Any] = {}
+        if settings_path.is_file():
+            try:
+                loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+                raw_settings = loaded if isinstance(loaded, dict) else {}
+            except Exception:
+                raw_settings = {}
+        settings_audit = self.secrets_guard.audit_settings(raw_settings)
+        project_audit = None
+        slug = str(project_slug or "").strip()
+        if slug:
+            project_dir = safe_child(WORKSPACE_DIR, slug)
+            if not project_dir.is_dir():
+                raise FileNotFoundError(slug)
+            project_audit = self.secrets_guard.audit_project(project_dir).to_dict()
+        return {
+            "secrets": {
+                "settings": settings_audit.to_dict(),
+                "project": project_audit,
+                "rule": "secret values are never returned by this audit",
+            },
+            "cost": {
+                "session": self.cost_guard.snapshot(),
+                "rule": "metered or unknown-cost operations require explicit approval and a configured budget",
+            },
+            "autonomy": {
+                "max_repair_attempts": self.stop_escalation.MAX_REPAIR_ATTEMPTS,
+                "red_risk_requires_human": True,
+                "repeated_failure_stops": True,
+                "missing_permissions_escalate": True,
+            },
+        }
+
+    def check_cost_operation(
+        self,
+        *,
+        billing_mode: str,
+        estimated_cost_yen: int | float | str | None = None,
+        approved: bool = False,
+        commit: bool = False,
+    ) -> dict[str, Any]:
+        decision = self.cost_guard.check(
+            billing_mode=billing_mode,
+            estimated_cost_yen=estimated_cost_yen,
+            explicitly_approved=approved,
+        )
+        payload = decision.to_dict()
+        if commit:
+            if not approved:
+                raise PermissionError("explicit approval is required before committing paid cost")
+            payload["committed_total_yen"] = self.cost_guard.commit(decision)
+            payload["session"] = self.cost_guard.snapshot()
+        return payload
 
     def specialist_agents(self) -> list[dict[str, Any]]:
         return self.specialists.public_contract()
