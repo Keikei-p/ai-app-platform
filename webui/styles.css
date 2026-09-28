@@ -95,3 +95,19 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .evidence-review p{font-size:12px;line-height:1.6;color:var(--muted);margin:7px 0 0}
 .evidence-review.verified{border-color:#4f9b6b}
 .evidence-review.failed{border-color:#d05b52}
+
+
+.mission-create{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(260px,2fr) auto;gap:10px;align-items:start;margin-bottom:16px}
+.mission-create textarea{min-height:78px;border:1px solid var(--border);border-radius:13px;background:var(--surface);color:var(--text);padding:11px 13px;resize:vertical;outline:0}
+.mission-create .agent-action{width:auto;min-width:150px}
+.mission-create .meta{grid-column:1/-1;margin:0}
+.mission-grid{display:grid;gap:12px}
+.mission-card{border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:17px;box-shadow:0 5px 18px rgba(0,0,0,.025)}
+.mission-head{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:.75rem}
+.mission-head>div{display:flex;align-items:center;gap:9px}
+.mission-card h3{font-size:1rem;margin:12px 0 7px}
+.mission-card p{color:var(--muted);font-size:.82rem;line-height:1.6;margin:0 0 10px}
+.mission-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
+.mission-actions .agent-action{width:auto;padding:0 13px}
+.mission-actions .route-save{min-height:40px}
+@media(max-width:760px){.mission-create{grid-template-columns:1fr}.mission-create .meta{grid-column:auto}.mission-create .agent-action{width:100%}}
