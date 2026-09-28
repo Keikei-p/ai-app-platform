@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 import json
+import re
 
 from .config import DATA_DIR
 from .knowledge_store import KnowledgeItem, VerifiedKnowledgeStore
@@ -28,6 +29,21 @@ class KnowledgeBatchResult:
         data["knowledge_ids"] = list(self.knowledge_ids)
         data["rejections"] = list(self.rejections)
         return data
+
+
+_SENSITIVE_CONTENT_PATTERNS = (
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(
+        r"""(?ix)\b(?:api[_-]?key|secret|access[_-]?token|refresh[_-]?token|client[_-]?secret|password)\b
+        \s*[:=]\s*[\"'][^\"'\r\n]{12,}[\"']"""
+    ),
+)
+_PII_PATTERNS = (
+    re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I),
+    re.compile(r"(?<!\d)(?:\+?81[- ]?)?0\d{1,4}[- ]?\d{1,4}[- ]?\d{3,4}(?!\d)"),
+)
 
 
 class KnowledgeFactory:
@@ -107,13 +123,19 @@ class KnowledgeFactory:
                         raise ValueError(
                             "source quarantined:" + ",".join(inspected.indicators)
                         )
+                    if self._contains_sensitive_content(content):
+                        raise ValueError("source contains secret or PII-like content")
                     safe_sources.append({
                         "kind": inspected.source_kind,
                         "locator": inspected.locator,
                         "title": inspected.title,
+                        "version": str(source.get("version") or "")[:120],
+                        "retrieved_at": str(source.get("retrieved_at") or inspected.retrieved_at)[:80],
                     })
 
                 self._reject_secret_like_payload(topic, statement, safe_sources)
+                if self._contains_sensitive_content(statement):
+                    raise ValueError("statement contains secret or PII-like content")
                 item: KnowledgeItem | None = None
                 for source in safe_sources:
                     item = self.knowledge.ingest(
@@ -122,6 +144,8 @@ class KnowledgeFactory:
                         source_kind=source["kind"],
                         source_locator=source["locator"],
                         source_title=source["title"],
+                        source_version=source.get("version", ""),
+                        retrieved_at=source.get("retrieved_at", ""),
                     )
                 assert item is not None
                 accepted += 1
@@ -171,6 +195,14 @@ class KnowledgeFactory:
         combined = json.dumps(payload, ensure_ascii=False)
         if any(pattern.search(combined) for pattern in SECRET_VALUE_PATTERNS):
             raise ValueError("secret-like values are not allowed in knowledge intake")
+
+    @staticmethod
+    def _contains_sensitive_content(text: str) -> bool:
+        raw = str(text)
+        return any(
+            pattern.search(raw)
+            for pattern in (*_SENSITIVE_CONTENT_PATTERNS, *_PII_PATTERNS)
+        )
 
     def _audit(self, result: KnowledgeBatchResult) -> None:
         payload = result.to_dict()
