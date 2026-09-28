@@ -90,6 +90,16 @@ Live SNS publishing, production signing and store publication require the user's
 
 Screenshot-based visual-diff critique is prepared at the report-schema level but is not yet executing screenshots automatically.
 
+## Open the latest Aivy
+
+On Windows, double-click `AIVY.bat`.
+
+By default it follows `develop`, the active Aivy integration branch. Before every launch it checks GitHub and only applies a fast-forward update. If local code changes are present, automatic updating is skipped instead of overwriting them. Update failures also fall back to the current local copy; the launcher never uses `git reset --hard`.
+
+Use `AIVY.bat stable` when you intentionally want the tested `main` branch.
+
+For first-time setup or to repair an existing Git installation, run `INSTALL_OR_UPDATE.bat`. It follows the same safe-update rules and keeps runtime user data outside Git.
+
 ## Run
 
 Windows: `START.bat`

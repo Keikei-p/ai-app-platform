@@ -45,3 +45,6 @@ secrets*.json
 Thumbs.db
 .vscode/
 .idea/
+
+# Aivy launcher runtime metadata
+.aivy/
