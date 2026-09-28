@@ -34,6 +34,7 @@ from .agent_plan_runner import AgentPlanRunner
 from .agent_execution_trace import BuildExecutionTracer
 from .knowledge_verifier import ProjectKnowledgeVerifier
 from .completion_certificate import DevelopmentCertificateBuilder
+from .recovery_supervisor import RecoverySupervisor
 
 
 class PlatformService:
@@ -80,6 +81,7 @@ class PlatformService:
         self.agent_plan_runner = AgentPlanRunner(self.tool_executor, registry=self.tools)
         self.build_execution_tracer = BuildExecutionTracer()
         self.development_certificates = DevelopmentCertificateBuilder()
+        self.recovery_supervisor = RecoverySupervisor()
         self.agent = AgentOrchestrator(
             tools=self.tools,
             specialists=self.specialists,
@@ -125,6 +127,9 @@ class PlatformService:
                 "agent_safe_execution": True,
                 "evidence_backed_knowledge_promotion": True,
                 "development_certificate": True,
+                "recovery_supervisor": True,
+                "independent_recovery_review": True,
+                "validated_recovery_learning": True,
             },
         }
 
@@ -546,6 +551,7 @@ class PlatformService:
             raise FileNotFoundError(slug)
         meta = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
         project_name = str(meta.get("name") or slug)
+        baseline_evaluation = self.recovery_supervisor.capture(project_dir)
 
         def emit_platform(stage: str, message: str) -> None:
             if progress is None:
@@ -611,6 +617,50 @@ class PlatformService:
         except Exception:
             recover_failed_change()
             raise
+
+        candidate_evaluation = self.recovery_supervisor.capture(project_dir)
+        failure_classification = self.recovery_supervisor.classify(
+            result.pipeline_report,
+            result.repair_attempts,
+        )
+        recovery_decision = self.recovery_supervisor.decide(
+            baseline_evaluation,
+            candidate_evaluation,
+            repair_attempts=result.repair_attempts,
+            classification=failure_classification,
+        )
+        recovery_path = self.recovery_supervisor.save(
+            project_dir,
+            baseline=baseline_evaluation,
+            candidate=candidate_evaluation,
+            classification=failure_classification,
+            decision=recovery_decision,
+        )
+        recovery_payload = {
+            "classification": failure_classification.to_dict(),
+            "decision": recovery_decision.to_dict(),
+            "report_path": recovery_path.relative_to(project_dir).as_posix(),
+        }
+        current_pipeline = dict(result.pipeline_report or {})
+        current_pipeline["recovery_supervision"] = recovery_payload
+        result.pipeline_report = current_pipeline
+        ledger.record(
+            run_id=plan.run_id,
+            stage="repair",
+            status=recovery_decision.action,
+            summary=(
+                f"recovery supervisor: {failure_classification.kind} / "
+                f"{recovery_decision.action} / {recovery_decision.reason}"
+            ),
+            source="recovery-supervisor",
+        )
+        if result.ok and recovery_decision.action != "accept":
+            result.ok = False
+            result.message = (
+                "自動修正後の独立比較で安全な改善を確認できなかったため、"
+                f"完成扱いを停止しました。判断: {recovery_decision.action}"
+            )
+
         emit_platform(
             "postflight",
             "別経路のTool ExecutorでTests・Design・Securityを再検証しています",
@@ -636,6 +686,42 @@ class PlatformService:
             result.message = (
                 "AICore完了後の独立PostflightでTests / Design / Securityの"
                 "再検証に失敗したため、完成扱いを停止しました。"
+            )
+
+        independent_review = self.recovery_supervisor.independent_review(
+            baseline_evaluation,
+            candidate_evaluation,
+            recovery_decision,
+            postflight_ok=postflight.status == "pass",
+        )
+        self.recovery_supervisor.save(
+            project_dir,
+            baseline=baseline_evaluation,
+            candidate=candidate_evaluation,
+            classification=failure_classification,
+            decision=recovery_decision,
+            review=independent_review,
+        )
+        review_pipeline = dict(result.pipeline_report or {})
+        review_pipeline["independent_recovery_review"] = independent_review.to_dict()
+        result.pipeline_report = review_pipeline
+        ledger.record(
+            run_id=plan.run_id,
+            stage="review",
+            status="pass" if independent_review.approved else "blocked",
+            summary=(
+                "independent deterministic recovery review approved"
+                if independent_review.approved
+                else "independent recovery review requires changes: "
+                + ", ".join(independent_review.findings)
+            ),
+            source="recovery-supervisor",
+        )
+        if result.ok and not independent_review.approved:
+            result.ok = False
+            result.message = (
+                "独立Reviewerが品質・回帰・修正回数の条件を満たしていないと判断したため、"
+                "完成扱いを停止しました。"
             )
 
         emit_platform(
@@ -723,6 +809,48 @@ class PlatformService:
                 "Development Certificateの独立Evidenceが不足しているため、"
                 "完成扱いを停止しました。"
             )
+
+        learning = self.recovery_supervisor.learning_decision(
+            classification=failure_classification,
+            decision=recovery_decision,
+            review=independent_review,
+            certificate_verified=certificate.preview_verified,
+            evidence_refs=[
+                certificate_path.relative_to(project_dir).as_posix(),
+                postflight_path.relative_to(project_dir).as_posix(),
+                str(trace.history_path or ""),
+            ],
+        )
+        if learning.promote:
+            self.agent.memory.record(
+                category="verified_recovery",
+                input_text=instruction,
+                lesson=learning.lesson,
+                outcome="verified",
+                project_slug=slug,
+                verified=True,
+                evidence_source=certificate_path.relative_to(project_dir).as_posix(),
+            )
+            ledger.record(
+                run_id=plan.run_id,
+                stage="report",
+                status="learned",
+                summary=learning.lesson,
+                source="validated-recovery-learning",
+            )
+        final_recovery_path = self.recovery_supervisor.save(
+            project_dir,
+            baseline=baseline_evaluation,
+            candidate=candidate_evaluation,
+            classification=failure_classification,
+            decision=recovery_decision,
+            review=independent_review,
+            learning=learning,
+        )
+        learning_pipeline = dict(result.pipeline_report or {})
+        learning_pipeline["validated_recovery_learning"] = learning.to_dict()
+        learning_pipeline["recovery_supervision_report"] = final_recovery_path.relative_to(project_dir).as_posix()
+        result.pipeline_report = learning_pipeline
 
         emit_platform(
             "done" if result.ok else "issue",
