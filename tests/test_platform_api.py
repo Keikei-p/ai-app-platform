@@ -61,6 +61,30 @@ class FakeKnowledgeService:
         self.calls.append(("learning_supervision", limit))
         return [{"messages": [{"role": "user", "content": "build"}]}]
 
+    def list_missions(self, limit=100):
+        self.calls.append(("list_missions", limit))
+        return [{"mission_id": "m1", "status": "paused"}]
+
+    def mission_detail(self, mission_id):
+        self.calls.append(("mission_detail", mission_id))
+        return {"mission_id": mission_id, "status": "paused"}
+
+    def create_mission(self, *, goal, project_slug, max_cycles=8):
+        self.calls.append(("create_mission", goal, project_slug, max_cycles))
+        return {"mission_id": "m2", "status": "queued", "goal": goal, "project_slug": project_slug}
+
+    def run_mission_cycle(self, mission_id, *, approved_build=False):
+        self.calls.append(("run_mission", mission_id, approved_build))
+        return {"mission_id": mission_id, "status": "running" if approved_build else "approval_required"}
+
+    def pause_mission(self, mission_id):
+        self.calls.append(("pause_mission", mission_id))
+        return {"mission_id": mission_id, "status": "paused"}
+
+    def cancel_mission(self, mission_id):
+        self.calls.append(("cancel_mission", mission_id))
+        return {"mission_id": mission_id, "status": "cancelled"}
+
 
 class PlatformAPITests(unittest.TestCase):
     def test_handler_is_constructible(self):
@@ -151,6 +175,62 @@ class PlatformAPITests(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(len(data["candidates"]), 1)
             self.assertEqual(service.calls[-1], ("learning_supervision", 9))
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_mission_control_routes_persist_and_require_csrf(self):
+        api, service, server, thread = self._server()
+        try:
+            status, data = self._request(server, "GET", "/api/v1/missions?limit=7")
+            self.assertEqual(status, 200)
+            self.assertEqual(data["missions"][0]["mission_id"], "m1")
+            self.assertEqual(service.calls[-1], ("list_missions", 7))
+
+            status, data = self._request(server, "GET", "/api/v1/missions/m1")
+            self.assertEqual(status, 200)
+            self.assertEqual(data["mission_id"], "m1")
+
+            status, _ = self._request(
+                server,
+                "POST",
+                "/api/v1/missions",
+                body={"goal": "Improve app", "project_slug": "demo"},
+            )
+            self.assertEqual(status, 403)
+
+            headers = {"X-CSRF-Token": api.csrf}
+            status, data = self._request(
+                server,
+                "POST",
+                "/api/v1/missions",
+                body={"goal": "Improve app", "project_slug": "demo", "max_cycles": 6},
+                headers=headers,
+            )
+            self.assertEqual(status, 201)
+            self.assertEqual(data["status"], "queued")
+            self.assertEqual(service.calls[-1], ("create_mission", "Improve app", "demo", 6))
+
+            status, data = self._request(
+                server,
+                "POST",
+                "/api/v1/missions/m2/run",
+                body={"approved_build": False},
+                headers=headers,
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(data["status"], "approval_required")
+
+            status, data = self._request(
+                server,
+                "POST",
+                "/api/v1/missions/m2/run",
+                body={"approved_build": True},
+                headers=headers,
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(data["status"], "running")
         finally:
             server.shutdown()
             server.server_close()
