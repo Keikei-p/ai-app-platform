@@ -148,7 +148,7 @@ async function showProject(slug){
     : '<div class="plan-step"><div class="step-no">◇</div><div><strong>Development Certificate</strong><p>まだ証明書はありません。</p></div></div>';
   $('#agentPlan').innerHTML=`
     <div class="data-card"><h3>${esc(card.name||slug)}</h3><div class="meta"><span>${esc(card.status)}</span><span>${esc(card.quality)}</span>${evaluation.score!=null?`<span>AI評価 ${evaluation.score}/100</span>`:''}</div></div>
-    <div class="health-actions"><button class="agent-action secondary" id="runHealthCheck" type="button">Aivy再点検</button><button class="agent-action secondary" id="runExecutionCouncil" type="button">専門AI＋実測</button><span id="healthStatus" class="meta">Tests / Design / Securityを再確認</span></div>
+    <div class="health-actions"><button class="agent-action secondary" id="runHealthCheck" type="button">Aivy再点検</button><button class="agent-action secondary" id="runParallelSandbox" type="button">並列Sandbox</button><button class="agent-action secondary" id="runExecutionCouncil" type="button">専門AI＋実測</button><span id="healthStatus" class="meta">Tests / Design / Securityを再確認</span></div>
     <div id="executionCouncilResult"></div>
     ${visualBlock}
     ${traceBlock}
@@ -159,8 +159,39 @@ async function showProject(slug){
   $('#inspector').classList.add('open');
   const healthButton=$('#runHealthCheck');
   if(healthButton)healthButton.onclick=()=>runProjectHealth(slug);
+  const parallelButton=$('#runParallelSandbox');
+  if(parallelButton)parallelButton.onclick=()=>runParallelSandbox(slug);
   const councilButton=$('#runExecutionCouncil');
   if(councilButton)councilButton.onclick=()=>runProjectExecutionCouncil(slug);
+}
+async function runParallelSandbox(slug){
+  const button=$('#runParallelSandbox');const target=$('#executionCouncilResult');
+  if(!button||!target)return;
+  button.disabled=true;button.textContent='隔離並列レビュー中…';
+  target.innerHTML='<div class="council-note">専門ワーカーごとの隔離コピーを準備しています…</div>';
+  try{
+    const report=await api('/api/v1/agent/sandbox/parallel',{
+      method:'POST',
+      body:JSON.stringify({
+        goal:'現在のプロジェクトを複数の専門AIが隔離環境で並列レビューする',
+        project_slug:slug
+      })
+    });
+    const workers=report.workers||[];
+    target.innerHTML='<div class="council-report"><div class="council-head"><strong>Aivy Parallel Sandbox</strong><span>'+esc(report.status||'')+'</span></div>'+
+      '<p>元コード無変更: '+(report.source_unchanged?'VERIFIED':'BLOCKED')+' · workers: '+workers.length+'</p>'+
+      workers.map(w=>{
+        const s=w.specialist||{};
+        return '<details class="council-turn"><summary>'+esc(w.role)+' · '+esc(w.status||'')+'</summary>'+
+          '<p>'+esc(s.summary||'')+'</p>'+
+          ((s.findings||[]).length?'<p>'+s.findings.slice(0,3).map(esc).join('<br>')+'</p>':'')+
+          '</details>';
+      }).join('')+'</div>';
+  }catch(e){
+    target.innerHTML='<div class="council-note">Parallel Sandboxを実行できませんでした: '+esc(e.message)+'</div>';
+  }finally{
+    button.disabled=false;button.textContent='並列Sandbox';
+  }
 }
 async function runProjectExecutionCouncil(slug){
   const button=$('#runExecutionCouncil');const target=$('#executionCouncilResult');
