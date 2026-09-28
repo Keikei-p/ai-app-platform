@@ -4,16 +4,22 @@ cd /d "%~dp0"
 title Aivy - Latest Launcher
 
 set "CHANNEL=develop"
+set "MODE=desktop"
 if /I "%AIVY_CHANNEL%"=="main" set "CHANNEL=main"
 if /I "%AIVY_CHANNEL%"=="develop" set "CHANNEL=develop"
 if /I "%~1"=="stable" set "CHANNEL=main"
 if /I "%~1"=="latest" set "CHANNEL=develop"
+if /I "%~2"=="latest" set "CHANNEL=develop"
+if /I "%~2"=="stable" set "CHANNEL=main"
+if /I "%~1"=="web" set "MODE=web"
+if /I "%~2"=="web" set "MODE=web"
 
 echo.
 echo ==========================================
 echo   Aivy - Safe Auto Update Launcher
 echo ==========================================
 echo Channel: %CHANNEL%
+echo Mode: %MODE%
 echo.
 
 if /I "%~1"=="--skip-update" goto :launch
@@ -80,6 +86,12 @@ goto :launch
 
 :launch
 echo.
-echo Starting Aivy...
+if /I "%MODE%"=="web" goto :launch_web
+echo Starting Aivy desktop...
 call START.bat
+exit /b %errorlevel%
+
+:launch_web
+echo Starting Aivy in your browser...
+call START_WEB.bat
 exit /b %errorlevel%

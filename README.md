@@ -90,9 +90,19 @@ Live SNS publishing, production signing and store publication require the user's
 
 Screenshot-based visual-diff critique is prepared at the report-schema level but is not yet executing screenshots automatically.
 
+## Browser-first development
+
+Until the desktop product is considered complete, the recommended development and verification surface is Aivy Web.
+
+On Windows, double-click `AIVY_WEB.bat`. It uses the same safe `develop` auto-update path, runs preflight, starts the loopback-only Platform API, and opens Aivy in the default browser at `127.0.0.1:8766`.
+
+The browser UI uses the real local Platform Service rather than a mock screen, so conversations, projects, agent planning, knowledge, build state and downloads can be exercised through the same Core. Closing the accompanying Aivy Web console stops the local server.
+
+This does not publish Aivy to the public internet. It is a local browser development surface; production hosting remains a separate later step.
+
 ## Open the latest Aivy
 
-On Windows, double-click `AIVY.bat`.
+On Windows, use `AIVY_WEB.bat` during development or `AIVY.bat` for the desktop shell.
 
 By default it follows `develop`, the active Aivy integration branch. Before every launch it checks GitHub and only applies a fast-forward update. If local code changes are present, automatic updating is skipped instead of overwriting them. Update failures also fall back to the current local copy; the launcher never uses `git reset --hard`.
 

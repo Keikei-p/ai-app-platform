@@ -7,6 +7,8 @@ import argparse
 import json
 import os
 import secrets
+import threading
+import webbrowser
 
 from .platform_service import PlatformService
 from .config import ROOT_DIR
@@ -479,12 +481,17 @@ class PlatformAPI:
         return Handler
 
 
-def serve(host: str = "127.0.0.1", port: int = 8766) -> None:
+def serve(host: str = "127.0.0.1", port: int = 8766, *, open_browser: bool = False) -> None:
     if host not in {"127.0.0.1", "localhost"}:
         raise RuntimeError("Platform API is loopback-only")
     api = PlatformAPI()
     server = ThreadingHTTPServer((host, port), api.handler_class())
-    print(f"AI App Platform local API: http://{host}:{port}", flush=True)
+    url = f"http://{host}:{port}/"
+    print(f"Aivy Web: {url}", flush=True)
+    if open_browser:
+        opener = threading.Timer(0.35, webbrowser.open, args=(url,))
+        opener.daemon = True
+        opener.start()
     try:
         server.serve_forever()
     finally:
@@ -495,8 +502,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8766)
+    parser.add_argument("--open-browser", action="store_true")
     args = parser.parse_args()
-    serve(args.host, args.port)
+    serve(args.host, args.port, open_browser=args.open_browser)
     return 0
 
 

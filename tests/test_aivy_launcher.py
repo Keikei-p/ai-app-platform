@@ -17,8 +17,25 @@ class AivyLauncherSafetyTests(unittest.TestCase):
         self.assertIn("git fetch --prune origin", lowered)
         self.assertIn('git merge --ff-only "origin/%channel%"', lowered)
         self.assertIn("call start.bat", lowered)
+        self.assertIn('set "mode=desktop"', lowered)
+        self.assertIn('if /i "%~1"=="web" set "mode=web"', lowered)
+        self.assertIn("call start_web.bat", lowered)
         self.assertNotIn("reset --hard", lowered)
         self.assertNotIn("clean -fd", lowered)
+
+    def test_web_shortcut_uses_safe_aivy_launcher(self):
+        script = self.read_root("AIVY_WEB.bat").lower()
+        self.assertIn("call aivy.bat web", script)
+        web_start = self.read_root("START_WEB.bat").lower()
+        self.assertIn("src.tools.preflight", web_start)
+        self.assertIn("src.core.platform_api --open-browser", web_start)
+        self.assertNotIn("unittest discover", web_start)
+
+    def test_platform_api_supports_browser_open_flag(self):
+        source = self.read_root("src/core/platform_api.py")
+        self.assertIn('parser.add_argument("--open-browser", action="store_true")', source)
+        self.assertIn("webbrowser.open", source)
+        self.assertIn("ThreadingHTTPServer", source)
 
     def test_installer_never_discards_local_work(self):
         script = self.read_root("INSTALL_OR_UPDATE.bat")
