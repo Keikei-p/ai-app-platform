@@ -91,7 +91,7 @@ class ReleaseGuardian:
                 warnings.append(f"accessibility: {row.rule}")
         for row in performance.findings:
             warnings.append(f"performance: {row.metric} exceeds budget")
-        if not secrets.safe:
+        if not secrets.passed:
             blockers.extend(f"secrets: {x}" for x in secrets.findings)
         if requirement is not None:
             if requirement.structural_blockers:
