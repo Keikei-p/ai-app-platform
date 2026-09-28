@@ -142,6 +142,7 @@ class ResearchIntake:
                 source_kind=source.source_kind,
                 source_locator=source.locator,
                 source_title=source.title,
+                retrieved_at=source.retrieved_at,
             )
         assert item is not None
         return ResearchIntakeResult(
