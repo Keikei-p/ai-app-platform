@@ -155,7 +155,7 @@ class PlatformAPITests(unittest.TestCase):
                 body={"page_index": 0, "rows": [row], "final": True},
                 headers=headers,
             )
-            self.assertEqual(status, 202)
+            self.assertEqual(status, 200)
             self.assertEqual(data["status"], "completed")
             self.assertEqual(service.calls[-1], ("page", import_id, 0, 1, True))
 
