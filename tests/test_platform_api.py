@@ -1,53 +1,47 @@
+import http.client
 import json
-import os
 import threading
 import unittest
-import urllib.error
-import urllib.request
 from http.server import ThreadingHTTPServer
-from unittest.mock import patch
 
 from src.core.platform_api import PlatformAPI
 
 
-class FakeKnowledgeImportService:
+class FakeKnowledgeService:
     def __init__(self):
-        self.import_id = "a" * 32
-        self.pages = []
+        self.calls = []
+
+    def search_knowledge(self, query, *, verified_only=True, limit=8, minimum_confidence=0.0):
+        self.calls.append(("search", query, verified_only, limit, minimum_confidence))
+        return [{"knowledge": {"knowledge_id": "k1"}, "score": 0.9}]
+
+    def knowledge_index_status(self):
+        self.calls.append(("index",))
+        return {"documents": 123, "fts": True, "search_mode": "sqlite_fts_plus_local_semantic"}
+
+    def list_knowledge_imports(self, limit=50):
+        self.calls.append(("list_imports", limit))
+        return [{"import_id": "a" * 32, "status": "active"}]
+
+    def knowledge_import(self, import_id):
+        self.calls.append(("get_import", import_id))
+        return {"import_id": import_id, "status": "active"}
 
     def start_knowledge_import(self, name):
-        return {
-            "import_id": self.import_id,
-            "name": name,
-            "status": "active",
-            "next_page": 0,
-        }
+        self.calls.append(("start_import", name))
+        return {"import_id": "b" * 32, "name": name, "status": "active", "next_page": 0}
+
+    def ingest_knowledge_batch(self, rows):
+        self.calls.append(("batch", len(rows)))
+        return {"accepted": len(rows), "rejected": 0}
 
     def ingest_knowledge_import_page(self, import_id, *, page_index, rows, final=False):
-        if import_id != self.import_id:
-            raise KeyError(import_id)
-        self.pages.append((page_index, rows, final))
+        self.calls.append(("page", import_id, page_index, len(rows), final))
         return {
             "import_id": import_id,
             "status": "completed" if final else "active",
             "next_page": page_index + 1,
-            "rows_received": len(rows),
-        }
-
-    def list_knowledge_imports(self, limit=50):
-        return [{
-            "import_id": self.import_id,
-            "name": "docs",
-            "status": "active",
-        }][:limit]
-
-    def knowledge_import(self, import_id):
-        if import_id != self.import_id:
-            raise KeyError(import_id)
-        return {
-            "import_id": import_id,
-            "name": "docs",
-            "status": "active",
+            "accepted": len(rows),
         }
 
 
@@ -58,79 +52,122 @@ class PlatformAPITests(unittest.TestCase):
         self.assertTrue(issubclass(handler, object))
         self.assertGreaterEqual(len(api.csrf), 20)
 
-    def test_knowledge_import_api_is_csrf_protected_and_resumable(self):
-        service = FakeKnowledgeImportService()
-        api = PlatformAPI(service=service)
+    def _server(self):
+        service = FakeKnowledgeService()
+        api = PlatformAPI(service)
         server = ThreadingHTTPServer(("127.0.0.1", 0), api.handler_class())
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        base = f"http://127.0.0.1:{server.server_address[1]}"
+        return api, service, server, thread
 
-        def request(method, path, payload=None, *, csrf=True):
-            raw = None if payload is None else json.dumps(payload).encode("utf-8")
-            headers = {"Content-Type": "application/json"}
-            if csrf:
-                headers["X-CSRF-Token"] = api.csrf
-            req = urllib.request.Request(
-                base + path,
-                data=raw,
-                headers=headers,
-                method=method,
-            )
-            with urllib.request.urlopen(req, timeout=5) as response:
-                return response.status, json.loads(response.read().decode("utf-8"))
+    @staticmethod
+    def _request(server, method, path, *, body=None, headers=None):
+        connection = http.client.HTTPConnection(
+            "127.0.0.1",
+            server.server_address[1],
+            timeout=5,
+        )
+        payload = None
+        request_headers = dict(headers or {})
+        if body is not None:
+            payload = json.dumps(body).encode("utf-8")
+            request_headers["Content-Type"] = "application/json"
+            request_headers["Content-Length"] = str(len(payload))
+        connection.request(method, path, body=payload, headers=request_headers)
+        response = connection.getresponse()
+        raw = response.read()
+        data = json.loads(raw.decode("utf-8"))
+        connection.close()
+        return response.status, data
 
+    def test_knowledge_search_index_and_import_routes(self):
+        api, service, server, thread = self._server()
         try:
-            with patch.dict(os.environ, {"AI_APP_LOCAL_API_TOKEN": ""}, clear=False):
-                with self.assertRaises(urllib.error.HTTPError) as blocked:
-                    request(
-                        "POST",
-                        "/api/v1/knowledge/imports",
-                        {"name": "docs"},
-                        csrf=False,
-                    )
-                self.assertEqual(blocked.exception.code, 403)
+            status, data = self._request(
+                server,
+                "GET",
+                "/api/v1/knowledge/search?q=Firebase%20auth&limit=4&minimum_confidence=0.5",
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(data["results"][0]["knowledge"]["knowledge_id"], "k1")
+            self.assertEqual(service.calls[-1], ("search", "Firebase auth", True, 4, 0.5))
 
-                status, started = request(
-                    "POST",
-                    "/api/v1/knowledge/imports",
-                    {"name": "docs"},
-                )
-                self.assertEqual(status, 201)
-                self.assertEqual(started["import_id"], service.import_id)
+            status, data = self._request(server, "GET", "/api/v1/knowledge/index")
+            self.assertEqual(status, 200)
+            self.assertEqual(data["documents"], 123)
 
-                status, page = request(
-                    "POST",
-                    f"/api/v1/knowledge/imports/{service.import_id}/pages",
-                    {
-                        "page_index": 0,
-                        "rows": [{
-                            "topic": "Firebase",
-                            "statement": "Authentication docs",
-                            "sources": [{
-                                "kind": "official_docs",
-                                "locator": "https://example.com/firebase",
-                                "content": "docs",
-                            }],
-                        }],
-                        "final": True,
-                    },
-                )
-                self.assertEqual(status, 200)
-                self.assertEqual(page["status"], "completed")
-                self.assertEqual(service.pages[0][0], 0)
-                self.assertTrue(service.pages[0][2])
+            status, data = self._request(
+                server,
+                "GET",
+                "/api/v1/knowledge/imports?limit=7",
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(service.calls[-1], ("list_imports", 7))
 
-                status, listing = request("GET", "/api/v1/knowledge/imports")
-                self.assertEqual(status, 200)
-                self.assertEqual(listing["imports"][0]["import_id"], service.import_id)
+            import_id = "a" * 32
+            status, data = self._request(
+                server,
+                "GET",
+                f"/api/v1/knowledge/imports/{import_id}",
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(data["import_id"], import_id)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
-                status, detail = request(
-                    "GET",
-                    f"/api/v1/knowledge/imports/{service.import_id}",
-                )
-                self.assertEqual(status, 200)
-                self.assertEqual(detail["import_id"], service.import_id)
+    def test_mutating_knowledge_routes_require_csrf_and_accept_paged_import(self):
+        api, service, server, thread = self._server()
+        try:
+            status, _ = self._request(
+                server,
+                "POST",
+                "/api/v1/knowledge/imports",
+                body={"name": "docs"},
+            )
+            self.assertEqual(status, 403)
+
+            headers = {"X-CSRF-Token": api.csrf}
+            status, data = self._request(
+                server,
+                "POST",
+                "/api/v1/knowledge/imports",
+                body={"name": "docs"},
+                headers=headers,
+            )
+            self.assertEqual(status, 201)
+            import_id = data["import_id"]
+
+            row = {
+                "topic": "Firebase",
+                "statement": "Authentication pattern",
+                "sources": [{
+                    "kind": "official_docs",
+                    "locator": "https://example.com/firebase",
+                    "content": "Public documentation.",
+                }],
+            }
+            status, data = self._request(
+                server,
+                "POST",
+                f"/api/v1/knowledge/imports/{import_id}/pages",
+                body={"page_index": 0, "rows": [row], "final": True},
+                headers=headers,
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(data["status"], "completed")
+            self.assertEqual(service.calls[-1], ("page", import_id, 0, 1, True))
+
+            status, data = self._request(
+                server,
+                "POST",
+                "/api/v1/knowledge/batch",
+                body={"rows": [row]},
+                headers=headers,
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(data["accepted"], 1)
         finally:
             server.shutdown()
             server.server_close()
