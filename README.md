@@ -82,6 +82,22 @@ Current v0.8 integration evidence includes:
 
 The release PR also runs the dedicated Android native APK acceptance before main is updated.
 
+## Aivy Guardians and Candidate Arena
+
+Aivy now runs additional deterministic guardians around normal builds:
+
+- Regression Guardian blocks completion when a previously passing critical gate regresses.
+- Requirement Guardian stores requirement-to-evidence coverage without pretending semantic proof.
+- Dependency Guardian checks offline dependency hygiene and explicitly distinguishes that from live CVE intelligence.
+- Accessibility Guardian performs deterministic static HTML checks and can block high-severity accessibility failures.
+- Performance Guardian tracks static source budgets without inventing runtime latency.
+- Project Memory stores certified, project-local development history.
+- Candidate Arena compares already-evaluated candidates and never auto-applies a winner.
+- Model Benchmark records measured provider/model outcomes from verified builds.
+- Aivy Health summarizes projects, specialists, missions, learning, and model observations.
+
+The Web project inspector surfaces Guardian state, and Settings shows Aivy Health and Model Benchmark summaries.
+
 ## Parallel Sandbox Workers
 
 Aivy can now run Research, Architecture, Coding, Test, Design and Security specialists in parallel over separate project snapshots. Workers cannot write the live source project; secret-style files and runtime/internal directories are excluded from their snapshots. The live project is fingerprinted before and after the parallel review, and a mismatch blocks the result.
