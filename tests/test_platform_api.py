@@ -44,6 +44,23 @@ class FakeKnowledgeService:
             "accepted": len(rows),
         }
 
+    def learning_status(self):
+        self.calls.append(("learning_status",))
+        return {
+            "verified_examples": 3,
+            "average_score": 96.0,
+            "ai_backed_examples": 2,
+            "training_stage": "collecting_verified_supervision",
+        }
+
+    def learning_examples(self, limit=50):
+        self.calls.append(("learning_examples", limit))
+        return [{"example_id": "verified-1", "evaluation_score": 97}]
+
+    def learning_supervision_candidates(self, limit=100):
+        self.calls.append(("learning_supervision", limit))
+        return [{"messages": [{"role": "user", "content": "build"}]}]
+
 
 class PlatformAPITests(unittest.TestCase):
     def test_handler_is_constructible(self):
@@ -112,6 +129,28 @@ class PlatformAPITests(unittest.TestCase):
             )
             self.assertEqual(status, 200)
             self.assertEqual(data["import_id"], import_id)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_learning_routes_expose_verified_growth_state(self):
+        api, service, server, thread = self._server()
+        try:
+            status, data = self._request(server, "GET", "/api/v1/learning/status")
+            self.assertEqual(status, 200)
+            self.assertEqual(data["verified_examples"], 3)
+            self.assertEqual(service.calls[-1], ("learning_status",))
+
+            status, data = self._request(server, "GET", "/api/v1/learning/examples?limit=7")
+            self.assertEqual(status, 200)
+            self.assertEqual(data["examples"][0]["example_id"], "verified-1")
+            self.assertEqual(service.calls[-1], ("learning_examples", 7))
+
+            status, data = self._request(server, "GET", "/api/v1/learning/supervision?limit=9")
+            self.assertEqual(status, 200)
+            self.assertEqual(len(data["candidates"]), 1)
+            self.assertEqual(service.calls[-1], ("learning_supervision", 9))
         finally:
             server.shutdown()
             server.server_close()
