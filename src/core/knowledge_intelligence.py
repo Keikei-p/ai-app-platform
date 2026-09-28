@@ -131,7 +131,7 @@ class LocalSemanticIndex:
         if len(left) != len(right):
             raise ValueError("vector dimensions must match")
         raw = sum(a * b for a, b in zip(left, right))
-        return max(0.0, min(1.0, (raw + 1.0) / 2.0))
+        return max(0.0, min(1.0, raw))
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -268,8 +268,13 @@ class KnowledgeSearchEngine:
         return rows[: max(1, min(int(limit), 50))]
 
     def record_outcome(self, knowledge_ids: list[str] | tuple[str, ...], *, success: bool) -> list[KnowledgeUsage]:
+        known = {item.knowledge_id for item in self.knowledge.list()}
+        requested = list(dict.fromkeys(str(x).strip() for x in knowledge_ids if str(x).strip()))
+        unknown = [knowledge_id for knowledge_id in requested if knowledge_id not in known]
+        if unknown:
+            raise KeyError("unknown knowledge ids: " + ", ".join(unknown[:10]))
         updated: list[KnowledgeUsage] = []
-        for knowledge_id in dict.fromkeys(str(x).strip() for x in knowledge_ids if str(x).strip()):
+        for knowledge_id in requested:
             updated.append(self.usage.record(knowledge_id, success=success))
         return updated
 
