@@ -20,6 +20,7 @@ class ScalableKnowledgeIndex:
 
     MAX_INDEX_TOKENS = 700
     MAX_QUERY_TOKENS = 48
+    SCHEMA_VERSION = "2"
 
     def __init__(self, path: Path | None = None):
         self.path = path or (DATA_DIR / "knowledge_search_index.sqlite3")
@@ -62,6 +63,21 @@ class ScalableKnowledgeIndex:
                 )
                 """
             )
+            current_schema = db.execute(
+                "SELECT value FROM knowledge_index_meta WHERE key='schema_version'"
+            ).fetchone()
+            if not current_schema or current_schema[0] != self.SCHEMA_VERSION:
+                db.execute(
+                    "DELETE FROM knowledge_index_meta WHERE key='source_signature'"
+                )
+                db.execute(
+                    """
+                    INSERT INTO knowledge_index_meta (key, value)
+                    VALUES ('schema_version', ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value
+                    """,
+                    (self.SCHEMA_VERSION,),
+                )
             try:
                 db.execute(
                     """
