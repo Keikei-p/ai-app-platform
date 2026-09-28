@@ -43,6 +43,7 @@ from .cost_guard import CostGuard
 from .stop_escalation import StopEscalationJudge
 from .production_monitor import HealthSample, ProductionMonitor
 from .learning_flywheel import AivyLearningFlywheel
+from .mission_control import MissionStore, TERMINAL_STATUSES
 
 
 class PlatformService:
@@ -97,6 +98,7 @@ class PlatformService:
         self.stop_escalation = StopEscalationJudge()
         self.production_monitor = ProductionMonitor()
         self.learning_flywheel = AivyLearningFlywheel()
+        self.missions = MissionStore()
         self.recovery_supervisor = RecoverySupervisor(escalation=self.stop_escalation)
         self.agent = AgentOrchestrator(
             tools=self.tools,
@@ -156,6 +158,8 @@ class PlatformService:
                 "production_monitor": True,
                 "verified_learning_flywheel": True,
                 "supervision_dataset_candidates": True,
+                "persistent_mission_control": True,
+                "mission_resume_after_restart": True,
             },
         }
 
@@ -591,6 +595,180 @@ class PlatformService:
 
     def fetch_research_source(self, url: str) -> dict[str, Any]:
         return self.research_provider.fetch(url).to_dict()
+
+    def list_missions(self, limit: int = 100) -> list[dict[str, Any]]:
+        return [
+            self._refresh_mission(row.mission_id).to_dict()
+            for row in self.missions.list(limit)
+        ]
+
+    def mission_detail(self, mission_id: str) -> dict[str, Any]:
+        return self._refresh_mission(mission_id).to_dict()
+
+    def create_mission(
+        self,
+        *,
+        goal: str,
+        project_slug: str,
+        max_cycles: int = 8,
+    ) -> dict[str, Any]:
+        clean_goal = goal.strip()
+        slug = project_slug.strip()
+        if not clean_goal or not slug:
+            raise ValueError("goal and project_slug are required")
+        project_dir = safe_child(WORKSPACE_DIR, slug)
+        if not project_dir.is_dir():
+            raise FileNotFoundError(slug)
+        plan = self.agent.plan(clean_goal, slug)
+        return self.missions.create(
+            project_slug=slug,
+            goal=clean_goal,
+            plan=plan.to_dict(),
+            max_cycles=max_cycles,
+        ).to_dict()
+
+    def run_mission_cycle(
+        self,
+        mission_id: str,
+        *,
+        approved_build: bool = False,
+    ) -> dict[str, Any]:
+        mission = self._refresh_mission(mission_id)
+        if mission.status in TERMINAL_STATUSES:
+            return mission.to_dict()
+        if mission.status == "running" and mission.build_job_id:
+            return mission.to_dict()
+        if mission.cycle >= mission.max_cycles:
+            return self.missions.update(
+                mission_id,
+                status="paused",
+                phase="cycle_budget_reached",
+                message="Mission cycle budget reached. Review evidence before continuing.",
+                requires_approval=False,
+            ).to_dict()
+
+        slug = mission.project_slug
+        project_dir = safe_child(WORKSPACE_DIR, slug)
+        if not project_dir.is_dir():
+            return self.missions.update(
+                mission_id,
+                status="failed",
+                phase="project_missing",
+                message="Mission project no longer exists.",
+            ).to_dict()
+
+        cycle = mission.cycle + 1
+        self.missions.update(
+            mission_id,
+            status="running",
+            phase="preflight",
+            message=f"Mission cycle {cycle}: inspecting project and verified context.",
+            cycle=cycle,
+            requires_approval=False,
+            build_job_id=None,
+        )
+
+        plan = self.agent.plan(mission.goal, slug)
+        try:
+            preflight = self.agent_plan_runner.run_preflight(
+                plan,
+                project_dir=project_dir,
+            )
+        except Exception as exc:
+            return self.missions.update(
+                mission_id,
+                status="paused",
+                phase="preflight_blocked",
+                message=f"Preflight stopped safely: {type(exc).__name__}: {exc}",
+            ).to_dict()
+
+        evidence_refs = [str(preflight.history_path or "")]
+        council_summary = "Specialist review was unavailable."
+        try:
+            council = self.run_specialist_execution_council(
+                mission.goal,
+                slug,
+                context={"source": "mission-control", "mission_id": mission_id},
+            )
+            council_summary = (
+                f"Specialist council: {council.get('status') or 'unknown'}; "
+                f"reviewed tools {len(council.get('executed_tools') or [])}."
+            )
+            if council.get("history_path"):
+                evidence_refs.append(str(council["history_path"]))
+        except Exception as exc:
+            council_summary = f"Specialist council unavailable: {type(exc).__name__}"
+
+        if not approved_build:
+            return self.missions.update(
+                mission_id,
+                status="approval_required",
+                phase="build_approval",
+                message=council_summary + " Safe inspection is complete. Build approval is required.",
+                requires_approval=True,
+                evidence_refs=evidence_refs,
+            ).to_dict()
+
+        job = self.start_build_job(slug, mission.goal, approved=True)
+        return self.missions.update(
+            mission_id,
+            status="running",
+            phase="build_running",
+            message="Approved build started in the reviewed Aivy pipeline.",
+            requires_approval=False,
+            build_job_id=str(job["job_id"]),
+            evidence_refs=evidence_refs,
+        ).to_dict()
+
+    def pause_mission(self, mission_id: str) -> dict[str, Any]:
+        return self.missions.pause(mission_id).to_dict()
+
+    def cancel_mission(self, mission_id: str) -> dict[str, Any]:
+        return self.missions.cancel(mission_id).to_dict()
+
+    def _refresh_mission(self, mission_id: str):
+        mission = self.missions.get(mission_id)
+        if not mission.build_job_id or mission.status != "running":
+            return mission
+        try:
+            job = self.build_jobs.get(mission.build_job_id)
+        except KeyError:
+            return self.missions.update(
+                mission_id,
+                status="paused",
+                phase="resume_required",
+                message="Build process ended. Mission state was preserved for a safe resume.",
+                build_job_id=None,
+            )
+
+        if job.status in {"queued", "running"}:
+            return self.missions.update(
+                mission_id,
+                status="running",
+                phase=f"build_{job.stage}",
+                message=job.message,
+                requires_approval=False,
+            )
+        if job.status == "completed":
+            result = dict(job.result or {})
+            return self.missions.update(
+                mission_id,
+                status="completed",
+                phase="done",
+                message=str(result.get("message") or "Mission completed with verified build evidence."),
+                requires_approval=False,
+                build_job_id=None,
+                result=result,
+            )
+        return self.missions.update(
+            mission_id,
+            status="paused" if job.status == "blocked" else "failed",
+            phase=f"build_{job.status}",
+            message=job.message or job.error or "Mission build stopped safely.",
+            requires_approval=False,
+            build_job_id=None,
+            result=dict(job.result or {}) if isinstance(job.result, dict) else None,
+        )
 
     def list_project_cards(self) -> list[dict[str, Any]]:
         return [asdict(x) for x in self.catalog.list_cards()]
