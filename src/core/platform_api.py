@@ -121,6 +121,14 @@ class PlatformAPI:
                     if path == "/api/v1/status":
                         self._json(200, {**api.service.status(), "csrf": api.csrf})
                         return
+                    if path == "/api/v1/health/dashboard":
+                        self._json(200, api.service.aivy_health_dashboard())
+                        return
+                    if path == "/api/v1/models/benchmark":
+                        query = parse_qs(parsed.query)
+                        capability = str((query.get("capability") or [""])[0]).strip() or None
+                        self._json(200, api.service.model_benchmark_summary(capability))
+                        return
                     if path == "/api/v1/projects":
                         self._json(200, {"projects": api.service.list_project_cards()})
                         return
@@ -212,6 +220,14 @@ class PlatformAPI:
                         return
 
                     parts = [x for x in path.split("/") if x]
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "memory":
+                        query = parse_qs(parsed.query)
+                        limit = max(1, min(int((query.get("limit") or ["100"])[0]), 500))
+                        self._json(200, {"memory": api.service.project_memory(parts[3], limit)})
+                        return
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "dependency-health":
+                        self._json(200, api.service.dependency_health(parts[3]))
+                        return
                     if len(parts) == 4 and parts[:3] == ["api", "v1", "missions"]:
                         self._json(200, api.service.mission_detail(parts[3]))
                         return
@@ -248,6 +264,16 @@ class PlatformAPI:
                     return
                 try:
                     data = self._body()
+                    if path == "/api/v1/arena/compare":
+                        baseline = data.get("baseline")
+                        candidates = data.get("candidates")
+                        if not isinstance(baseline, dict) or not isinstance(candidates, dict):
+                            raise ValueError("baseline and candidates are required")
+                        self._json(200, api.service.compare_candidate_arena(
+                            baseline,
+                            candidates,
+                        ))
+                        return
                     if path == "/api/v1/missions":
                         goal = str(data.get("goal") or "").strip()
                         project_slug = str(data.get("project_slug") or "").strip()
