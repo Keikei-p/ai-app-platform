@@ -79,9 +79,9 @@ async function loadMissions(){
       </article>`;
     }).join('')||'<div class="empty">まだミッションはありません。</div>';
 
-    $('.mission-run').forEach(b=>b.onclick=()=>runMission(b.dataset.id,b.dataset.approved==='true'));
-    $('.mission-pause').forEach(b=>b.onclick=()=>pauseMission(b.dataset.id));
-    $('.mission-cancel').forEach(b=>b.onclick=()=>cancelMission(b.dataset.id));
+    $$('.mission-run').forEach(b=>b.onclick=()=>runMission(b.dataset.id,b.dataset.approved==='true'));
+    $$('.mission-pause').forEach(b=>b.onclick=()=>pauseMission(b.dataset.id));
+    $$('.mission-cancel').forEach(b=>b.onclick=()=>cancelMission(b.dataset.id));
 
     if(rows.some(m=>m.status==='running')&&state.view==='missions'){
       setTimeout(()=>{if(state.view==='missions')loadMissions();},1800);
