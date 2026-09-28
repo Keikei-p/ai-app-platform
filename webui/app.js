@@ -15,11 +15,12 @@ function setView(name){
   state.view=name;
   $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
   $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
-  const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'作成したアプリ',downloads:'ダウンロード',settings:'設定'};
+  const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'作成したアプリ',missions:'ミッション',downloads:'ダウンロード',settings:'設定'};
   $('#topbarTitle').textContent=titles[name]||'Aivy';
   closeSidebar();
   if(name==='conversations')loadConversations();
   if(name==='projects')loadProjects();
+  if(name==='missions')loadMissions();
   if(name==='downloads')loadDownloads();
   if(name==='settings'){loadModelRoutes();loadEvolutionSummary();loadKnowledgeSummary();loadLearningSummary();}
 }
@@ -49,6 +50,78 @@ async function openConversation(id){
   const data=await api('/api/v1/conversations/'+encodeURIComponent(id)+'/messages');
   (data.messages||[]).forEach(x=>message(x.role,x.content));
   setView('home');$('#topbarTitle').textContent=row.title;
+}
+async function loadMissions(){
+  const projectSelect=$('#missionProject');
+  try{
+    if(!state.projects.length){
+      const p=await api('/api/v1/projects');state.projects=p.projects||[];
+    }
+    if(projectSelect){
+      projectSelect.innerHTML=state.projects.map(row=>`<option value="${esc(row.slug)}">${esc(row.name||row.slug)}</option>`).join('')||'<option value="">作成済みアプリがありません</option>';
+    }
+    const data=await api('/api/v1/missions');
+    const rows=data.missions||[];
+    $('#missionGrid').innerHTML=rows.map(m=>{
+      const terminal=['completed','failed','cancelled'].includes(m.status);
+      const canRun=!terminal&&m.status!=='running';
+      const approve=m.status==='approval_required';
+      return `<article class="mission-card">
+        <div class="mission-head"><div><span class="chip">${esc(m.status)}</span><strong>${esc(m.project_slug)}</strong></div><span>cycle ${m.cycle}/${m.max_cycles}</span></div>
+        <h3>${esc(m.goal)}</h3>
+        <p>${esc(m.message||'')}</p>
+        <div class="meta"><span>phase: ${esc(m.phase)}</span><span>${fmt(m.updated_at)}</span><span>evidence ${(m.evidence_refs||[]).length}</span></div>
+        <div class="mission-actions">
+          ${canRun?`<button class="route-save mission-run" data-id="${esc(m.mission_id)}" data-approved="${approve?'true':'false'}">${approve?'承認して続行':'安全確認を続行'}</button>`:''}
+          ${!terminal&&m.status!=='running'? `<button class="agent-action secondary mission-pause" data-id="${esc(m.mission_id)}">一時停止</button>`:''}
+          ${!terminal&&m.status!=='running'? `<button class="agent-action secondary mission-cancel" data-id="${esc(m.mission_id)}">終了</button>`:''}
+        </div>
+      </article>`;
+    }).join('')||'<div class="empty">まだミッションはありません。</div>';
+
+    $('.mission-run').forEach(b=>b.onclick=()=>runMission(b.dataset.id,b.dataset.approved==='true'));
+    $('.mission-pause').forEach(b=>b.onclick=()=>pauseMission(b.dataset.id));
+    $('.mission-cancel').forEach(b=>b.onclick=()=>cancelMission(b.dataset.id));
+
+    if(rows.some(m=>m.status==='running')&&state.view==='missions'){
+      setTimeout(()=>{if(state.view==='missions')loadMissions();},1800);
+    }
+  }catch(e){
+    $('#missionGrid').innerHTML='<div class="empty">Mission Controlを読み込めませんでした: '+esc(e.message)+'</div>';
+  }
+}
+async function createMission(){
+  const slug=$('#missionProject')?.value||'';
+  const goal=$('#missionGoal')?.value.trim()||'';
+  if(!slug||!goal)return;
+  const button=$('#createMission');button.disabled=true;button.textContent='作成中…';
+  try{
+    await api('/api/v1/missions',{method:'POST',body:JSON.stringify({project_slug:slug,goal})});
+    $('#missionGoal').value='';
+    await loadMissions();
+  }catch(e){alert('ミッションを作成できませんでした: '+e.message);}
+  finally{button.disabled=false;button.textContent='ミッションを作成';}
+}
+async function runMission(id,approved){
+  try{
+    await api('/api/v1/missions/'+encodeURIComponent(id)+'/run',{
+      method:'POST',
+      body:JSON.stringify({approved_build:approved})
+    });
+    await loadMissions();
+  }catch(e){alert('ミッションを続行できませんでした: '+e.message);}
+}
+async function pauseMission(id){
+  try{
+    await api('/api/v1/missions/'+encodeURIComponent(id)+'/pause',{method:'POST',body:'{}'});
+    await loadMissions();
+  }catch(e){alert('一時停止できませんでした: '+e.message);}
+}
+async function cancelMission(id){
+  try{
+    await api('/api/v1/missions/'+encodeURIComponent(id)+'/cancel',{method:'POST',body:'{}'});
+    await loadMissions();
+  }catch(e){alert('終了できませんでした: '+e.message);}
 }
 async function loadProjects(){
   const data=await api('/api/v1/projects');state.projects=data.projects||[];
@@ -452,7 +525,7 @@ $('#prompt').addEventListener('input',autoGrow);
 $('#prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send(e.currentTarget.value);}});
 $$('[data-prompt]').forEach(b=>b.onclick=()=>send(b.dataset.prompt));
 $$('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
-$('#newChat').onclick=newChat;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;localStorage.setItem('ui-theme',next);};
 document.documentElement.dataset.theme=localStorage.getItem('ui-theme')||'system';
