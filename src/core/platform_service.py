@@ -46,6 +46,14 @@ from .learning_flywheel import AivyLearningFlywheel
 from .mission_control import MissionStore, TERMINAL_STATUSES
 from .parallel_sandbox_workers import ParallelSandboxWorkerPool
 from .specialist_squad import SpecialistSquadSelector
+from .regression_guardian import RegressionGuardian
+from .requirement_guardian import RequirementGuardian
+from .project_memory import ProjectMemory
+from .dependency_guardian import DependencyGuardian
+from .candidate_arena import CandidateArena
+from .model_benchmark import ModelBenchmarkStore
+from .aivy_health_dashboard import AivyHealthDashboard
+from .app_spec import AppSpec
 
 
 class PlatformService:
@@ -107,6 +115,12 @@ class PlatformService:
             router=self.model_router,
         )
         self.squad_selector = SpecialistSquadSelector()
+        self.regression_guardian = RegressionGuardian()
+        self.requirement_guardian = RequirementGuardian()
+        self.project_memory_store = ProjectMemory()
+        self.dependency_guardian = DependencyGuardian()
+        self.candidate_arena = CandidateArena(self.evolution.evaluation)
+        self.model_benchmark = ModelBenchmarkStore()
         self.recovery_supervisor = RecoverySupervisor(escalation=self.stop_escalation)
         self.agent = AgentOrchestrator(
             tools=self.tools,
@@ -171,8 +185,74 @@ class PlatformService:
                 "parallel_sandbox_workers": True,
                 "source_write_single_coordinator": True,
                 "automatic_specialist_squad": True,
+                "regression_guardian": True,
+                "requirement_guardian": True,
+                "project_local_memory": True,
+                "dependency_guardian": True,
+                "candidate_arena": True,
+                "model_benchmark_store": True,
+                "health_dashboard": True,
             },
         }
+
+    def aivy_health_dashboard(self) -> dict[str, Any]:
+        missions = self.missions.list(500)
+        learning = self.learning_flywheel.stats()
+        benchmark = self.model_benchmark.summary()
+        active = sum(1 for x in missions if x.status not in TERMINAL_STATUSES and x.status != "paused")
+        status = "healthy"
+        if any(x.status == "failed" for x in missions[:20]):
+            status = "attention_required"
+        return AivyHealthDashboard(
+            project_count=len(list_projects()),
+            specialist_count=len(self.specialists.list()),
+            mission_count=len(missions),
+            active_missions=active,
+            verified_learning_examples=int(learning.get("verified_examples") or 0),
+            average_learning_score=float(learning.get("average_score") or 0.0),
+            model_observations=int(benchmark.get("observations") or 0),
+            status=status,
+        ).to_dict()
+
+    def project_memory(self, project_slug: str, limit: int = 100) -> list[dict[str, Any]]:
+        project_dir = safe_child(WORKSPACE_DIR, project_slug.strip())
+        if not project_dir.is_dir():
+            raise FileNotFoundError(project_slug)
+        return [
+            x.to_dict()
+            for x in self.project_memory_store.recent(project_dir, limit=limit)
+        ]
+
+    def dependency_health(self, project_slug: str) -> dict[str, Any]:
+        project_dir = safe_child(WORKSPACE_DIR, project_slug.strip())
+        if not project_dir.is_dir():
+            raise FileNotFoundError(project_slug)
+        report = self.dependency_guardian.scan(project_dir)
+        return report.to_dict()
+
+    def model_benchmark_summary(self, capability: str | None = None) -> dict[str, Any]:
+        clean = str(capability or "").strip() or None
+        return self.model_benchmark.summary(clean)
+
+    def compare_candidate_arena(
+        self,
+        baseline: dict[str, Any],
+        candidates: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        if not isinstance(candidates, dict) or not candidates:
+            raise ValueError("candidates object is required")
+        baseline_report = self.evolution.report_from_dict(baseline)
+        candidate_reports = {
+            str(candidate_id): self.evolution.report_from_dict(report)
+            for candidate_id, report in candidates.items()
+            if isinstance(report, dict)
+        }
+        if not candidate_reports:
+            raise ValueError("at least one candidate report is required")
+        return self.candidate_arena.compare_reports(
+            baseline_report,
+            candidate_reports,
+        ).to_dict()
 
     def operational_safety(self, project_slug: str | None = None) -> dict[str, Any]:
         settings_path = self.ai_engine.settings_path
@@ -1122,6 +1202,32 @@ class PlatformService:
         current_pipeline = dict(result.pipeline_report or {})
         current_pipeline["recovery_supervision"] = recovery_payload
         result.pipeline_report = current_pipeline
+        regression = self.regression_guardian.compare(
+            baseline_evaluation,
+            candidate_evaluation,
+        )
+        regression_path = self.regression_guardian.save(project_dir, regression)
+        current_pipeline = dict(result.pipeline_report or {})
+        current_pipeline["regression_guardian"] = regression.to_dict()
+        current_pipeline["regression_guardian_path"] = regression_path.relative_to(project_dir).as_posix()
+        result.pipeline_report = current_pipeline
+        ledger.record(
+            run_id=plan.run_id,
+            stage="validate",
+            status="blocked" if regression.blocked else "pass",
+            summary=(
+                "critical regressions: " + ", ".join(regression.critical_regressions)
+                if regression.blocked
+                else f"regression guardian passed; score delta {regression.score_delta:+d}"
+            ),
+            source="regression-guardian",
+        )
+        if result.ok and regression.blocked:
+            result.ok = False
+            result.message = (
+                "以前PASSしていた品質ゲートの回帰を検出したため、完成扱いを停止しました。"
+                " 回帰: " + ", ".join(regression.critical_regressions)
+            )
         ledger.record(
             run_id=plan.run_id,
             stage="repair",
@@ -1164,6 +1270,23 @@ class PlatformService:
             result.message = (
                 "AICore完了後の独立PostflightでTests / Design / Securityの"
                 "再検証に失敗したため、完成扱いを停止しました。"
+            )
+
+        dependency_report = self.dependency_guardian.scan(project_dir)
+        dependency_path = self.dependency_guardian.save(project_dir, dependency_report)
+        postflight_pipeline = dict(result.pipeline_report or {})
+        postflight_pipeline["dependency_guardian"] = dependency_report.to_dict()
+        postflight_pipeline["dependency_guardian_path"] = dependency_path.relative_to(project_dir).as_posix()
+        result.pipeline_report = postflight_pipeline
+        high_dependency_findings = [
+            row for row in dependency_report.findings
+            if row.severity == "high"
+        ]
+        if result.ok and high_dependency_findings:
+            result.ok = False
+            result.message = (
+                "Dependency Guardianが高リスクの浮動依存関係を検出したため、"
+                "完成扱いを停止しました。"
             )
 
         independent_review = self.recovery_supervisor.independent_review(
@@ -1210,6 +1333,27 @@ class PlatformService:
         pipeline_report = dict(result.pipeline_report or {})
         pipeline_report["agent_execution_trace"] = trace.to_dict()
         result.pipeline_report = pipeline_report
+
+        spec_data = json.loads((project_dir / "app_spec.json").read_text(encoding="utf-8"))
+        spec = AppSpec(**spec_data)
+        requirement_report = self.requirement_guardian.assess(
+            project_dir,
+            spec,
+            instruction=instruction,
+            pipeline_report=result.pipeline_report,
+            trace=trace.to_dict(),
+        )
+        requirement_path = self.requirement_guardian.save(project_dir, requirement_report)
+        pipeline_report = dict(result.pipeline_report or {})
+        pipeline_report["requirement_guardian"] = requirement_report.to_dict()
+        pipeline_report["requirement_guardian_path"] = requirement_path.relative_to(project_dir).as_posix()
+        result.pipeline_report = pipeline_report
+        if result.ok and requirement_report.structural_blockers:
+            result.ok = False
+            result.message = (
+                "Requirement Guardianが仕様Evidenceの構造不足を検出したため、"
+                "完成扱いを停止しました。"
+            )
 
         trace_verified = trace.status == "verified"
         validated = bool(result.ok and trace_verified)
@@ -1365,6 +1509,32 @@ class PlatformService:
                 ai_status=ai_status,
                 repair_attempts=list(result.repair_attempts or []),
             )
+            benchmark_observation = None
+            if coding_route.get("provider") not in {None, "", "none"}:
+                benchmark_observation = self.model_benchmark.record(
+                    capability=str(coding_route.get("capability") or "coding"),
+                    provider=str(coding_route.get("provider") or ""),
+                    model=str(coding_route.get("model") or ""),
+                    success=bool(result.ok),
+                    quality_score=int(verified_evaluation.score),
+                    evidence_ref=certificate_path.relative_to(project_dir).as_posix(),
+                ).to_dict()
+            benchmark_pipeline = dict(result.pipeline_report or {})
+            benchmark_pipeline["model_benchmark_observation"] = benchmark_observation
+            result.pipeline_report = benchmark_pipeline
+
+            if result.ok and certificate.preview_verified:
+                self.project_memory_store.record(
+                    project_dir,
+                    category="verified_build",
+                    statement=(
+                        "Requirement: " + instruction.strip()
+                        + " | Outcome: " + str(result.message or "")
+                    ),
+                    verified=True,
+                    evidence_ref=certificate_path.relative_to(project_dir).as_posix(),
+                )
+
             learning_example = learning_capture.get("example") if isinstance(learning_capture, dict) else None
             if (
                 isinstance(learning_example, dict)
