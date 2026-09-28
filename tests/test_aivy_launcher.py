@@ -28,6 +28,10 @@ class AivyLauncherSafetyTests(unittest.TestCase):
         self.assertIn("aivy-latest", script)
         self.assertIn("call aivy.bat web", script)
         self.assertIn("shell.run command, 0, false", script)
+        self.assertIn("winhttp.winhttprequest.5.1", script)
+        self.assertIn("isaivyrunning", script)
+        self.assertIn("127.0.0.1:8766", script)
+        self.assertIn("shell.run url, 1, false", script)
         self.assertNotIn("reset --hard", script)
         self.assertNotIn("clean -fd", script)
 
