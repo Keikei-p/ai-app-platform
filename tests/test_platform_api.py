@@ -105,6 +105,23 @@ class FakeKnowledgeService:
             "scores": {"mobile": 80},
         }
 
+    def task_graph_for(self, goal, project_slug=None):
+        self.calls.append(("task_graph", goal, project_slug))
+        return {
+            "goal": goal,
+            "nodes": [{"task_id": "inspect", "depends_on": []}],
+            "waves": [["inspect"], ["generate"]],
+        }
+
+    def release_guardian_status(self, project_slug):
+        self.calls.append(("release_guardian", project_slug))
+        return {
+            "status": "approval_required",
+            "blockers": [],
+            "warnings": [],
+            "report_path": ".aiapp/reports/release_guardian.json",
+        }
+
     def aivy_health_dashboard(self):
         self.calls.append(("health_dashboard",))
         return {
@@ -379,6 +396,45 @@ class PlatformAPITests(unittest.TestCase):
                 service.calls[-1],
                 ("specialist_squad", "mobile app", "demo"),
             )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_task_graph_and_release_guardian_routes(self):
+        api, service, server, thread = self._server()
+        try:
+            headers = {"X-CSRF-Token": api.csrf}
+
+            status, data = self._request(
+                server,
+                "POST",
+                "/api/v1/agent/task-graph",
+                body={"goal": "Build web app", "project_slug": "demo"},
+                headers=headers,
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(data["waves"][0], ["inspect"])
+            self.assertEqual(service.calls[-1], ("task_graph", "Build web app", "demo"))
+
+            status, _ = self._request(
+                server,
+                "POST",
+                "/api/v1/projects/demo/release-guardian",
+                body={},
+            )
+            self.assertEqual(status, 403)
+
+            status, data = self._request(
+                server,
+                "POST",
+                "/api/v1/projects/demo/release-guardian",
+                body={},
+                headers=headers,
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(data["status"], "approval_required")
+            self.assertEqual(service.calls[-1], ("release_guardian", "demo"))
         finally:
             server.shutdown()
             server.server_close()
