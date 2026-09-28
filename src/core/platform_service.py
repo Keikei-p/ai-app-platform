@@ -56,6 +56,8 @@ from .aivy_health_dashboard import AivyHealthDashboard
 from .app_spec import AppSpec
 from .accessibility_guardian import AccessibilityGuardian
 from .performance_guardian import PerformanceGuardian
+from .task_graph import TaskGraphPlanner
+from .release_guardian import ReleaseGuardian
 
 
 class PlatformService:
@@ -125,6 +127,8 @@ class PlatformService:
         self.model_benchmark = ModelBenchmarkStore()
         self.accessibility_guardian = AccessibilityGuardian()
         self.performance_guardian = PerformanceGuardian()
+        self.task_graph = TaskGraphPlanner()
+        self.release_guardian = ReleaseGuardian()
         self.recovery_supervisor = RecoverySupervisor(escalation=self.stop_escalation)
         self.agent = AgentOrchestrator(
             tools=self.tools,
@@ -198,6 +202,8 @@ class PlatformService:
                 "health_dashboard": True,
                 "accessibility_guardian": True,
                 "performance_guardian": True,
+                "task_dependency_graph": True,
+                "release_guardian": True,
             },
         }
 
@@ -693,6 +699,35 @@ class PlatformService:
     def fetch_research_source(self, url: str) -> dict[str, Any]:
         return self.research_provider.fetch(url).to_dict()
 
+    def task_graph_for(
+        self,
+        goal: str,
+        project_slug: str | None = None,
+    ) -> dict[str, Any]:
+        squad = self.specialist_squad(goal, project_slug)
+        return self.task_graph.build(goal, squad).to_dict()
+
+    def release_guardian_status(self, project_slug: str) -> dict[str, Any]:
+        slug = project_slug.strip()
+        if not slug:
+            raise ValueError("project_slug is required")
+        project_dir = safe_child(WORKSPACE_DIR, slug)
+        if not project_dir.is_dir():
+            raise FileNotFoundError(slug)
+        spec_path = project_dir / "app_spec.json"
+        if not spec_path.is_file():
+            return {
+                "status": "not_available",
+                "blockers": ["app_spec.json is missing"],
+                "warnings": [],
+            }
+        spec = AppSpec(**json.loads(spec_path.read_text(encoding="utf-8")))
+        report = self.release_guardian.assess(project_dir, spec)
+        path = self.release_guardian.save(project_dir, report)
+        payload = report.to_dict()
+        payload["report_path"] = path.relative_to(project_dir).as_posix()
+        return payload
+
     def specialist_squad(
         self,
         goal: str,
@@ -763,6 +798,10 @@ class PlatformService:
         plan = self.agent.plan(clean_goal, slug)
         plan_payload = plan.to_dict()
         plan_payload["squad"] = self.specialist_squad(clean_goal, slug)
+        plan_payload["task_graph"] = self.task_graph.build(
+            clean_goal,
+            plan_payload["squad"],
+        ).to_dict()
         return self.missions.create(
             project_slug=slug,
             goal=clean_goal,
