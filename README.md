@@ -82,6 +82,14 @@ Current v0.8 integration evidence includes:
 
 The release PR also runs the dedicated Android native APK acceptance before main is updated.
 
+## Aivy Learning Flywheel
+
+Verified successful builds now feed a dedicated Learning Flywheel. Aivy records only evidence-backed outcomes that pass Tests, Security, Design and Preview learning gates, together with the Development Certificate/Postflight evidence, the model route used, repair count and safe source-file hashes.
+
+The verified lesson is also written into Development Memory for relevant reuse on future builds. A supervision-candidate view is prepared for a future Aivy-specific model, but automatic fine-tuning remains disabled until dataset review and benchmark gates are added.
+
+The Web settings screen shows the current number of verified learning examples and their average score.
+
 ## Important boundaries
 
 Generated projects, runtime databases, logs, API keys, OAuth tokens, signing keys and user data are not committed to Git.

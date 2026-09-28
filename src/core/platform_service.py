@@ -42,6 +42,7 @@ from .secrets_guard import SecretsGuard
 from .cost_guard import CostGuard
 from .stop_escalation import StopEscalationJudge
 from .production_monitor import HealthSample, ProductionMonitor
+from .learning_flywheel import AivyLearningFlywheel
 
 
 class PlatformService:
@@ -95,6 +96,7 @@ class PlatformService:
         self.cost_guard = CostGuard(0)
         self.stop_escalation = StopEscalationJudge()
         self.production_monitor = ProductionMonitor()
+        self.learning_flywheel = AivyLearningFlywheel()
         self.recovery_supervisor = RecoverySupervisor(escalation=self.stop_escalation)
         self.agent = AgentOrchestrator(
             tools=self.tools,
@@ -152,6 +154,8 @@ class PlatformService:
                 "cost_guard": True,
                 "stop_escalation_judge": True,
                 "production_monitor": True,
+                "verified_learning_flywheel": True,
+                "supervision_dataset_candidates": True,
             },
         }
 
@@ -543,6 +547,15 @@ class PlatformService:
                 evidence_ref=evidence_ref,
             )
         ]
+
+    def learning_status(self) -> dict[str, Any]:
+        return self.learning_flywheel.stats()
+
+    def learning_examples(self, limit: int = 50) -> list[dict[str, Any]]:
+        return [x.to_dict() for x in self.learning_flywheel.recent(max(1, min(limit, 200)))]
+
+    def learning_supervision_candidates(self, limit: int = 100) -> list[dict[str, Any]]:
+        return self.learning_flywheel.supervision_candidates(max(1, min(limit, 500)))
 
     def staged_knowledge(self, trust_level: str | None = None) -> list[dict[str, Any]]:
         return [x.to_dict() for x in self.knowledge.list(trust_level)]
@@ -1070,6 +1083,60 @@ class PlatformService:
             "usage": knowledge_feedback,
         }
         result.pipeline_report = final_pipeline
+
+        try:
+            verified_evaluation = self.evolution.evaluation.evaluate(project_dir)
+            coding_route = self.model_router.route("coding").to_dict()
+            ai_status = str((result.ai_enhancement or {}).get("status") or "")
+            learning_capture = self.learning_flywheel.capture_verified_build(
+                project_slug=slug,
+                instruction=instruction,
+                outcome_summary=result.message,
+                result_ok=bool(result.ok),
+                evaluation=verified_evaluation.to_dict(),
+                evidence_refs=[
+                    certificate_path.relative_to(project_dir).as_posix(),
+                    postflight_path.relative_to(project_dir).as_posix(),
+                    str(trace.history_path or ""),
+                ],
+                project_dir=project_dir,
+                result_files=list(result.files or []),
+                model_route=coding_route,
+                ai_status=ai_status,
+                repair_attempts=list(result.repair_attempts or []),
+            )
+            learning_example = learning_capture.get("example") if isinstance(learning_capture, dict) else None
+            if (
+                isinstance(learning_example, dict)
+                and learning_capture.get("captured")
+                and not learning_capture.get("duplicate")
+            ):
+                self.agent.memory.record(
+                    category="verified_build",
+                    input_text=instruction,
+                    lesson=str(learning_example.get("lesson") or ""),
+                    outcome="verified",
+                    project_slug=slug,
+                    verified=True,
+                    evidence_source=certificate_path.relative_to(project_dir).as_posix(),
+                )
+                ledger.record(
+                    run_id=plan.run_id,
+                    stage="report",
+                    status="learned",
+                    summary="verified build added to Aivy Learning Flywheel",
+                    source="learning-flywheel",
+                )
+        except Exception as exc:
+            learning_capture = {
+                "captured": False,
+                "reason": "learning_capture_failed",
+                "error_type": type(exc).__name__,
+            }
+
+        learning_pipeline = dict(result.pipeline_report or {})
+        learning_pipeline["learning_flywheel"] = learning_capture
+        result.pipeline_report = learning_pipeline
 
         emit_platform(
             "done" if result.ok else "issue",

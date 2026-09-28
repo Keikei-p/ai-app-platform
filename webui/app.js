@@ -21,7 +21,7 @@ function setView(name){
   if(name==='conversations')loadConversations();
   if(name==='projects')loadProjects();
   if(name==='downloads')loadDownloads();
-  if(name==='settings'){loadModelRoutes();loadEvolutionSummary();loadKnowledgeSummary();}
+  if(name==='settings'){loadModelRoutes();loadEvolutionSummary();loadKnowledgeSummary();loadLearningSummary();}
 }
 function message(role,text){
   $('#welcome').hidden=true;
@@ -431,11 +431,20 @@ async function loadKnowledgeSummary(){
     target.textContent='Untrusted '+counts.untrusted+' · Candidate '+counts.candidate+' · Verified '+counts.verified+' · Agentが再利用するのはVerifiedのみ';
   }catch(e){target.textContent='Knowledge状態を取得できませんでした';}
 }
+async function loadLearningSummary(){
+  const target=$('#learningSummary');if(!target)return;
+  try{
+    const data=await api('/api/v1/learning/status');
+    const latest=data.latest||null;
+    const suffix=latest?(' · 最新 '+latest.evaluation_score+'/100'):' · まだ検証済み経験なし';
+    target.textContent='Verified '+(data.verified_examples||0)+'件 · 平均 '+(data.average_score||0)+'/100 · AI利用 '+(data.ai_backed_examples||0)+'件 · 教師候補を安全に蓄積中'+suffix;
+  }catch(e){target.textContent='Learning状態を取得できませんでした';}
+}
 async function boot(){
   try{
     const status=await api('/api/v1/status');state.csrf=status.csrf||'';
     $('#coreStatus').innerHTML='<i></i>Core接続';$('#coreStatus').classList.add('success');
-    await loadConversations();await loadProjects();await loadModelRoutes();await loadEvolutionSummary();await loadKnowledgeSummary();
+    await loadConversations();await loadProjects();await loadModelRoutes();await loadEvolutionSummary();await loadKnowledgeSummary();await loadLearningSummary();
   }catch(e){$('#coreStatus').textContent='Core未接続';}
 }
 $('#composer').addEventListener('submit',e=>{e.preventDefault();send($('#prompt').value);});

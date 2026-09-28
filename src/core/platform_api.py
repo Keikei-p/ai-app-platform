@@ -139,6 +139,21 @@ class PlatformAPI:
                     if path == "/api/v1/evolution/experiments":
                         self._json(200, {"experiments": api.service.list_evolution_experiments()})
                         return
+                    if path == "/api/v1/learning/status":
+                        self._json(200, api.service.learning_status())
+                        return
+                    if path == "/api/v1/learning/examples":
+                        query = parse_qs(parsed.query)
+                        limit = max(1, min(int((query.get("limit") or ["50"])[0]), 200))
+                        self._json(200, {"examples": api.service.learning_examples(limit)})
+                        return
+                    if path == "/api/v1/learning/supervision":
+                        query = parse_qs(parsed.query)
+                        limit = max(1, min(int((query.get("limit") or ["100"])[0]), 500))
+                        self._json(200, {
+                            "candidates": api.service.learning_supervision_candidates(limit)
+                        })
+                        return
                     if path == "/api/v1/knowledge":
                         query = parse_qs(parsed.query).get("q", [""])[0]
                         self._json(200, {"knowledge": api.service.verified_knowledge(query)})
