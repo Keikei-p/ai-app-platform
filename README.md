@@ -82,7 +82,14 @@ Current v0.8 integration evidence includes:
 
 The release PR also runs the dedicated Android native APK acceptance before main is updated.
 
+## Parallel Sandbox Workers
+
+Aivy can now run Research, Architecture, Coding, Test, Design and Security specialists in parallel over separate project snapshots. Workers cannot write the live source project; secret-style files and runtime/internal directories are excluded from their snapshots. The live project is fingerprinted before and after the parallel review, and a mismatch blocks the result.
+
+Mission Control uses this parallel review before the reviewed execution council and before build approval. Actual source changes remain single-writer operations in the existing safe build pipeline.
+
 ## Mission Control
+
 
 Aivy now includes a persistent Mission Control foundation for long-horizon work. Missions preserve their goal, project, plan, phase, approval state, evidence references and history across restarts.
 
