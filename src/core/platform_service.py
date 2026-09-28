@@ -1334,26 +1334,38 @@ class PlatformService:
         pipeline_report["agent_execution_trace"] = trace.to_dict()
         result.pipeline_report = pipeline_report
 
-        spec_data = json.loads((project_dir / "app_spec.json").read_text(encoding="utf-8"))
-        spec = AppSpec(**spec_data)
-        requirement_report = self.requirement_guardian.assess(
-            project_dir,
-            spec,
-            instruction=instruction,
-            pipeline_report=result.pipeline_report,
-            trace=trace.to_dict(),
-        )
-        requirement_path = self.requirement_guardian.save(project_dir, requirement_report)
-        pipeline_report = dict(result.pipeline_report or {})
-        pipeline_report["requirement_guardian"] = requirement_report.to_dict()
-        pipeline_report["requirement_guardian_path"] = requirement_path.relative_to(project_dir).as_posix()
-        result.pipeline_report = pipeline_report
-        if result.ok and requirement_report.structural_blockers:
-            result.ok = False
-            result.message = (
-                "Requirement Guardianが仕様Evidenceの構造不足を検出したため、"
-                "完成扱いを停止しました。"
+        spec_path = project_dir / "app_spec.json"
+        if spec_path.is_file():
+            spec_data = json.loads(spec_path.read_text(encoding="utf-8"))
+            spec = AppSpec(**spec_data)
+            requirement_report = self.requirement_guardian.assess(
+                project_dir,
+                spec,
+                instruction=instruction,
+                pipeline_report=result.pipeline_report,
+                trace=trace.to_dict(),
             )
+            requirement_path = self.requirement_guardian.save(project_dir, requirement_report)
+            pipeline_report = dict(result.pipeline_report or {})
+            pipeline_report["requirement_guardian"] = requirement_report.to_dict()
+            pipeline_report["requirement_guardian_path"] = requirement_path.relative_to(project_dir).as_posix()
+            result.pipeline_report = pipeline_report
+            if result.ok and requirement_report.structural_blockers:
+                result.ok = False
+                result.message = (
+                    "Requirement Guardianが仕様Evidenceの構造不足を検出したため、"
+                    "完成扱いを停止しました。"
+                )
+        else:
+            pipeline_report = dict(result.pipeline_report or {})
+            pipeline_report["requirement_guardian"] = {
+                "status": "not_available",
+                "requirements": [],
+                "structural_blockers": [],
+                "semantic_review_required": False,
+                "reason": "app_spec.json is not available in this execution path",
+            }
+            result.pipeline_report = pipeline_report
 
         trace_verified = trace.status == "verified"
         validated = bool(result.ok and trace_verified)
