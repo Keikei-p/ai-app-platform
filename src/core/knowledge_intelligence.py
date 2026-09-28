@@ -286,13 +286,18 @@ class KnowledgeSearchEngine:
         clean = str(query).strip()
         if not clean:
             return []
-        all_items = self.knowledge.list()
-        self.scalable_index.sync(
-            all_items,
-            source_signature=knowledge_source_signature(
-                getattr(self.knowledge, "path", None)
-            ),
+        source_signature = knowledge_source_signature(
+            getattr(self.knowledge, "path", None)
         )
+        index_current = self.scalable_index.is_current(source_signature)
+        all_items: list[KnowledgeItem] | None = None
+        if not index_current:
+            all_items = self.knowledge.list()
+            self.scalable_index.sync(
+                all_items,
+                source_signature=source_signature,
+            )
+
         candidate_limit = max(160, min(1000, int(limit) * 24))
         candidate_ids = self.scalable_index.candidates(
             clean,
@@ -300,14 +305,18 @@ class KnowledgeSearchEngine:
             limit=candidate_limit,
         )
         if candidate_ids:
-            by_id = {item.knowledge_id: item for item in all_items}
-            candidates = [
-                by_id[knowledge_id]
-                for knowledge_id in candidate_ids
-                if knowledge_id in by_id
-            ]
+            candidates = self.scalable_index.items(candidate_ids)
+            if not candidates and all_items is not None:
+                by_id = {item.knowledge_id: item for item in all_items}
+                candidates = [
+                    by_id[knowledge_id]
+                    for knowledge_id in candidate_ids
+                    if knowledge_id in by_id
+                ]
+        elif self.scalable_index.fts_available:
+            candidates = []
         else:
-            candidates = all_items
+            candidates = all_items if all_items is not None else self.knowledge.list()
 
         query_vector = self.index.vector(clean)
         rows: list[RankedKnowledge] = []
