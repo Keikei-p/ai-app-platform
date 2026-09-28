@@ -1,0 +1,282 @@
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from hashlib import sha256
+from math import sqrt
+from pathlib import Path
+from typing import Any
+import json
+import re
+
+from .config import DATA_DIR
+from .knowledge_store import KnowledgeItem, VerifiedKnowledgeStore
+
+
+@dataclass(frozen=True)
+class KnowledgeUsage:
+    knowledge_id: str
+    uses: int = 0
+    successes: int = 0
+    failures: int = 0
+    last_used_at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class RankedKnowledge:
+    item: KnowledgeItem
+    relevance: float
+    confidence: float
+    score: float
+    usage: KnowledgeUsage
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "knowledge": self.item.to_dict(),
+            "relevance": round(self.relevance, 4),
+            "confidence": round(self.confidence, 4),
+            "score": round(self.score, 4),
+            "usage": self.usage.to_dict(),
+        }
+
+
+class KnowledgeUsageStore:
+    """Inspectable success/failure history for knowledge used in real work."""
+
+    def __init__(self, path: Path | None = None):
+        self.path = path or (DATA_DIR / "knowledge_usage.json")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _read(self) -> dict[str, KnowledgeUsage]:
+        if not self.path.is_file():
+            return {}
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        rows: dict[str, KnowledgeUsage] = {}
+        for key, value in raw.items() if isinstance(raw, dict) else []:
+            if not isinstance(value, dict):
+                continue
+            try:
+                rows[str(key)] = KnowledgeUsage(
+                    knowledge_id=str(value.get("knowledge_id") or key),
+                    uses=max(0, int(value.get("uses") or 0)),
+                    successes=max(0, int(value.get("successes") or 0)),
+                    failures=max(0, int(value.get("failures") or 0)),
+                    last_used_at=str(value.get("last_used_at") or ""),
+                )
+            except Exception:
+                continue
+        return rows
+
+    def _write(self, rows: dict[str, KnowledgeUsage]) -> None:
+        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+        tmp.write_text(
+            json.dumps({key: row.to_dict() for key, row in rows.items()}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        tmp.replace(self.path)
+
+    def get(self, knowledge_id: str) -> KnowledgeUsage:
+        return self._read().get(knowledge_id, KnowledgeUsage(knowledge_id))
+
+    def record(self, knowledge_id: str, *, success: bool) -> KnowledgeUsage:
+        key = str(knowledge_id).strip()
+        if not key:
+            raise ValueError("knowledge_id is required")
+        rows = self._read()
+        current = rows.get(key, KnowledgeUsage(key))
+        updated = KnowledgeUsage(
+            knowledge_id=key,
+            uses=current.uses + 1,
+            successes=current.successes + (1 if success else 0),
+            failures=current.failures + (0 if success else 1),
+            last_used_at=datetime.now(timezone.utc).isoformat(),
+        )
+        rows[key] = updated
+        self._write(rows)
+        return updated
+
+
+class LocalSemanticIndex:
+    """Deterministic local vector-like search with no embedding API dependency.
+
+    Character n-grams work for Japanese and Latin text, remain inspectable, and
+    provide a free fallback until a real embedding adapter is explicitly enabled.
+    """
+
+    DIMENSIONS = 256
+
+    @classmethod
+    def vector(cls, text: str) -> tuple[float, ...]:
+        normalized = cls._normalize(text)
+        grams = cls._ngrams(normalized)
+        values = [0.0] * cls.DIMENSIONS
+        for gram in grams:
+            digest = sha256(gram.encode("utf-8")).digest()
+            index = int.from_bytes(digest[:2], "big") % cls.DIMENSIONS
+            sign = -1.0 if digest[2] & 1 else 1.0
+            values[index] += sign
+        norm = sqrt(sum(x * x for x in values))
+        if norm:
+            values = [x / norm for x in values]
+        return tuple(values)
+
+    @staticmethod
+    def similarity(left: tuple[float, ...], right: tuple[float, ...]) -> float:
+        if len(left) != len(right):
+            raise ValueError("vector dimensions must match")
+        raw = sum(a * b for a, b in zip(left, right))
+        return max(0.0, min(1.0, (raw + 1.0) / 2.0))
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", str(text).strip().lower())[:24_000]
+
+    @classmethod
+    def _ngrams(cls, text: str) -> tuple[str, ...]:
+        compact = text.replace(" ", "")
+        grams: list[str] = []
+        for size in (2, 3, 4):
+            for index in range(max(0, len(compact) - size + 1)):
+                grams.append(compact[index:index + size])
+        words = re.findall(r"[a-z0-9_+#.-]{2,}", text)
+        grams.extend(words)
+        return tuple(dict.fromkeys(grams[:12_000]))
+
+
+class KnowledgeConfidenceEngine:
+    """Score knowledge quality without treating heuristics as verification."""
+
+    SOURCE_WEIGHTS = {
+        "official": 0.95,
+        "official_docs": 0.95,
+        "documentation": 0.85,
+        "repository": 0.80,
+        "github": 0.75,
+        "project_evidence": 0.90,
+        "web": 0.55,
+        "manual": 0.55,
+        "unknown": 0.40,
+    }
+
+    def score(self, item: KnowledgeItem, usage: KnowledgeUsage) -> float:
+        trust_base = {
+            "untrusted": 0.20,
+            "candidate": 0.48,
+            "verified": 0.76,
+        }.get(item.trust_level, 0.10)
+
+        source_scores = [
+            self.SOURCE_WEIGHTS.get(str(source.get("kind") or "").lower(), 0.45)
+            for source in item.sources
+        ]
+        source_quality = sum(source_scores) / len(source_scores) if source_scores else 0.30
+        source_bonus = min(0.08, max(0, len({
+            str(source.get("locator") or "") for source in item.sources
+            if str(source.get("locator") or "").strip()
+        }) - 1) * 0.025)
+
+        verifier_bonus = min(0.10, len(set(item.verified_by)) * 0.025)
+        freshness = self._freshness(item.updated_at)
+
+        if usage.uses:
+            success_rate = usage.successes / usage.uses
+            experience = min(0.12, usage.uses * 0.012)
+            usage_adjustment = (success_rate - 0.5) * 2 * experience
+        else:
+            usage_adjustment = 0.0
+
+        score = (
+            trust_base * 0.52
+            + source_quality * 0.18
+            + freshness * 0.12
+            + source_bonus
+            + verifier_bonus
+            + usage_adjustment
+        )
+        if item.trust_level != "verified":
+            score = min(score, 0.69)
+        return max(0.0, min(1.0, score))
+
+    @staticmethod
+    def _freshness(value: str) -> float:
+        try:
+            updated = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            age_days = max(0, (datetime.now(timezone.utc) - updated).days)
+        except Exception:
+            return 0.35
+        if age_days <= 30:
+            return 1.0
+        if age_days <= 180:
+            return 0.82
+        if age_days <= 365:
+            return 0.65
+        if age_days <= 730:
+            return 0.48
+        return 0.30
+
+
+class KnowledgeSearchEngine:
+    """Hybrid relevance + confidence search over the existing staged store."""
+
+    def __init__(
+        self,
+        knowledge: VerifiedKnowledgeStore | None = None,
+        usage: KnowledgeUsageStore | None = None,
+        confidence: KnowledgeConfidenceEngine | None = None,
+        index: LocalSemanticIndex | None = None,
+    ):
+        self.knowledge = knowledge or VerifiedKnowledgeStore()
+        self.usage = usage or KnowledgeUsageStore()
+        self.confidence = confidence or KnowledgeConfidenceEngine()
+        self.index = index or LocalSemanticIndex()
+
+    def search(
+        self,
+        query: str,
+        *,
+        verified_only: bool = True,
+        limit: int = 8,
+        minimum_confidence: float = 0.0,
+    ) -> list[RankedKnowledge]:
+        clean = str(query).strip()
+        if not clean:
+            return []
+        query_vector = self.index.vector(clean)
+        rows: list[RankedKnowledge] = []
+        for item in self.knowledge.list():
+            if verified_only and item.trust_level != "verified":
+                continue
+            use = self.usage.get(item.knowledge_id)
+            confidence = self.confidence.score(item, use)
+            if confidence < minimum_confidence:
+                continue
+            item_vector = self.index.vector(item.topic + "\n" + item.statement)
+            semantic = self.index.similarity(query_vector, item_vector)
+            lexical = self._lexical(clean, item.topic + " " + item.statement)
+            relevance = semantic * 0.65 + lexical * 0.35
+            score = relevance * 0.72 + confidence * 0.28
+            rows.append(RankedKnowledge(item, relevance, confidence, score, use))
+        rows.sort(key=lambda row: (row.score, row.confidence, row.item.updated_at), reverse=True)
+        return rows[: max(1, min(int(limit), 50))]
+
+    def record_outcome(self, knowledge_ids: list[str] | tuple[str, ...], *, success: bool) -> list[KnowledgeUsage]:
+        updated: list[KnowledgeUsage] = []
+        for knowledge_id in dict.fromkeys(str(x).strip() for x in knowledge_ids if str(x).strip()):
+            updated.append(self.usage.record(knowledge_id, success=success))
+        return updated
+
+    @staticmethod
+    def _lexical(query: str, text: str) -> float:
+        query_terms = set(LocalSemanticIndex._ngrams(LocalSemanticIndex._normalize(query)))
+        text_terms = set(LocalSemanticIndex._ngrams(LocalSemanticIndex._normalize(text)))
+        if not query_terms:
+            return 0.0
+        return len(query_terms & text_terms) / len(query_terms)
