@@ -199,6 +199,151 @@ class VerifiedKnowledgeStore:
         self._write(rows)
         return item
 
+    def ingest_many(self, entries: list[dict[str, Any]]) -> list[KnowledgeItem]:
+        if not isinstance(entries, list):
+            raise ValueError("entries must be an array")
+        if not entries:
+            return []
+
+        rows = self._read()
+        index_by_id = {item.knowledge_id: index for index, item in enumerate(rows)}
+        by_hash = {item.content_hash: item for item in rows}
+        results: list[KnowledgeItem] = []
+        changed = False
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise ValueError("knowledge entry must be an object")
+            clean_topic = redact_sensitive(str(entry.get("topic") or "").strip())[:180]
+            clean_statement = redact_sensitive(str(entry.get("statement") or "").strip())[:4000]
+            if not clean_topic or not clean_statement:
+                raise ValueError("topic and statement are required")
+            raw_sources = entry.get("sources")
+            if not isinstance(raw_sources, list) or not raw_sources:
+                raise ValueError("knowledge entry requires sources")
+            sources = []
+            for raw in raw_sources:
+                if not isinstance(raw, dict):
+                    raise ValueError("knowledge source must be an object")
+                sources.append(self._source(
+                    str(raw.get("kind") or ""),
+                    str(raw.get("locator") or ""),
+                    str(raw.get("title") or ""),
+                    version=str(raw.get("version") or ""),
+                    retrieved_at=str(raw.get("retrieved_at") or ""),
+                ))
+
+            digest = self._hash(clean_topic, clean_statement)
+            existing = by_hash.get(digest)
+            now = _now()
+            if existing is None:
+                updated = KnowledgeItem(
+                    uuid.uuid4().hex,
+                    now,
+                    now,
+                    clean_topic,
+                    clean_statement,
+                    "untrusted",
+                    tuple(dict.fromkeys(
+                        json.dumps(source, ensure_ascii=False, sort_keys=True)
+                        for source in sources
+                    )),
+                    (),
+                    (),
+                    digest,
+                )
+                decoded_sources = tuple(json.loads(source) for source in updated.sources)
+                updated = KnowledgeItem(
+                    updated.knowledge_id,
+                    updated.created_at,
+                    updated.updated_at,
+                    updated.topic,
+                    updated.statement,
+                    updated.trust_level,
+                    decoded_sources,
+                    updated.evidence_refs,
+                    updated.verified_by,
+                    updated.content_hash,
+                )
+                index_by_id[updated.knowledge_id] = len(rows)
+                rows.append(updated)
+                by_hash[digest] = updated
+                changed = True
+            else:
+                merged = list(existing.sources)
+                for source in sources:
+                    if source not in merged:
+                        merged.append(source)
+                if tuple(merged) != existing.sources:
+                    updated = KnowledgeItem(
+                        existing.knowledge_id,
+                        existing.created_at,
+                        now,
+                        existing.topic,
+                        existing.statement,
+                        existing.trust_level,
+                        tuple(merged),
+                        existing.evidence_refs,
+                        existing.verified_by,
+                        existing.content_hash,
+                    )
+                    rows[index_by_id[existing.knowledge_id]] = updated
+                    by_hash[digest] = updated
+                    changed = True
+                else:
+                    updated = existing
+            results.append(updated)
+
+        if changed:
+            self._write(rows)
+        return results
+
+    def promote_candidates(self, knowledge_ids: list[str] | tuple[str, ...]) -> list[KnowledgeItem]:
+        requested = set(str(x).strip() for x in knowledge_ids if str(x).strip())
+        if not requested:
+            return []
+        rows = self._read()
+        found = {item.knowledge_id for item in rows}
+        missing = sorted(requested - found)
+        if missing:
+            raise KeyError("unknown knowledge ids: " + ", ".join(missing[:10]))
+
+        promoted: list[KnowledgeItem] = []
+        changed = False
+        now = _now()
+        for index, item in enumerate(rows):
+            if item.knowledge_id not in requested:
+                continue
+            if item.trust_level in {"candidate", "verified"}:
+                promoted.append(item)
+                continue
+            distinct_locators = {
+                str(source.get("locator") or "").strip()
+                for source in item.sources
+                if str(source.get("locator") or "").strip()
+            }
+            if len(distinct_locators) < 2:
+                continue
+            updated = KnowledgeItem(
+                item.knowledge_id,
+                item.created_at,
+                now,
+                item.topic,
+                item.statement,
+                "candidate",
+                item.sources,
+                item.evidence_refs,
+                item.verified_by,
+                item.content_hash,
+            )
+            rows[index] = updated
+            promoted.append(updated)
+            changed = True
+
+        if changed:
+            self._write(rows)
+        return promoted
+
     def promote_candidate(self, knowledge_id: str) -> KnowledgeItem:
         rows = self._read()
         item = next((x for x in rows if x.knowledge_id == knowledge_id), None)
