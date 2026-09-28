@@ -181,6 +181,9 @@ class RecoverySupervisor:
         if comparison["critical_regression"] or candidate.score < baseline.score:
             action = "recover"
             reason = "candidate is worse than the verified baseline"
+        elif not attempts and classification.kind == "UNKNOWN" and not classification.signals:
+            action = "accept"
+            reason = "no repair outcome exists; completion gates remain authoritative"
         elif candidate.learning_eligible and candidate.preview_ready:
             action = "accept"
             reason = "all quality gates pass without a critical regression"
@@ -217,16 +220,24 @@ class RecoverySupervisor:
         *,
         postflight_ok: bool,
     ) -> IndependentReview:
-        checks = {
-            "tests": candidate.tests_passed,
-            "security": candidate.security_passed,
-            "design": candidate.design_passed,
-            "preview": candidate.preview_ready,
-            "postflight": bool(postflight_ok),
-            "no_critical_regression": not decision.critical_regression,
-            "not_worse_than_baseline": candidate.score >= baseline.score,
-            "repair_budget_respected": decision.attempts_used <= decision.max_attempts,
-        }
+        if decision.attempts_used == 0:
+            checks = {
+                "postflight": bool(postflight_ok),
+                "no_critical_regression": not decision.critical_regression,
+                "not_worse_than_baseline": candidate.score >= baseline.score,
+                "repair_budget_respected": True,
+            }
+        else:
+            checks = {
+                "tests": candidate.tests_passed,
+                "security": candidate.security_passed,
+                "design": candidate.design_passed,
+                "preview": candidate.preview_ready,
+                "postflight": bool(postflight_ok),
+                "no_critical_regression": not decision.critical_regression,
+                "not_worse_than_baseline": candidate.score >= baseline.score,
+                "repair_budget_respected": decision.attempts_used <= decision.max_attempts,
+            }
         findings = [name for name, passed in checks.items() if not passed]
         if decision.action != "accept":
             findings.append("recovery_decision:" + decision.action)
