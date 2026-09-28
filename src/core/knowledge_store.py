@@ -52,10 +52,25 @@ class VerifiedKnowledgeStore:
     def __init__(self, path: Path | None = None):
         self.path = path or (DATA_DIR / "verified_knowledge.json")
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._cache_signature: tuple[int, int] | None = None
+        self._cache_rows: list[KnowledgeItem] | None = None
 
     def _read(self) -> list[KnowledgeItem]:
         if not self.path.is_file():
+            self._cache_signature = None
+            self._cache_rows = []
             return []
+        try:
+            stat = self.path.stat()
+            signature = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            signature = None
+        if (
+            signature is not None
+            and self._cache_signature == signature
+            and self._cache_rows is not None
+        ):
+            return list(self._cache_rows)
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except Exception:
@@ -79,7 +94,9 @@ class VerifiedKnowledgeStore:
                 )
             except Exception:
                 continue
-        return rows
+        self._cache_rows = list(rows)
+        self._cache_signature = signature
+        return list(rows)
 
     def _write(self, rows: list[KnowledgeItem]) -> None:
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
@@ -88,6 +105,12 @@ class VerifiedKnowledgeStore:
             encoding="utf-8",
         )
         tmp.replace(self.path)
+        self._cache_rows = list(rows)
+        try:
+            stat = self.path.stat()
+            self._cache_signature = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            self._cache_signature = None
 
     @staticmethod
     def _source(
