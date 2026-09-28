@@ -14,6 +14,7 @@ from .agent_tools import AgentToolRegistry
 from .specialist_agents import SpecialistAgentRegistry
 from .model_router import ModelRouter
 from .knowledge_store import VerifiedKnowledgeStore
+from .knowledge_intelligence import KnowledgeSearchEngine
 
 
 ALLOWED_AGENT_ACTIONS = {
@@ -156,6 +157,7 @@ class AgentOrchestrator:
         self.specialists = specialists or SpecialistAgentRegistry(self.tools)
         self.model_router = model_router or ModelRouter()
         self.knowledge = knowledge or VerifiedKnowledgeStore()
+        self.knowledge_search = KnowledgeSearchEngine(self.knowledge)
 
     def plan(self, goal: str, project_slug: str | None = None) -> AgentPlan:
         goal = goal.strip()
@@ -188,7 +190,13 @@ class AgentOrchestrator:
 
     def context(self, goal: str, limit: int = 5) -> dict[str, Any]:
         lessons = self.memory.lessons_for(goal, limit=limit, verified_only=True)
-        knowledge = self.knowledge.search(goal, verified_only=True, limit=limit)
+        ranked_knowledge = self.knowledge_search.search(
+            goal,
+            verified_only=True,
+            limit=limit,
+            minimum_confidence=0.45,
+        )
+        knowledge = [row.item for row in ranked_knowledge]
         specialist_rows = []
         for specialist in self.specialists.list():
             route = self.model_router.route(specialist.model_task)
@@ -203,6 +211,18 @@ class AgentOrchestrator:
             "goal": goal,
             "lessons": lessons,
             "verified_knowledge": [x.to_dict() for x in knowledge],
+            "knowledge_ranking": [
+                {
+                    "knowledge_id": row.item.knowledge_id,
+                    "relevance": round(row.relevance, 4),
+                    "confidence": round(row.confidence, 4),
+                    "score": round(row.score, 4),
+                    "uses": row.usage.uses,
+                    "successes": row.usage.successes,
+                    "failures": row.usage.failures,
+                }
+                for row in ranked_knowledge
+            ],
             "specialists": specialist_rows,
             "policy": {
                 "arbitrary_shell": False,
