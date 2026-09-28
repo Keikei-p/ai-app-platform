@@ -45,6 +45,7 @@ from .production_monitor import HealthSample, ProductionMonitor
 from .learning_flywheel import AivyLearningFlywheel
 from .mission_control import MissionStore, TERMINAL_STATUSES
 from .parallel_sandbox_workers import ParallelSandboxWorkerPool
+from .specialist_squad import SpecialistSquadSelector
 
 
 class PlatformService:
@@ -105,6 +106,7 @@ class PlatformService:
             specialists=self.specialists,
             router=self.model_router,
         )
+        self.squad_selector = SpecialistSquadSelector()
         self.recovery_supervisor = RecoverySupervisor(escalation=self.stop_escalation)
         self.agent = AgentOrchestrator(
             tools=self.tools,
@@ -168,6 +170,7 @@ class PlatformService:
                 "mission_resume_after_restart": True,
                 "parallel_sandbox_workers": True,
                 "source_write_single_coordinator": True,
+                "automatic_specialist_squad": True,
             },
         }
 
@@ -604,6 +607,24 @@ class PlatformService:
     def fetch_research_source(self, url: str) -> dict[str, Any]:
         return self.research_provider.fetch(url).to_dict()
 
+    def specialist_squad(
+        self,
+        goal: str,
+        project_slug: str | None = None,
+    ) -> dict[str, Any]:
+        detail: dict[str, Any] = {}
+        slug = str(project_slug or "").strip()
+        if slug:
+            try:
+                raw = self.project_detail(slug)
+                detail = dict(raw.get("card") or raw)
+            except FileNotFoundError:
+                detail = {}
+        return self.squad_selector.select(
+            goal,
+            project_detail=detail,
+        ).to_dict()
+
     def run_parallel_sandbox_review(
         self,
         goal: str,
@@ -617,13 +638,18 @@ class PlatformService:
         project_dir = safe_child(WORKSPACE_DIR, slug)
         if not project_dir.is_dir():
             raise FileNotFoundError(slug)
+
+        squad = self.specialist_squad(clean_goal, slug)
+        selected_roles = roles or tuple(squad.get("worker_roles") or ())
         report = self.parallel_sandboxes.run(
             goal=clean_goal,
             project_slug=slug,
             project_dir=project_dir,
-            roles=roles,
+            roles=selected_roles,
         )
-        return report.to_dict()
+        payload = report.to_dict()
+        payload["squad"] = squad
+        return payload
 
     def list_missions(self, limit: int = 100) -> list[dict[str, Any]]:
         return [
