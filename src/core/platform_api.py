@@ -124,6 +124,11 @@ class PlatformAPI:
                     if path == "/api/v1/projects":
                         self._json(200, {"projects": api.service.list_project_cards()})
                         return
+                    if path == "/api/v1/missions":
+                        query = parse_qs(parsed.query)
+                        limit = max(1, min(int((query.get("limit") or ["100"])[0]), 500))
+                        self._json(200, {"missions": api.service.list_missions(limit)})
+                        return
                     if path == "/api/v1/agents":
                         self._json(200, {"agents": api.service.specialist_agents()})
                         return
@@ -207,6 +212,9 @@ class PlatformAPI:
                         return
 
                     parts = [x for x in path.split("/") if x]
+                    if len(parts) == 4 and parts[:3] == ["api", "v1", "missions"]:
+                        self._json(200, api.service.mission_detail(parts[3]))
+                        return
                     if len(parts) == 5 and parts[:4] == ["api", "v1", "knowledge", "imports"]:
                         self._json(200, api.service.knowledge_import(parts[4]))
                         return
@@ -240,6 +248,16 @@ class PlatformAPI:
                     return
                 try:
                     data = self._body()
+                    if path == "/api/v1/missions":
+                        goal = str(data.get("goal") or "").strip()
+                        project_slug = str(data.get("project_slug") or "").strip()
+                        max_cycles = int(data.get("max_cycles") or 8)
+                        self._json(201, api.service.create_mission(
+                            goal=goal,
+                            project_slug=project_slug,
+                            max_cycles=max_cycles,
+                        ))
+                        return
                     if path == "/api/v1/conversations":
                         row = api.service.create_conversation(str(data.get("title") or "新しいチャット"))
                         self._json(201, row)
@@ -326,6 +344,19 @@ class PlatformAPI:
                         self._json(201, row)
                         return
                     parts = [x for x in path.split("/") if x]
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "missions"]:
+                        if parts[4] == "run":
+                            self._json(202, api.service.run_mission_cycle(
+                                parts[3],
+                                approved_build=data.get("approved_build") is True,
+                            ))
+                            return
+                        if parts[4] == "pause":
+                            self._json(200, api.service.pause_mission(parts[3]))
+                            return
+                        if parts[4] == "cancel":
+                            self._json(200, api.service.cancel_mission(parts[3]))
+                            return
                     if len(parts) == 6 and parts[:4] == ["api", "v1", "knowledge", "imports"] and parts[5] == "pages":
                         rows = data.get("rows")
                         page_index = data.get("page_index")
