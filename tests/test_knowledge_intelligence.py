@@ -4,6 +4,7 @@ from pathlib import Path
 
 from src.core.agent_runtime import AgentOrchestrator
 from src.core.knowledge_factory import KnowledgeFactory
+from src.core.knowledge_index import ScalableKnowledgeIndex
 from src.core.knowledge_intelligence import (
     KnowledgeConfidenceEngine,
     KnowledgeSearchEngine,
@@ -175,6 +176,42 @@ class LocalSemanticKnowledgeTests(unittest.TestCase):
             evidence_text = (root / "usage-evidence.jsonl").read_text(encoding="utf-8")
             self.assertIn("certificate:abc", evidence_text)
             self.assertIn('"project_slug": "demo"', evidence_text)
+
+    def test_current_sqlite_index_avoids_full_store_scan(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            store = VerifiedKnowledgeStore(root / "knowledge.json")
+            usage = KnowledgeUsageStore(root / "usage.json", root / "usage-evidence.jsonl")
+            item = verified_item(
+                store,
+                "Firebase Authentication",
+                "Firebase Authenticationで認証済みユーザーを管理する。",
+            )
+            scalable = ScalableKnowledgeIndex(root / "knowledge.index.sqlite3")
+            search = KnowledgeSearchEngine(
+                store,
+                usage,
+                scalable_index=scalable,
+            )
+            first = search.search("Firebase 認証", limit=3)
+            self.assertEqual(first[0].item.knowledge_id, item.knowledge_id)
+
+            original_list = store.list
+            def fail_full_scan(*args, **kwargs):
+                raise AssertionError("full knowledge JSON scan should not run when index is current")
+            store.list = fail_full_scan
+            try:
+                second = search.search("Firebase 認証", limit=3)
+                self.assertEqual(second[0].item.knowledge_id, item.knowledge_id)
+                feedback = search.record_outcome(
+                    [item.knowledge_id],
+                    success=True,
+                    project_slug="demo",
+                    evidence_ref="certificate:indexed",
+                )
+                self.assertEqual(feedback[0].successes, 1)
+            finally:
+                store.list = original_list
 
     def test_local_index_is_deterministic_and_free(self):
         one = LocalSemanticIndex.vector("Firebase 認証")
