@@ -46,8 +46,8 @@ class RecoverySupervisorTests(unittest.TestCase):
         self.assertTrue(classification.retryable)
 
         decision = self.supervisor.decide(
-            report(80),
-            report(80, tests=False, learning=False),
+            report(50, tests=False, learning=False),
+            report(55, tests=False, learning=False),
             repair_attempts=[],
             classification=classification,
         )
