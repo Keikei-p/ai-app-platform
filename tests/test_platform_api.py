@@ -85,6 +85,15 @@ class FakeKnowledgeService:
         self.calls.append(("cancel_mission", mission_id))
         return {"mission_id": mission_id, "status": "cancelled"}
 
+    def run_parallel_sandbox_review(self, goal, project_slug, roles=None):
+        self.calls.append(("parallel_sandbox", goal, project_slug, roles))
+        return {
+            "run_id": "sandbox-1",
+            "status": "completed",
+            "source_unchanged": True,
+            "workers": [{"role": "security", "status": "completed"}],
+        }
+
 
 class PlatformAPITests(unittest.TestCase):
     def test_handler_is_constructible(self):
@@ -231,6 +240,40 @@ class PlatformAPITests(unittest.TestCase):
             )
             self.assertEqual(status, 202)
             self.assertEqual(data["status"], "running")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_parallel_sandbox_route_requires_csrf(self):
+        api, service, server, thread = self._server()
+        try:
+            status, _ = self._request(
+                server,
+                "POST",
+                "/api/v1/agent/sandbox/parallel",
+                body={"goal": "Review", "project_slug": "demo"},
+            )
+            self.assertEqual(status, 403)
+
+            headers = {"X-CSRF-Token": api.csrf}
+            status, data = self._request(
+                server,
+                "POST",
+                "/api/v1/agent/sandbox/parallel",
+                body={
+                    "goal": "Review",
+                    "project_slug": "demo",
+                    "roles": ["security", "test"],
+                },
+                headers=headers,
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(data["source_unchanged"])
+            self.assertEqual(
+                service.calls[-1],
+                ("parallel_sandbox", "Review", "demo", ("security", "test")),
+            )
         finally:
             server.shutdown()
             server.server_close()
