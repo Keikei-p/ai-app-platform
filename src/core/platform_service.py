@@ -177,6 +177,12 @@ class PlatformService:
             },
         }
 
+    def configure_cost_budget(self, budget_yen: int | float | str, *, approved: bool) -> dict[str, str]:
+        if not approved:
+            raise PermissionError("explicit approval is required before enabling a paid-operation budget")
+        self.cost_guard = CostGuard(budget_yen)
+        return self.cost_guard.snapshot()
+
     def check_cost_operation(
         self,
         *,
