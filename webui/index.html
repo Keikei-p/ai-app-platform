@@ -25,6 +25,7 @@
         <button data-view="home" class="nav-item active">⌂ <span>チャット</span></button>
         <button data-view="conversations" class="nav-item">◷ <span>最近の会話</span></button>
         <button data-view="projects" class="nav-item">▦ <span>作成したアプリ</span></button>
+        <button data-view="missions" class="nav-item">◎ <span>ミッション</span></button>
         <button data-view="downloads" class="nav-item">↓ <span>ダウンロード</span></button>
       </nav>
 
@@ -95,6 +96,21 @@
             <div><span class="eyebrow">APPS</span><h2>作成したアプリ</h2><p>状態・対象OS・品質チェックを一目で確認できます。</p></div>
           </div>
           <div class="project-grid" id="projectGrid"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-missions">
+        <div class="page">
+          <div class="page-heading">
+            <div><span class="eyebrow">MISSION CONTROL</span><h2>長時間ミッション</h2><p>目標・進捗・承認待ち・再開地点を保存しながらAivyに仕事を任せます。</p></div>
+          </div>
+          <div class="mission-create data-card">
+            <select id="missionProject" class="search" aria-label="対象アプリ"></select>
+            <textarea id="missionGoal" rows="3" placeholder="Aivyに長時間任せたい目標…" aria-label="ミッション目標"></textarea>
+            <button id="createMission" class="agent-action" type="button">ミッションを作成</button>
+            <p class="meta">コード生成の直前で人の承認を要求します。停止・再起動後もミッション状態は保存されます。</p>
+          </div>
+          <div class="mission-grid" id="missionGrid"></div>
         </div>
       </section>
 
