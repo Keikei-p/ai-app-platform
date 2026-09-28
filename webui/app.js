@@ -144,11 +144,13 @@ async function showProject(slug){
   const traceBlock=latestRun
     ? `<div class="execution-trace"><div class="execution-trace-head"><strong>最新Aivy Execution Trace</strong><span>${esc(latestRun.status||'')}</span></div>${(latestRun.steps||[]).map(x=>`<div class="trace-row ${esc(x.status||'')}"><b>${esc(x.step_id||x.action||'step')}</b><span>${esc(x.status||'')}</span><p>${esc(x.summary||'')}</p></div>`).join('')}</div>`
     : '<div class="plan-step"><div class="step-no">◎</div><div><strong>Execution Trace</strong><p>まだBuild実行履歴はありません。</p></div></div>';
-  const regression=guardians.regression||{};const requirements=guardians.requirements||{};const dependencies=guardians.dependencies||{};
+  const regression=guardians.regression||{};const requirements=guardians.requirements||{};const dependencies=guardians.dependencies||{};const accessibility=guardians.accessibility||{};const performance=guardians.performance||{};
   const guardianBlock=`<div class="data-card"><h3>Aivy Guardians</h3>
-    <div class="meta"><span>Regression: ${esc(regression.status||'未実行')}</span><span>Requirements: ${esc(requirements.status||'未実行')}</span><span>Dependencies: ${esc(dependencies.status||'未実行')}</span></div>
+    <div class="meta"><span>Regression: ${esc(regression.status||'未実行')}</span><span>Requirements: ${esc(requirements.status||'未実行')}</span><span>Dependencies: ${esc(dependencies.status||'未実行')}</span><span>Accessibility: ${esc(accessibility.status||'未実行')}</span><span>Performance: ${esc(performance.status||'未実行')}</span></div>
     ${(regression.critical_regressions||[]).length?`<p class="certificate-blockers">Regression: ${regression.critical_regressions.map(esc).join(' / ')}</p>`:''}
     ${(dependencies.findings||[]).length?`<p>Dependency: ${dependencies.findings.slice(0,4).map(f=>esc(f.dependency||'')+' · '+esc(f.reason||'')).join('<br>')}</p>`:''}
+    ${(accessibility.issues||[]).length?`<p>Accessibility: ${accessibility.issues.slice(0,4).map(f=>esc(f.rule||'')+' · '+esc(f.detail||'')).join('<br>')}</p>`:''}
+    ${performance.source_bytes!=null?`<p>Performance: source ${Math.round((performance.source_bytes||0)/1024)} KB · assets ${performance.asset_count||0}</p>`:''}
     <p>Project Memory: ${projectMemory.length} verified item(s)</p>
   </div>`;
   const certificateBlock=certificate.status
