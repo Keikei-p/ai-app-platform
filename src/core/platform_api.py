@@ -176,11 +176,6 @@ class PlatformAPI:
                             "imports": api.service.list_knowledge_imports(limit)
                         })
                         return
-                    if path == "/api/v1/knowledge/imports":
-                        limit_raw = str(parse_qs(parsed.query).get("limit", ["50"])[0]).strip()
-                        limit = max(1, min(int(limit_raw or "50"), 200))
-                        self._json(200, {"imports": api.service.list_knowledge_imports(limit)})
-                        return
                     if path == "/api/v1/conversations":
                         query = parse_qs(parsed.query).get("q", [""])[0]
                         self._json(200, {"conversations": api.service.list_conversations(query)})
@@ -200,9 +195,6 @@ class PlatformAPI:
                         return
                     if len(parts) == 5 and parts[:4] == ["api", "v1", "build", "jobs"]:
                         self._json(200, api.service.build_job(parts[4]))
-                        return
-                    if len(parts) == 5 and parts[:4] == ["api", "v1", "knowledge", "imports"]:
-                        self._json(200, api.service.knowledge_import(parts[4]))
                         return
                     if len(parts) == 4 and parts[:3] == ["api", "v1", "projects"]:
                         self._json(200, api.service.project_detail(parts[3]))
@@ -249,12 +241,6 @@ class PlatformAPI:
                             raise ValueError("project name is required")
                         row = api.service.create_project(name, str(data.get("thread_id") or "") or None)
                         self._json(201, row)
-                        return
-                    if path == "/api/v1/knowledge/imports":
-                        name = str(data.get("name") or "").strip()
-                        if not name:
-                            raise ValueError("knowledge import name is required")
-                        self._json(201, api.service.start_knowledge_import(name))
                         return
                     if path == "/api/v1/models/routes":
                         capability = str(data.get("capability") or "").strip()
@@ -325,17 +311,16 @@ class PlatformAPI:
                     parts = [x for x in path.split("/") if x]
                     if len(parts) == 6 and parts[:4] == ["api", "v1", "knowledge", "imports"] and parts[5] == "pages":
                         rows = data.get("rows")
-                        if not isinstance(rows, list):
-                            raise ValueError("rows must be an array")
-                        if "page_index" not in data:
-                            raise ValueError("page_index is required")
+                        page_index = data.get("page_index")
+                        if not isinstance(rows, list) or not isinstance(page_index, int) or isinstance(page_index, bool):
+                            raise ValueError("page_index integer and rows array are required")
                         row = api.service.ingest_knowledge_import_page(
                             parts[4],
-                            page_index=int(data["page_index"]),
+                            page_index=page_index,
                             rows=rows,
                             final=data.get("final") is True,
                         )
-                        self._json(202, row)
+                        self._json(200, row)
                         return
                     if len(parts) == 6 and parts[:4] == ["api", "v1", "evolution", "experiments"] and parts[5] == "review":
                         approved = data.get("approved")
