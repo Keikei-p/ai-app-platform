@@ -37,6 +37,17 @@ class AivyLauncherSafetyTests(unittest.TestCase):
         self.assertIn("webbrowser.open", source)
         self.assertIn("ThreadingHTTPServer", source)
 
+    def test_one_click_web_bootstrap_is_safe(self):
+        script = self.read_root("OPEN_AIVY_WEB.bat")
+        lowered = script.lower()
+        self.assertIn('set "channel=develop"', lowered)
+        self.assertIn("git clone --branch", lowered)
+        self.assertIn("git status --porcelain --untracked-files=all", lowered)
+        self.assertIn('git merge --ff-only "origin/%channel%"', lowered)
+        self.assertIn("call aivy_web.bat", lowered)
+        self.assertNotIn("reset --hard", lowered)
+        self.assertNotIn("clean -fd", lowered)
+
     def test_installer_never_discards_local_work(self):
         script = self.read_root("INSTALL_OR_UPDATE.bat")
         lowered = script.lower()

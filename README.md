@@ -90,6 +90,12 @@ Live SNS publishing, production signing and store publication require the user's
 
 Screenshot-based visual-diff critique is prepared at the report-schema level but is not yet executing screenshots automatically.
 
+## One-click browser setup
+
+For a Windows PC that still has an older Aivy copy, download just `OPEN_AIVY_WEB.bat` from the `develop` branch and double-click it.
+
+It installs the current development copy into `%USERPROFILE%\Aivy-Latest` without modifying the old Aivy folder, safely fast-forwards future updates, and then opens Aivy Web. If local source edits are found, it refuses to overwrite them.
+
 ## Browser-first development
 
 Until the desktop product is considered complete, the recommended development and verification surface is Aivy Web.
