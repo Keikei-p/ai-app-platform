@@ -44,11 +44,13 @@ class RankedKnowledge:
 
 
 class KnowledgeUsageStore:
-    """Inspectable success/failure history for knowledge used in real work."""
+    """Inspectable, evidence-linked success/failure history for real work."""
 
-    def __init__(self, path: Path | None = None):
+    def __init__(self, path: Path | None = None, audit_path: Path | None = None):
         self.path = path or (DATA_DIR / "knowledge_usage.json")
+        self.audit_path = audit_path or (DATA_DIR / "knowledge_usage_evidence.jsonl")
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.audit_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _read(self) -> dict[str, KnowledgeUsage]:
         if not self.path.is_file():
@@ -84,10 +86,23 @@ class KnowledgeUsageStore:
     def get(self, knowledge_id: str) -> KnowledgeUsage:
         return self._read().get(knowledge_id, KnowledgeUsage(knowledge_id))
 
-    def record(self, knowledge_id: str, *, success: bool) -> KnowledgeUsage:
+    def record(
+        self,
+        knowledge_id: str,
+        *,
+        success: bool,
+        project_slug: str,
+        evidence_ref: str,
+    ) -> KnowledgeUsage:
         key = str(knowledge_id).strip()
         if not key:
             raise ValueError("knowledge_id is required")
+        evidence = str(evidence_ref).strip()
+        if not evidence:
+            raise ValueError("knowledge usage feedback requires evidence_ref")
+        slug = str(project_slug).strip()
+        if not slug:
+            raise ValueError("knowledge usage feedback requires project_slug")
         rows = self._read()
         current = rows.get(key, KnowledgeUsage(key))
         updated = KnowledgeUsage(
@@ -99,6 +114,14 @@ class KnowledgeUsageStore:
         )
         rows[key] = updated
         self._write(rows)
+        with self.audit_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({
+                "knowledge_id": key,
+                "project_slug": slug[:120],
+                "success": bool(success),
+                "evidence_ref": evidence[:500],
+                "created_at": updated.last_used_at,
+            }, ensure_ascii=False) + "\n")
         return updated
 
 
@@ -182,7 +205,12 @@ class KnowledgeConfidenceEngine:
         }) - 1) * 0.025)
 
         verifier_bonus = min(0.10, len(set(item.verified_by)) * 0.025)
-        freshness = self._freshness(item.updated_at)
+        source_times = [
+            str(source.get("retrieved_at") or "").strip()
+            for source in item.sources
+            if str(source.get("retrieved_at") or "").strip()
+        ]
+        freshness = self._freshness(max(source_times) if source_times else item.updated_at)
 
         if usage.uses:
             success_rate = usage.successes / usage.uses
@@ -267,15 +295,34 @@ class KnowledgeSearchEngine:
         rows.sort(key=lambda row: (row.score, row.confidence, row.item.updated_at), reverse=True)
         return rows[: max(1, min(int(limit), 50))]
 
-    def record_outcome(self, knowledge_ids: list[str] | tuple[str, ...], *, success: bool) -> list[KnowledgeUsage]:
-        known = {item.knowledge_id for item in self.knowledge.list()}
+    def record_outcome(
+        self,
+        knowledge_ids: list[str] | tuple[str, ...],
+        *,
+        success: bool,
+        project_slug: str,
+        evidence_ref: str,
+    ) -> list[KnowledgeUsage]:
+        items = {item.knowledge_id: item for item in self.knowledge.list()}
         requested = list(dict.fromkeys(str(x).strip() for x in knowledge_ids if str(x).strip()))
-        unknown = [knowledge_id for knowledge_id in requested if knowledge_id not in known]
+        unknown = [knowledge_id for knowledge_id in requested if knowledge_id not in items]
         if unknown:
             raise KeyError("unknown knowledge ids: " + ", ".join(unknown[:10]))
+        if success:
+            not_verified = [
+                knowledge_id for knowledge_id in requested
+                if items[knowledge_id].trust_level != "verified"
+            ]
+            if not_verified:
+                raise ValueError("successful feedback is allowed only for verified knowledge")
         updated: list[KnowledgeUsage] = []
         for knowledge_id in requested:
-            updated.append(self.usage.record(knowledge_id, success=success))
+            updated.append(self.usage.record(
+                knowledge_id,
+                success=success,
+                project_slug=project_slug,
+                evidence_ref=evidence_ref,
+            ))
         return updated
 
     @staticmethod
