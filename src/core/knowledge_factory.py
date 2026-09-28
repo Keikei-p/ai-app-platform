@@ -10,7 +10,7 @@ from .config import DATA_DIR
 from .knowledge_store import KnowledgeItem, VerifiedKnowledgeStore
 from .redaction import redact_sensitive
 from .research_guard import ResearchGuard
-from .secrets_guard import SecretsGuard
+from .secrets_guard import SecretsGuard, SECRET_VALUE_PATTERNS
 
 
 @dataclass(frozen=True)
@@ -168,6 +168,9 @@ class KnowledgeFactory:
         audit = self.secrets_guard.audit_settings(payload)
         if not audit.passed:
             raise ValueError("secret-like fields are not allowed in knowledge intake")
+        combined = json.dumps(payload, ensure_ascii=False)
+        if any(pattern.search(combined) for pattern in SECRET_VALUE_PATTERNS):
+            raise ValueError("secret-like values are not allowed in knowledge intake")
 
     def _audit(self, result: KnowledgeBatchResult) -> None:
         payload = result.to_dict()
