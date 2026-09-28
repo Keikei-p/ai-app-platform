@@ -70,7 +70,7 @@ async function loadMissions(){
         <div class="mission-head"><div><span class="chip">${esc(m.status)}</span><strong>${esc(m.project_slug)}</strong></div><span>cycle ${m.cycle}/${m.max_cycles}</span></div>
         <h3>${esc(m.goal)}</h3>
         <p>${esc(m.message||'')}</p>
-        <div class="meta"><span>phase: ${esc(m.phase)}</span><span>${fmt(m.updated_at)}</span><span>evidence ${(m.evidence_refs||[]).length}</span></div>${(((m.plan||{}).squad||{}).roles||[]).length?`<p class="mission-team">Team: ${(((m.plan||{}).squad||{}).roles||[]).map(esc).join(' / ')}</p>`:''}
+        <div class="meta"><span>phase: ${esc(m.phase)}</span><span>${fmt(m.updated_at)}</span><span>evidence ${(m.evidence_refs||[]).length}</span></div>${(((m.plan||{}).squad||{}).roles||[]).length?`<p class="mission-team">Team: ${(((m.plan||{}).squad||{}).roles||[]).map(esc).join(' / ')}</p>`:''}${((((m.plan||{}).task_graph||{}).waves||[]).length)?`<p class="mission-team">Task Waves: ${(((m.plan||{}).task_graph||{}).waves||[]).map((w,i)=>'W'+(i+1)+'['+w.join(', ')+']').join(' → ')}</p>`:''}
         <div class="mission-actions">
           ${canRun?`<button class="route-save mission-run" data-id="${esc(m.mission_id)}" data-approved="${approve?'true':'false'}">${approve?'承認して続行':'安全確認を続行'}</button>`:''}
           ${!terminal&&m.status!=='running'? `<button class="agent-action secondary mission-pause" data-id="${esc(m.mission_id)}">一時停止</button>`:''}
@@ -158,7 +158,7 @@ async function showProject(slug){
     : '<div class="plan-step"><div class="step-no">◇</div><div><strong>Development Certificate</strong><p>まだ証明書はありません。</p></div></div>';
   $('#agentPlan').innerHTML=`
     <div class="data-card"><h3>${esc(card.name||slug)}</h3><div class="meta"><span>${esc(card.status)}</span><span>${esc(card.quality)}</span>${evaluation.score!=null?`<span>AI評価 ${evaluation.score}/100</span>`:''}</div></div>
-    <div class="health-actions"><button class="agent-action secondary" id="runHealthCheck" type="button">Aivy再点検</button><button class="agent-action secondary" id="runParallelSandbox" type="button">並列Sandbox</button><button class="agent-action secondary" id="runExecutionCouncil" type="button">専門AI＋実測</button><span id="healthStatus" class="meta">Tests / Design / Securityを再確認</span></div>
+    <div class="health-actions"><button class="agent-action secondary" id="runHealthCheck" type="button">Aivy再点検</button><button class="agent-action secondary" id="runParallelSandbox" type="button">並列Sandbox</button><button class="agent-action secondary" id="runExecutionCouncil" type="button">専門AI＋実測</button><button class="agent-action secondary" id="runReleaseGuardian" type="button">公開前チェック</button><span id="healthStatus" class="meta">Tests / Design / Securityを再確認</span></div>
     <div id="executionCouncilResult"></div>
     ${visualBlock}
     ${traceBlock}
@@ -174,6 +174,28 @@ async function showProject(slug){
   if(parallelButton)parallelButton.onclick=()=>runParallelSandbox(slug);
   const councilButton=$('#runExecutionCouncil');
   if(councilButton)councilButton.onclick=()=>runProjectExecutionCouncil(slug);
+  const releaseButton=$('#runReleaseGuardian');
+  if(releaseButton)releaseButton.onclick=()=>runReleaseGuardian(slug);
+}
+async function runReleaseGuardian(slug){
+  const button=$('#runReleaseGuardian');const target=$('#executionCouncilResult');
+  if(!button||!target)return;
+  button.disabled=true;button.textContent='公開前確認中…';
+  try{
+    const report=await api('/api/v1/projects/'+encodeURIComponent(slug)+'/release-guardian',{
+      method:'POST',body:'{}'
+    });
+    const blockers=report.blockers||[];const warnings=report.warnings||[];
+    target.innerHTML='<div class="council-report"><div class="council-head"><strong>Release Guardian</strong><span>'+esc(report.status||'')+'</span></div>'+
+      '<p>Blockers: '+blockers.length+' · Warnings: '+warnings.length+'</p>'+
+      (blockers.length?'<p class="certificate-blockers">'+blockers.map(esc).join('<br>')+'</p>':'')+
+      (warnings.length?'<p>'+warnings.slice(0,8).map(esc).join('<br>')+'</p>':'')+
+      '<p>外部公開・ストア提出は引き続き人の承認が必要です。</p></div>';
+  }catch(e){
+    target.innerHTML='<div class="council-note error">公開前チェックを完了できませんでした: '+esc(e.message)+'</div>';
+  }finally{
+    button.disabled=false;button.textContent='公開前チェック';
+  }
 }
 async function runParallelSandbox(slug){
   const button=$('#runParallelSandbox');const target=$('#executionCouncilResult');
