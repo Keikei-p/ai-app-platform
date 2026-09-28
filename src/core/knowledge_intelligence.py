@@ -347,8 +347,23 @@ class KnowledgeSearchEngine:
         project_slug: str,
         evidence_ref: str,
     ) -> list[KnowledgeUsage]:
-        items = {item.knowledge_id: item for item in self.knowledge.list()}
         requested = list(dict.fromkeys(str(x).strip() for x in knowledge_ids if str(x).strip()))
+        source_signature = knowledge_source_signature(
+            getattr(self.knowledge, "path", None)
+        )
+        if self.scalable_index.is_current(source_signature):
+            loaded = self.scalable_index.items(requested)
+        else:
+            all_items = self.knowledge.list()
+            self.scalable_index.sync(
+                all_items,
+                source_signature=source_signature,
+            )
+            loaded = [
+                item for item in all_items
+                if item.knowledge_id in set(requested)
+            ]
+        items = {item.knowledge_id: item for item in loaded}
         unknown = [knowledge_id for knowledge_id in requested if knowledge_id not in items]
         if unknown:
             raise KeyError("unknown knowledge ids: " + ", ".join(unknown[:10]))
