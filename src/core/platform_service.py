@@ -490,12 +490,16 @@ class PlatformService:
         knowledge_ids: list[str],
         *,
         success: bool,
+        project_slug: str,
+        evidence_ref: str,
     ) -> list[dict[str, Any]]:
         return [
             row.to_dict()
             for row in self.knowledge_search.record_outcome(
                 knowledge_ids,
                 success=success,
+                project_slug=project_slug,
+                evidence_ref=evidence_ref,
             )
         ]
 
@@ -1015,6 +1019,8 @@ class PlatformService:
         knowledge_feedback = self.record_knowledge_outcome(
             used_knowledge_ids,
             success=bool(result.ok),
+            project_slug=slug,
+            evidence_ref=certificate_path.relative_to(project_dir).as_posix(),
         ) if used_knowledge_ids else []
         final_pipeline = dict(result.pipeline_report or {})
         final_pipeline["knowledge_feedback"] = {
