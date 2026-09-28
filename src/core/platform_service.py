@@ -44,6 +44,7 @@ from .stop_escalation import StopEscalationJudge
 from .production_monitor import HealthSample, ProductionMonitor
 from .learning_flywheel import AivyLearningFlywheel
 from .mission_control import MissionStore, TERMINAL_STATUSES
+from .parallel_sandbox_workers import ParallelSandboxWorkerPool
 
 
 class PlatformService:
@@ -99,6 +100,11 @@ class PlatformService:
         self.production_monitor = ProductionMonitor()
         self.learning_flywheel = AivyLearningFlywheel()
         self.missions = MissionStore()
+        self.parallel_sandboxes = ParallelSandboxWorkerPool(
+            engine=self.ai_engine,
+            specialists=self.specialists,
+            router=self.model_router,
+        )
         self.recovery_supervisor = RecoverySupervisor(escalation=self.stop_escalation)
         self.agent = AgentOrchestrator(
             tools=self.tools,
@@ -160,6 +166,8 @@ class PlatformService:
                 "supervision_dataset_candidates": True,
                 "persistent_mission_control": True,
                 "mission_resume_after_restart": True,
+                "parallel_sandbox_workers": True,
+                "source_write_single_coordinator": True,
             },
         }
 
@@ -596,6 +604,27 @@ class PlatformService:
     def fetch_research_source(self, url: str) -> dict[str, Any]:
         return self.research_provider.fetch(url).to_dict()
 
+    def run_parallel_sandbox_review(
+        self,
+        goal: str,
+        project_slug: str,
+        roles: tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        clean_goal = goal.strip()
+        slug = project_slug.strip()
+        if not clean_goal or not slug:
+            raise ValueError("goal and project_slug are required")
+        project_dir = safe_child(WORKSPACE_DIR, slug)
+        if not project_dir.is_dir():
+            raise FileNotFoundError(slug)
+        report = self.parallel_sandboxes.run(
+            goal=clean_goal,
+            project_slug=slug,
+            project_dir=project_dir,
+            roles=roles,
+        )
+        return report.to_dict()
+
     def list_missions(self, limit: int = 100) -> list[dict[str, Any]]:
         return [
             self._refresh_mission(row.mission_id).to_dict()
@@ -683,12 +712,37 @@ class PlatformService:
             ).to_dict()
 
         evidence_refs = [str(preflight.history_path or "")]
-        council_summary = "Specialist review was unavailable."
+        parallel_summary = "Parallel sandbox review was unavailable."
+        try:
+            parallel = self.run_parallel_sandbox_review(mission.goal, slug)
+            parallel_summary = (
+                f"Parallel sandboxes: {parallel.get('status') or 'unknown'}; "
+                f"{len(parallel.get('workers') or [])} isolated worker(s); "
+                f"source unchanged={bool(parallel.get('source_unchanged'))}."
+            )
+            if parallel.get("history_path"):
+                evidence_refs.append(str(parallel["history_path"]))
+            if parallel.get("source_unchanged") is False:
+                return self.missions.update(
+                    mission_id,
+                    status="paused",
+                    phase="sandbox_integrity_blocked",
+                    message="Parallel sandbox integrity check detected a source change. Mission stopped.",
+                    evidence_refs=evidence_refs,
+                ).to_dict()
+        except Exception as exc:
+            parallel_summary = f"Parallel sandbox review unavailable: {type(exc).__name__}"
+
+        council_summary = "Specialist execution council was unavailable."
         try:
             council = self.run_specialist_execution_council(
                 mission.goal,
                 slug,
-                context={"source": "mission-control", "mission_id": mission_id},
+                context={
+                    "source": "mission-control",
+                    "mission_id": mission_id,
+                    "parallel_summary": parallel_summary,
+                },
             )
             council_summary = (
                 f"Specialist council: {council.get('status') or 'unknown'}; "
@@ -704,7 +758,7 @@ class PlatformService:
                 mission_id,
                 status="approval_required",
                 phase="build_approval",
-                message=council_summary + " Safe inspection is complete. Build approval is required.",
+                message=parallel_summary + " " + council_summary + " Safe inspection is complete. Build approval is required.",
                 requires_approval=True,
                 evidence_refs=evidence_refs,
             ).to_dict()
