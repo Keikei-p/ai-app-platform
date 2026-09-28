@@ -298,6 +298,47 @@ class KnowledgeFactoryTests(unittest.TestCase):
             self.assertEqual(source["version"], "v3.2")
             self.assertEqual(source["retrieved_at"], "2026-09-28T00:00:00+00:00")
 
+    def test_pii_like_source_content_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            store = VerifiedKnowledgeStore(root / "knowledge.json")
+            factory = KnowledgeFactory(store, audit_path=root / "factory.jsonl")
+            result = factory.ingest_batch([{
+                "topic": "personal note",
+                "statement": "個人情報を含むメモ。",
+                "sources": [{
+                    "kind": "manual",
+                    "locator": "local-note",
+                    "title": "note",
+                    "content": "contact me at person@example.com",
+                }],
+            }])
+            self.assertEqual(result.accepted, 0)
+            self.assertEqual(result.rejected, 1)
+            self.assertEqual(store.list(), [])
+
+    def test_source_version_and_retrieval_time_are_preserved(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            store = VerifiedKnowledgeStore(root / "knowledge.json")
+            factory = KnowledgeFactory(store, audit_path=root / "factory.jsonl")
+            result = factory.ingest_batch([{
+                "topic": "Versioned docs",
+                "statement": "Version metadata should remain attached to provenance.",
+                "sources": [{
+                    "kind": "official_docs",
+                    "locator": "https://example.com/versioned",
+                    "title": "Docs",
+                    "version": "v2.4",
+                    "retrieved_at": "2026-09-28T12:00:00+00:00",
+                    "content": "Versioned public documentation.",
+                }],
+            }])
+            self.assertEqual(result.accepted, 1)
+            source = store.list()[0].sources[0]
+            self.assertEqual(source["version"], "v2.4")
+            self.assertEqual(source["retrieved_at"], "2026-09-28T12:00:00+00:00")
+
     def test_agent_context_includes_ranked_verified_knowledge(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
