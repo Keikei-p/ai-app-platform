@@ -412,18 +412,6 @@ class PlatformAPI:
                         self._json(202 if row.get("accepted") else 422, row)
                         return
                     parts = [x for x in path.split("/") if x]
-                    if len(parts) == 6 and parts[:4] == ["api", "v1", "knowledge", "imports"] and parts[5] == "pages":
-                        rows = data.get("rows")
-                        page_index = data.get("page_index")
-                        if not isinstance(rows, list) or not isinstance(page_index, int) or isinstance(page_index, bool):
-                            raise ValueError("page_index integer and rows array are required")
-                        self._json(200, api.service.ingest_knowledge_import_page(
-                            parts[4],
-                            page_index=page_index,
-                            rows=rows,
-                            final=data.get("final") is True,
-                        ))
-                        return
                     if len(parts) == 5 and parts[:3] == ["api", "v1", "knowledge"] and parts[4] == "candidate":
                         row = api.service.promote_knowledge_candidate(parts[3])
                         self._json(200, row)
