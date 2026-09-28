@@ -18,6 +18,8 @@ from .agent_tools import AgentToolRegistry
 from .specialist_agents import SpecialistAgentRegistry
 from .model_router import ModelRouter
 from .knowledge_store import VerifiedKnowledgeStore
+from .knowledge_factory import KnowledgeFactory
+from .knowledge_intelligence import KnowledgeSearchEngine
 from .research_guard import ResearchIntake
 from .research_provider import GuardedResearchProvider
 from .specialist_runtime import SpecialistRuntime
@@ -59,6 +61,8 @@ class PlatformService:
         self.ai_engine = AIChatEngine()
         self.model_router = ModelRouter(self.ai_engine)
         self.knowledge = VerifiedKnowledgeStore()
+        self.knowledge_factory = KnowledgeFactory(self.knowledge)
+        self.knowledge_search = KnowledgeSearchEngine(self.knowledge)
         self.research = ResearchIntake(self.knowledge)
         self.research_provider = GuardedResearchProvider()
         self.evolution = VerifiedEvolutionEngine()
@@ -138,6 +142,9 @@ class PlatformService:
                 "recovery_supervisor": True,
                 "independent_recovery_review": True,
                 "validated_recovery_learning": True,
+                "knowledge_factory": True,
+                "local_semantic_knowledge_search": True,
+                "knowledge_confidence_feedback": True,
                 "secrets_guard": True,
                 "cost_guard": True,
                 "stop_escalation_judge": True,
@@ -447,8 +454,50 @@ class PlatformService:
         return self.agent.context(goal)
 
     def verified_knowledge(self, query: str = "") -> list[dict[str, Any]]:
-        rows = self.knowledge.search(query, verified_only=True) if query.strip() else self.knowledge.list("verified")
-        return [x.to_dict() for x in rows]
+        if not query.strip():
+            return [x.to_dict() for x in self.knowledge.list("verified")]
+        rows = self.knowledge_search.search(
+            query,
+            verified_only=True,
+            limit=8,
+            minimum_confidence=0.45,
+        )
+        return [row.item.to_dict() for row in rows]
+
+    def search_knowledge(
+        self,
+        query: str,
+        *,
+        verified_only: bool = True,
+        limit: int = 8,
+        minimum_confidence: float = 0.0,
+    ) -> list[dict[str, Any]]:
+        return [
+            row.to_dict()
+            for row in self.knowledge_search.search(
+                query,
+                verified_only=verified_only,
+                limit=limit,
+                minimum_confidence=minimum_confidence,
+            )
+        ]
+
+    def ingest_knowledge_batch(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        return self.knowledge_factory.ingest_batch(rows).to_dict()
+
+    def record_knowledge_outcome(
+        self,
+        knowledge_ids: list[str],
+        *,
+        success: bool,
+    ) -> list[dict[str, Any]]:
+        return [
+            row.to_dict()
+            for row in self.knowledge_search.record_outcome(
+                knowledge_ids,
+                success=success,
+            )
+        ]
 
     def staged_knowledge(self, trust_level: str | None = None) -> list[dict[str, Any]]:
         return [x.to_dict() for x in self.knowledge.list(trust_level)]
@@ -700,6 +749,15 @@ class PlatformService:
 
         preparation = next(row.result for row in preflight.steps if row.tool_name == 'change.prepare')
         checkpoint = preparation['checkpoint']
+        knowledge_step = next(
+            (row.result for row in preflight.steps if row.tool_name == "knowledge.search"),
+            None,
+        ) or {}
+        used_knowledge_ids = [
+            str(item.get("knowledge_id") or "")
+            for item in (knowledge_step.get("knowledge") or [])
+            if isinstance(item, dict) and str(item.get("knowledge_id") or "").strip()
+        ]
 
         def recover_failed_change() -> dict[str, Any]:
             recovery = CheckpointManager().restore(project_dir, checkpoint['checkpoint_id'], checkpoint['manifest_sha256'])
@@ -953,6 +1011,18 @@ class PlatformService:
         learning_pipeline["validated_recovery_learning"] = learning.to_dict()
         learning_pipeline["recovery_supervision_report"] = final_recovery_path.relative_to(project_dir).as_posix()
         result.pipeline_report = learning_pipeline
+
+        knowledge_feedback = self.record_knowledge_outcome(
+            used_knowledge_ids,
+            success=bool(result.ok),
+        ) if used_knowledge_ids else []
+        final_pipeline = dict(result.pipeline_report or {})
+        final_pipeline["knowledge_feedback"] = {
+            "knowledge_ids": used_knowledge_ids,
+            "success": bool(result.ok),
+            "usage": knowledge_feedback,
+        }
+        result.pipeline_report = final_pipeline
 
         emit_platform(
             "done" if result.ok else "issue",
