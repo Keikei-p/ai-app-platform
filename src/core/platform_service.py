@@ -941,6 +941,30 @@ class PlatformService:
         detail["certificate_integrity"] = self.development_certificates.verify_saved(
             project_dir
         ).to_dict()
+
+        def report(name: str) -> dict[str, Any]:
+            path = project_dir / ".aiapp" / "reports" / name
+            if not path.is_file():
+                return {}
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {}
+            except Exception:
+                return {}
+
+        detail["guardians"] = {
+            "regression": report("regression_guardian.json"),
+            "requirements": report("requirement_guardian.json"),
+            "dependencies": report("dependency_guardian.json"),
+        }
+        detail["project_memory"] = [
+            x.to_dict()
+            for x in self.project_memory_store.recent(
+                project_dir,
+                limit=12,
+                verified_only=True,
+            )
+        ]
         return detail
 
     def project_health(self, slug: str) -> dict[str, Any]:
