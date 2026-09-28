@@ -104,6 +104,45 @@ class FakeKnowledgeService:
             "scores": {"mobile": 80},
         }
 
+    def aivy_health_dashboard(self):
+        self.calls.append(("health_dashboard",))
+        return {
+            "project_count": 2,
+            "specialist_count": 15,
+            "mission_count": 3,
+            "active_missions": 1,
+            "verified_learning_examples": 4,
+            "average_learning_score": 95.0,
+            "model_observations": 7,
+            "status": "healthy",
+        }
+
+    def model_benchmark_summary(self, capability=None):
+        self.calls.append(("model_benchmark", capability))
+        return {
+            "capability": capability,
+            "observations": 2,
+            "models": [{"provider": "openai", "model": "x", "success_rate": 1.0, "average_quality": 96.0}],
+        }
+
+    def project_memory(self, project_slug, limit=100):
+        self.calls.append(("project_memory", project_slug, limit))
+        return [{"category": "verified_build", "statement": "works"}]
+
+    def dependency_health(self, project_slug):
+        self.calls.append(("dependency_health", project_slug))
+        return {"status": "pass", "dependency_count": 2, "findings": []}
+
+    def compare_candidate_arena(self, baseline, candidates):
+        self.calls.append(("candidate_arena", len(candidates)))
+        return {
+            "status": "human_review_required",
+            "winner_id": "candidate-a",
+            "baseline_score": baseline.get("score", 0),
+            "candidates": [],
+            "auto_apply": False,
+        }
+
 
 class PlatformAPITests(unittest.TestCase):
     def test_handler_is_constructible(self):
@@ -194,6 +233,58 @@ class PlatformAPITests(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(len(data["candidates"]), 1)
             self.assertEqual(service.calls[-1], ("learning_supervision", 9))
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_health_memory_dependency_benchmark_and_arena_routes(self):
+        api, service, server, thread = self._server()
+        try:
+            status, data = self._request(server, "GET", "/api/v1/health/dashboard")
+            self.assertEqual(status, 200)
+            self.assertEqual(data["specialist_count"], 15)
+            self.assertEqual(service.calls[-1], ("health_dashboard",))
+
+            status, data = self._request(
+                server, "GET", "/api/v1/models/benchmark?capability=coding"
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(data["observations"], 2)
+            self.assertEqual(service.calls[-1], ("model_benchmark", "coding"))
+
+            status, data = self._request(
+                server, "GET", "/api/v1/projects/demo/memory?limit=6"
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(len(data["memory"]), 1)
+            self.assertEqual(service.calls[-1], ("project_memory", "demo", 6))
+
+            status, data = self._request(
+                server, "GET", "/api/v1/projects/demo/dependency-health"
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(data["status"], "pass")
+
+            status, _ = self._request(
+                server,
+                "POST",
+                "/api/v1/arena/compare",
+                body={"baseline": {"score": 80}, "candidates": {"candidate-a": {"score": 90}}},
+            )
+            self.assertEqual(status, 403)
+
+            headers = {"X-CSRF-Token": api.csrf}
+            status, data = self._request(
+                server,
+                "POST",
+                "/api/v1/arena/compare",
+                body={"baseline": {"score": 80}, "candidates": {"candidate-a": {"score": 90}}},
+                headers=headers,
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(data["winner_id"], "candidate-a")
+            self.assertFalse(data["auto_apply"])
         finally:
             server.shutdown()
             server.server_close()
