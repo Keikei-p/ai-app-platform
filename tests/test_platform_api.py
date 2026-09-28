@@ -94,6 +94,16 @@ class FakeKnowledgeService:
             "workers": [{"role": "security", "status": "completed"}],
         }
 
+    def specialist_squad(self, goal, project_slug=None):
+        self.calls.append(("specialist_squad", goal, project_slug))
+        return {
+            "goal": goal,
+            "roles": ["coordinator", "architect", "coding", "test", "security", "mobile"],
+            "worker_roles": ["architect", "coding", "test", "security", "mobile"],
+            "reasons": {"mobile": ["matched: mobile"]},
+            "scores": {"mobile": 80},
+        }
+
 
 class PlatformAPITests(unittest.TestCase):
     def test_handler_is_constructible(self):
@@ -240,6 +250,36 @@ class PlatformAPITests(unittest.TestCase):
             )
             self.assertEqual(status, 202)
             self.assertEqual(data["status"], "running")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_specialist_squad_route_requires_csrf(self):
+        api, service, server, thread = self._server()
+        try:
+            status, _ = self._request(
+                server,
+                "POST",
+                "/api/v1/agent/squad",
+                body={"goal": "mobile app", "project_slug": "demo"},
+            )
+            self.assertEqual(status, 403)
+
+            headers = {"X-CSRF-Token": api.csrf}
+            status, data = self._request(
+                server,
+                "POST",
+                "/api/v1/agent/squad",
+                body={"goal": "mobile app", "project_slug": "demo"},
+                headers=headers,
+            )
+            self.assertEqual(status, 200)
+            self.assertIn("mobile", data["roles"])
+            self.assertEqual(
+                service.calls[-1],
+                ("specialist_squad", "mobile app", "demo"),
+            )
         finally:
             server.shutdown()
             server.server_close()
