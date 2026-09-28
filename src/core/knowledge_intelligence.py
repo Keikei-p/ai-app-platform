@@ -11,6 +11,7 @@ import re
 
 from .config import DATA_DIR
 from .knowledge_store import KnowledgeItem, VerifiedKnowledgeStore
+from .knowledge_index import ScalableKnowledgeIndex, knowledge_source_signature
 
 
 @dataclass(frozen=True)
@@ -260,11 +261,19 @@ class KnowledgeSearchEngine:
         usage: KnowledgeUsageStore | None = None,
         confidence: KnowledgeConfidenceEngine | None = None,
         index: LocalSemanticIndex | None = None,
+        scalable_index: ScalableKnowledgeIndex | None = None,
     ):
         self.knowledge = knowledge or VerifiedKnowledgeStore()
         self.usage = usage or KnowledgeUsageStore()
         self.confidence = confidence or KnowledgeConfidenceEngine()
         self.index = index or LocalSemanticIndex()
+        knowledge_path = getattr(self.knowledge, "path", None)
+        default_index_path = (
+            Path(knowledge_path).with_suffix(".index.sqlite3")
+            if knowledge_path is not None
+            else None
+        )
+        self.scalable_index = scalable_index or ScalableKnowledgeIndex(default_index_path)
 
     def search(
         self,
@@ -277,9 +286,32 @@ class KnowledgeSearchEngine:
         clean = str(query).strip()
         if not clean:
             return []
+        all_items = self.knowledge.list()
+        self.scalable_index.sync(
+            all_items,
+            source_signature=knowledge_source_signature(
+                getattr(self.knowledge, "path", None)
+            ),
+        )
+        candidate_limit = max(160, min(1000, int(limit) * 24))
+        candidate_ids = self.scalable_index.candidates(
+            clean,
+            verified_only=verified_only,
+            limit=candidate_limit,
+        )
+        if candidate_ids:
+            by_id = {item.knowledge_id: item for item in all_items}
+            candidates = [
+                by_id[knowledge_id]
+                for knowledge_id in candidate_ids
+                if knowledge_id in by_id
+            ]
+        else:
+            candidates = all_items
+
         query_vector = self.index.vector(clean)
         rows: list[RankedKnowledge] = []
-        for item in self.knowledge.list():
+        for item in candidates:
             if verified_only and item.trust_level != "verified":
                 continue
             use = self.usage.get(item.knowledge_id)
@@ -294,6 +326,9 @@ class KnowledgeSearchEngine:
             rows.append(RankedKnowledge(item, relevance, confidence, score, use))
         rows.sort(key=lambda row: (row.score, row.confidence, row.item.updated_at), reverse=True)
         return rows[: max(1, min(int(limit), 50))]
+
+    def index_stats(self) -> dict[str, int | bool]:
+        return self.scalable_index.stats()
 
     def record_outcome(
         self,
