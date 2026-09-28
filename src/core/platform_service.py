@@ -54,6 +54,8 @@ from .candidate_arena import CandidateArena
 from .model_benchmark import ModelBenchmarkStore
 from .aivy_health_dashboard import AivyHealthDashboard
 from .app_spec import AppSpec
+from .accessibility_guardian import AccessibilityGuardian
+from .performance_guardian import PerformanceGuardian
 
 
 class PlatformService:
@@ -121,6 +123,8 @@ class PlatformService:
         self.dependency_guardian = DependencyGuardian()
         self.candidate_arena = CandidateArena(self.evolution.evaluation)
         self.model_benchmark = ModelBenchmarkStore()
+        self.accessibility_guardian = AccessibilityGuardian()
+        self.performance_guardian = PerformanceGuardian()
         self.recovery_supervisor = RecoverySupervisor(escalation=self.stop_escalation)
         self.agent = AgentOrchestrator(
             tools=self.tools,
@@ -192,6 +196,8 @@ class PlatformService:
                 "candidate_arena": True,
                 "model_benchmark_store": True,
                 "health_dashboard": True,
+                "accessibility_guardian": True,
+                "performance_guardian": True,
             },
         }
 
@@ -956,6 +962,8 @@ class PlatformService:
             "regression": report("regression_guardian.json"),
             "requirements": report("requirement_guardian.json"),
             "dependencies": report("dependency_guardian.json"),
+            "accessibility": report("accessibility_guardian.json"),
+            "performance": report("performance_guardian.json"),
         }
         detail["project_memory"] = [
             x.to_dict()
@@ -1310,6 +1318,27 @@ class PlatformService:
             result.ok = False
             result.message = (
                 "Dependency Guardianが高リスクの浮動依存関係を検出したため、"
+                "完成扱いを停止しました。"
+            )
+
+        accessibility_report = self.accessibility_guardian.scan(project_dir)
+        accessibility_path = self.accessibility_guardian.save(project_dir, accessibility_report)
+        performance_report = self.performance_guardian.scan(project_dir)
+        performance_path = self.performance_guardian.save(project_dir, performance_report)
+        postflight_pipeline = dict(result.pipeline_report or {})
+        postflight_pipeline["accessibility_guardian"] = accessibility_report.to_dict()
+        postflight_pipeline["accessibility_guardian_path"] = accessibility_path.relative_to(project_dir).as_posix()
+        postflight_pipeline["performance_guardian"] = performance_report.to_dict()
+        postflight_pipeline["performance_guardian_path"] = performance_path.relative_to(project_dir).as_posix()
+        result.pipeline_report = postflight_pipeline
+        high_accessibility_findings = [
+            row for row in accessibility_report.issues
+            if row.severity == "high"
+        ]
+        if result.ok and high_accessibility_findings:
+            result.ok = False
+            result.message = (
+                "Accessibility Guardianが高重大度の操作性問題を検出したため、"
                 "完成扱いを停止しました。"
             )
 
