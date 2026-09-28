@@ -95,11 +95,21 @@ class LocalSemanticKnowledgeTests(unittest.TestCase):
             )
             engine = KnowledgeConfidenceEngine()
             base = engine.score(item, usage.get(item.knowledge_id))
-            for _ in range(5):
-                usage.record(item.knowledge_id, success=True)
+            for index in range(5):
+                usage.record(
+                    item.knowledge_id,
+                    success=True,
+                    project_slug="demo",
+                    evidence_ref=f"certificate:success:{index}",
+                )
             improved = engine.score(item, usage.get(item.knowledge_id))
-            for _ in range(15):
-                usage.record(item.knowledge_id, success=False)
+            for index in range(15):
+                usage.record(
+                    item.knowledge_id,
+                    success=False,
+                    project_slug="demo",
+                    evidence_ref=f"certificate:failure:{index}",
+                )
             degraded = engine.score(item, usage.get(item.knowledge_id))
             self.assertGreater(improved, base)
             self.assertLess(degraded, improved)
@@ -112,7 +122,59 @@ class LocalSemanticKnowledgeTests(unittest.TestCase):
                 KnowledgeUsageStore(root / "usage.json"),
             )
             with self.assertRaises(KeyError):
-                search.record_outcome(["missing"], success=True)
+                search.record_outcome(
+                    ["missing"],
+                    success=True,
+                    project_slug="demo",
+                    evidence_ref="certificate:missing",
+                )
+
+    def test_success_feedback_requires_evidence_and_verified_knowledge(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            store = VerifiedKnowledgeStore(root / "knowledge.json")
+            usage = KnowledgeUsageStore(
+                root / "usage.json",
+                root / "usage-evidence.jsonl",
+            )
+            item = store.ingest(
+                topic="Candidate only",
+                statement="This is not verified yet.",
+                source_kind="official_docs",
+                source_locator="https://example.com/one",
+            )
+            search = KnowledgeSearchEngine(store, usage)
+            with self.assertRaises(ValueError):
+                search.record_outcome(
+                    [item.knowledge_id],
+                    success=True,
+                    project_slug="demo",
+                    evidence_ref="certificate:123",
+                )
+
+            verified = verified_item(
+                store,
+                "Verified pattern",
+                "A verified implementation pattern.",
+            )
+            with self.assertRaises(ValueError):
+                search.record_outcome(
+                    [verified.knowledge_id],
+                    success=True,
+                    project_slug="demo",
+                    evidence_ref="",
+                )
+
+            rows = search.record_outcome(
+                [verified.knowledge_id],
+                success=True,
+                project_slug="demo",
+                evidence_ref="certificate:abc",
+            )
+            self.assertEqual(rows[0].successes, 1)
+            evidence_text = (root / "usage-evidence.jsonl").read_text(encoding="utf-8")
+            self.assertIn("certificate:abc", evidence_text)
+            self.assertIn('"project_slug": "demo"', evidence_text)
 
     def test_local_index_is_deterministic_and_free(self):
         one = LocalSemanticIndex.vector("Firebase 認証")
@@ -194,6 +256,47 @@ class KnowledgeFactoryTests(unittest.TestCase):
             self.assertEqual(result.rejected, 1)
             self.assertEqual(store.list(), [])
             self.assertNotIn(secret, "\n".join(result.rejections))
+
+    def test_pii_like_statement_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            store = VerifiedKnowledgeStore(root / "knowledge.json")
+            factory = KnowledgeFactory(store, audit_path=root / "factory.jsonl")
+            result = factory.ingest_batch([{
+                "topic": "contact sample",
+                "statement": "担当者の連絡先は person@example.com です。",
+                "sources": [{
+                    "kind": "manual",
+                    "locator": "local-note",
+                    "title": "note",
+                    "content": "general documentation without personal information",
+                }],
+            }])
+            self.assertEqual(result.accepted, 0)
+            self.assertEqual(result.rejected, 1)
+            self.assertEqual(store.list(), [])
+
+    def test_source_version_and_retrieval_time_are_preserved(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            store = VerifiedKnowledgeStore(root / "knowledge.json")
+            factory = KnowledgeFactory(store, audit_path=root / "factory.jsonl")
+            result = factory.ingest_batch([{
+                "topic": "Versioned docs",
+                "statement": "Versioned API behavior should be tied to its source version.",
+                "sources": [{
+                    "kind": "official_docs",
+                    "locator": "https://example.com/versioned",
+                    "title": "Versioned docs",
+                    "content": "Versioned API documentation.",
+                    "version": "v3.2",
+                    "retrieved_at": "2026-09-28T00:00:00+00:00",
+                }],
+            }])
+            self.assertEqual(result.accepted, 1)
+            source = store.list()[0].sources[0]
+            self.assertEqual(source["version"], "v3.2")
+            self.assertEqual(source["retrieved_at"], "2026-09-28T00:00:00+00:00")
 
     def test_agent_context_includes_ranked_verified_knowledge(self):
         with tempfile.TemporaryDirectory() as td:
