@@ -38,6 +38,7 @@ from .recovery_supervisor import RecoverySupervisor
 from .secrets_guard import SecretsGuard
 from .cost_guard import CostGuard
 from .stop_escalation import StopEscalationJudge
+from .production_monitor import HealthSample, ProductionMonitor
 
 
 class PlatformService:
@@ -87,6 +88,7 @@ class PlatformService:
         self.secrets_guard = SecretsGuard()
         self.cost_guard = CostGuard(0)
         self.stop_escalation = StopEscalationJudge()
+        self.production_monitor = ProductionMonitor()
         self.recovery_supervisor = RecoverySupervisor(escalation=self.stop_escalation)
         self.agent = AgentOrchestrator(
             tools=self.tools,
@@ -139,6 +141,7 @@ class PlatformService:
                 "secrets_guard": True,
                 "cost_guard": True,
                 "stop_escalation_judge": True,
+                "production_monitor": True,
             },
         }
 
@@ -202,6 +205,34 @@ class PlatformService:
                 raise PermissionError("explicit approval is required before committing paid cost")
             payload["committed_total_yen"] = self.cost_guard.commit(decision)
             payload["session"] = self.cost_guard.snapshot()
+        return payload
+
+    def evaluate_production_health(
+        self,
+        project_slug: str,
+        samples: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        slug = project_slug.strip()
+        if not slug:
+            raise ValueError("project_slug is required")
+        project_dir = safe_child(WORKSPACE_DIR, slug)
+        if not project_dir.is_dir():
+            raise FileNotFoundError(slug)
+        parsed = []
+        for row in samples:
+            if not isinstance(row, dict):
+                raise ValueError("health samples must be objects")
+            parsed.append(HealthSample(
+                ok=bool(row.get("ok")),
+                status_code=row.get("status_code"),
+                latency_ms=row.get("latency_ms"),
+                error=str(row.get("error") or ""),
+                observed_at=str(row.get("observed_at") or ""),
+            ))
+        report = self.production_monitor.evaluate(parsed)
+        path = self.production_monitor.save(project_dir, report)
+        payload = report.to_dict()
+        payload["report_path"] = path.relative_to(project_dir).as_posix()
         return payload
 
     def specialist_agents(self) -> list[dict[str, Any]]:
