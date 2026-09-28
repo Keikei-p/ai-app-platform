@@ -388,6 +388,16 @@ class PlatformAPI:
                         row = api.service.agent_plan(goal, str(data.get("project_slug") or "") or None)
                         self._json(200, row)
                         return
+                    if path == "/api/v1/agent/squad":
+                        goal = str(data.get("goal") or "").strip()
+                        if not goal:
+                            raise ValueError("goal is required")
+                        row = api.service.specialist_squad(
+                            goal,
+                            str(data.get("project_slug") or "") or None,
+                        )
+                        self._json(200, row)
+                        return
                     if path == "/api/v1/agent/run-safe":
                         goal = str(data.get("goal") or "").strip()
                         project_slug = str(data.get("project_slug") or "").strip()
