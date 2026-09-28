@@ -90,11 +90,20 @@ class VerifiedKnowledgeStore:
         tmp.replace(self.path)
 
     @staticmethod
-    def _source(source_kind: str, locator: str, title: str = "") -> dict[str, str]:
+    def _source(
+        source_kind: str,
+        locator: str,
+        title: str = "",
+        *,
+        version: str = "",
+        retrieved_at: str = "",
+    ) -> dict[str, str]:
         return {
             "kind": redact_sensitive(source_kind.strip())[:40],
             "locator": redact_sensitive(locator.strip())[:500],
             "title": redact_sensitive(title.strip())[:240],
+            "version": redact_sensitive(str(version).strip())[:120],
+            "retrieved_at": redact_sensitive(str(retrieved_at).strip())[:80],
         }
 
     @staticmethod
@@ -114,12 +123,20 @@ class VerifiedKnowledgeStore:
         source_kind: str,
         source_locator: str,
         source_title: str = "",
+        source_version: str = "",
+        retrieved_at: str = "",
     ) -> KnowledgeItem:
         clean_topic = redact_sensitive(topic.strip())[:180]
         clean_statement = redact_sensitive(statement.strip())[:4000]
         if not clean_topic or not clean_statement:
             raise ValueError("topic and statement are required")
-        source = self._source(source_kind, source_locator, source_title)
+        source = self._source(
+            source_kind,
+            source_locator,
+            source_title,
+            version=source_version,
+            retrieved_at=retrieved_at,
+        )
         rows = self._read()
         digest = self._hash(clean_topic, clean_statement)
         existing = next((x for x in rows if x.content_hash == digest), None)
