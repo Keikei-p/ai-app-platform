@@ -25,6 +25,12 @@ class WebUIMissionSquadTests(unittest.TestCase):
         self.assertIn("mission-team", app)
         self.assertIn("(m.plan||{}).squad", app)
 
+    def test_task_waves_and_release_guardian_are_visible(self):
+        app = (ROOT / "webui" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("Task Waves:", app)
+        self.assertIn("runReleaseGuardian", app)
+        self.assertIn("/release-guardian", app)
+
 
 if __name__ == "__main__":
     unittest.main()
