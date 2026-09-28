@@ -41,10 +41,19 @@ class ScalableKnowledgeIndex:
                     content_hash TEXT NOT NULL,
                     trust_level TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    tokens TEXT NOT NULL
+                    tokens TEXT NOT NULL,
+                    payload TEXT NOT NULL DEFAULT '{}'
                 )
                 """
             )
+            columns = {
+                str(row[1])
+                for row in db.execute("PRAGMA table_info(knowledge_docs)")
+            }
+            if "payload" not in columns:
+                db.execute(
+                    "ALTER TABLE knowledge_docs ADD COLUMN payload TEXT NOT NULL DEFAULT '{}'"
+                )
             db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS knowledge_index_meta (
@@ -99,16 +108,22 @@ class ScalableKnowledgeIndex:
                 if existing.get(item.knowledge_id) == marker:
                     continue
                 tokens = self._document_tokens(item.topic + "\n" + item.statement)
+                payload = json.dumps(
+                    item.to_dict(),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
                 db.execute(
                     """
                     INSERT INTO knowledge_docs
-                        (knowledge_id, content_hash, trust_level, updated_at, tokens)
-                    VALUES (?, ?, ?, ?, ?)
+                        (knowledge_id, content_hash, trust_level, updated_at, tokens, payload)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(knowledge_id) DO UPDATE SET
                         content_hash=excluded.content_hash,
                         trust_level=excluded.trust_level,
                         updated_at=excluded.updated_at,
-                        tokens=excluded.tokens
+                        tokens=excluded.tokens,
+                        payload=excluded.payload
                     """,
                     (
                         item.knowledge_id,
@@ -116,6 +131,7 @@ class ScalableKnowledgeIndex:
                         item.trust_level,
                         item.updated_at,
                         tokens,
+                        payload,
                     ),
                 )
                 if self.fts_available:
@@ -186,6 +202,62 @@ class ScalableKnowledgeIndex:
                 return [str(row[0]) for row in db.execute(sql, args)]
         except sqlite3.OperationalError:
             return []
+
+    def is_current(self, source_signature: str) -> bool:
+        signature = str(source_signature or "").strip()
+        if not signature:
+            return False
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT value FROM knowledge_index_meta WHERE key='source_signature'"
+            ).fetchone()
+        return bool(row and row[0] == signature)
+
+    def items(self, knowledge_ids: list[str] | tuple[str, ...]) -> list[KnowledgeItem]:
+        requested = [
+            str(value).strip()
+            for value in knowledge_ids
+            if str(value).strip()
+        ]
+        if not requested:
+            return []
+        unique = list(dict.fromkeys(requested))
+        found: dict[str, KnowledgeItem] = {}
+        batch_size = 400
+        with self._connect() as db:
+            for start in range(0, len(unique), batch_size):
+                batch = unique[start:start + batch_size]
+                placeholders = ",".join("?" for _ in batch)
+                rows = db.execute(
+                    f"SELECT knowledge_id, payload FROM knowledge_docs WHERE knowledge_id IN ({placeholders})",
+                    batch,
+                ).fetchall()
+                for knowledge_id, payload in rows:
+                    item = self._item_from_payload(payload)
+                    if item is not None:
+                        found[str(knowledge_id)] = item
+        return [found[key] for key in unique if key in found]
+
+    @staticmethod
+    def _item_from_payload(payload: str) -> KnowledgeItem | None:
+        try:
+            row = json.loads(str(payload))
+            if not isinstance(row, dict):
+                return None
+            return KnowledgeItem(
+                knowledge_id=str(row["knowledge_id"]),
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+                topic=str(row["topic"]),
+                statement=str(row["statement"]),
+                trust_level=str(row["trust_level"]),
+                sources=tuple(row.get("sources") or ()),
+                evidence_refs=tuple(str(x) for x in row.get("evidence_refs") or ()),
+                verified_by=tuple(str(x) for x in row.get("verified_by") or ()),
+                content_hash=str(row["content_hash"]),
+            )
+        except Exception:
+            return None
 
     def stats(self) -> dict[str, int | bool]:
         with self._connect() as db:
