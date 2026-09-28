@@ -23,6 +23,14 @@ class AivyLauncherSafetyTests(unittest.TestCase):
         self.assertNotIn("reset --hard", lowered)
         self.assertNotIn("clean -fd", lowered)
 
+    def test_silent_web_launcher_hides_console(self):
+        script = self.read_root("AIVY_WEB_SILENT.vbs").lower()
+        self.assertIn("aivy-latest", script)
+        self.assertIn("call aivy.bat web", script)
+        self.assertIn("shell.run command, 0, false", script)
+        self.assertNotIn("reset --hard", script)
+        self.assertNotIn("clean -fd", script)
+
     def test_web_shortcut_uses_safe_aivy_launcher(self):
         script = self.read_root("AIVY_WEB.bat").lower()
         self.assertIn("call aivy.bat web", script)

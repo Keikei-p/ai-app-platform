@@ -108,6 +108,9 @@ It installs the current development copy into `%USERPROFILE%\Aivy-Latest` withou
 
 Until the desktop product is considered complete, the recommended development and verification surface is Aivy Web.
 
+For normal daily use on Windows, double-click `AIVY_WEB_SILENT.vbs`. It launches the same safe updater and Web server with the console window hidden, so the browser opens without leaving a black terminal window on screen. If the latest Aivy installation is not found, it shows a clear message instead of silently failing.
+
+
 On Windows, double-click `AIVY_WEB.bat`. It uses the same safe `develop` auto-update path, runs preflight, starts the loopback-only Platform API, and opens Aivy in the default browser at `127.0.0.1:8766`.
 
 The browser UI uses the real local Platform Service rather than a mock screen, so conversations, projects, agent planning, knowledge, build state and downloads can be exercised through the same Core. Closing the accompanying Aivy Web console stops the local server.
