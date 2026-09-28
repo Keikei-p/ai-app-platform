@@ -22,7 +22,7 @@ function setView(name){
   if(name==='projects')loadProjects();
   if(name==='missions')loadMissions();
   if(name==='downloads')loadDownloads();
-  if(name==='settings'){loadModelRoutes();loadEvolutionSummary();loadKnowledgeSummary();loadLearningSummary();}
+  if(name==='settings'){loadModelRoutes();loadEvolutionSummary();loadKnowledgeSummary();loadLearningSummary();loadSquadSummary();}
 }
 function message(role,text){
   $('#welcome').hidden=true;
@@ -70,7 +70,7 @@ async function loadMissions(){
         <div class="mission-head"><div><span class="chip">${esc(m.status)}</span><strong>${esc(m.project_slug)}</strong></div><span>cycle ${m.cycle}/${m.max_cycles}</span></div>
         <h3>${esc(m.goal)}</h3>
         <p>${esc(m.message||'')}</p>
-        <div class="meta"><span>phase: ${esc(m.phase)}</span><span>${fmt(m.updated_at)}</span><span>evidence ${(m.evidence_refs||[]).length}</span></div>
+        <div class="meta"><span>phase: ${esc(m.phase)}</span><span>${fmt(m.updated_at)}</span><span>evidence ${(m.evidence_refs||[]).length}</span></div>${(((m.plan||{}).squad||{}).roles||[]).length?`<p class="mission-team">Team: ${(((m.plan||{}).squad||{}).roles||[]).map(esc).join(' / ')}</p>`:''}
         <div class="mission-actions">
           ${canRun?`<button class="route-save mission-run" data-id="${esc(m.mission_id)}" data-approved="${approve?'true':'false'}">${approve?'承認して続行':'安全確認を続行'}</button>`:''}
           ${!terminal&&m.status!=='running'? `<button class="agent-action secondary mission-pause" data-id="${esc(m.mission_id)}">一時停止</button>`:''}
@@ -535,6 +535,15 @@ async function loadKnowledgeSummary(){
     target.textContent='Untrusted '+counts.untrusted+' · Candidate '+counts.candidate+' · Verified '+counts.verified+' · Agentが再利用するのはVerifiedのみ';
   }catch(e){target.textContent='Knowledge状態を取得できませんでした';}
 }
+async function loadSquadSummary(){
+  const target=$('#squadSummary');if(!target)return;
+  try{
+    const data=await api('/api/v1/agents');
+    const agents=data.agents||[];
+    const names=agents.map(x=>x.title||x.name).filter(Boolean);
+    target.textContent=agents.length+'人の専門AI · 案件ごとに必要な役職を自動招集 · '+names.slice(0,6).join(' / ')+(agents.length>6?' ほか':'');
+  }catch(e){target.textContent='AIチーム状態を取得できませんでした';}
+}
 async function loadLearningSummary(){
   const target=$('#learningSummary');if(!target)return;
   try{
@@ -548,7 +557,7 @@ async function boot(){
   try{
     const status=await api('/api/v1/status');state.csrf=status.csrf||'';
     $('#coreStatus').innerHTML='<i></i>Core接続';$('#coreStatus').classList.add('success');
-    await loadConversations();await loadProjects();await loadModelRoutes();await loadEvolutionSummary();await loadKnowledgeSummary();await loadLearningSummary();
+    await loadConversations();await loadProjects();await loadModelRoutes();await loadEvolutionSummary();await loadKnowledgeSummary();await loadLearningSummary();await loadSquadSummary();
   }catch(e){$('#coreStatus').textContent='Core未接続';}
 }
 $('#composer').addEventListener('submit',e=>{e.preventDefault();send($('#prompt').value);});
