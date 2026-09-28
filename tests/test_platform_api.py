@@ -1,6 +1,7 @@
 import http.client
 import json
 import threading
+import time
 import unittest
 from http.server import ThreadingHTTPServer
 
@@ -157,6 +158,13 @@ class PlatformAPITests(unittest.TestCase):
         server = ThreadingHTTPServer(("127.0.0.1", 0), api.handler_class())
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
+        deadline = time.time() + 1.0
+        while not thread.is_alive() and time.time() < deadline:
+            time.sleep(0.005)
+        if not thread.is_alive():
+            server.server_close()
+            raise RuntimeError("test API server did not start")
+        time.sleep(0.01)
         return api, service, server, thread
 
     @staticmethod
