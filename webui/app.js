@@ -135,6 +135,7 @@ async function loadProjects(){
 async function showProject(slug){
   const data=await api('/api/v1/projects/'+encodeURIComponent(slug));
   const card=data.card||{};const readiness=data.readiness||{};const gaps=(data.gaps||{}).items||[];const evaluation=data.evaluation||{};const release=data.release_manager||{};const visual=data.visual_design||{};const certificate=data.development_certificate||{};const integrity=data.certificate_integrity||{};const latestRun=data.latest_build_trace||(data.agent_runs||[])[0]||null;
+  const guardians=data.guardians||{};const projectMemory=data.project_memory||[];
   const visualBlock=visual.status==='reviewed'
     ? `<div class="visual-review-card"><div class="visual-review-head"><strong>Vision Design</strong><span>${visual.score}/100</span></div><p>${esc(visual.summary||'')}</p><div class="visual-shots">
         ${['mobile.png','tablet.png','desktop.png'].map(name=>`<figure><img src="/api/v1/projects/${encodeURIComponent(slug)}/screenshots/${name}" alt="${name} screenshot"><figcaption>${name.replace('.png','')}</figcaption></figure>`).join('')}
@@ -143,6 +144,13 @@ async function showProject(slug){
   const traceBlock=latestRun
     ? `<div class="execution-trace"><div class="execution-trace-head"><strong>最新Aivy Execution Trace</strong><span>${esc(latestRun.status||'')}</span></div>${(latestRun.steps||[]).map(x=>`<div class="trace-row ${esc(x.status||'')}"><b>${esc(x.step_id||x.action||'step')}</b><span>${esc(x.status||'')}</span><p>${esc(x.summary||'')}</p></div>`).join('')}</div>`
     : '<div class="plan-step"><div class="step-no">◎</div><div><strong>Execution Trace</strong><p>まだBuild実行履歴はありません。</p></div></div>';
+  const regression=guardians.regression||{};const requirements=guardians.requirements||{};const dependencies=guardians.dependencies||{};
+  const guardianBlock=`<div class="data-card"><h3>Aivy Guardians</h3>
+    <div class="meta"><span>Regression: ${esc(regression.status||'未実行')}</span><span>Requirements: ${esc(requirements.status||'未実行')}</span><span>Dependencies: ${esc(dependencies.status||'未実行')}</span></div>
+    ${(regression.critical_regressions||[]).length?`<p class="certificate-blockers">Regression: ${regression.critical_regressions.map(esc).join(' / ')}</p>`:''}
+    ${(dependencies.findings||[]).length?`<p>Dependency: ${dependencies.findings.slice(0,4).map(f=>esc(f.dependency||'')+' · '+esc(f.reason||'')).join('<br>')}</p>`:''}
+    <p>Project Memory: ${projectMemory.length} verified item(s)</p>
+  </div>`;
   const certificateBlock=certificate.status
     ? `<div class="certificate-card ${esc(certificate.status)}"><div class="certificate-head"><strong>Aivy Development Certificate</strong><span>${esc(certificate.status)}</span></div><p>Integrity: ${integrity.valid?'VERIFIED':'NG'} · Preflight: ${certificate.preflight_verified===true?'VERIFIED':certificate.preflight_verified===false?'NG':'N/A'} · Postflight: ${certificate.postflight_verified===true?'VERIFIED':certificate.postflight_verified===false?'NG':'N/A'} · Tests: ${certificate.tests_passed?'PASS':'NG'} · Design: ${certificate.design_passed?'PASS':'NG'} · Security: ${certificate.security_passed?'PASS':'NG'} · Trace: ${certificate.execution_trace_verified?'VERIFIED':'NG'}</p><p>Evidence: ${(certificate.evidence||[]).length}件 · 外部公開: ${esc(certificate.external_actions||'approval_required')}</p>${(certificate.blockers||[]).length?`<p class="certificate-blockers">${(certificate.blockers||[]).map(esc).join('<br>')}</p>`:''}${(!integrity.valid&&(integrity.missing||[]).length)?`<p class="certificate-blockers">Missing: ${(integrity.missing||[]).map(esc).join('<br>')}</p>`:''}${(!integrity.valid&&(integrity.mismatched||[]).length)?`<p class="certificate-blockers">Changed: ${(integrity.mismatched||[]).map(esc).join('<br>')}</p>`:''}</div>`
     : '<div class="plan-step"><div class="step-no">◇</div><div><strong>Development Certificate</strong><p>まだ証明書はありません。</p></div></div>';
@@ -153,6 +161,7 @@ async function showProject(slug){
     ${visualBlock}
     ${traceBlock}
     ${certificateBlock}
+    ${guardianBlock}
     <div class="plan-step"><div class="step-no">✓</div><div><strong>プレビュー</strong><p>${readiness.preview_ready?'可能':'まだ準備が必要'}</p></div></div>
     <div class="plan-step"><div class="step-no">⇩</div><div><strong>配布状態</strong><p>${(release.targets||[]).length?(release.targets||[]).map(x=>esc(x.target)+': '+esc(x.artifact_status)+' / '+esc(x.distribution_status)).join('<br>'):'Release Manager未実行'}</p></div></div>
     <div class="plan-step"><div class="step-no">!</div><div><strong>未完了</strong><p>${gaps.length?gaps.map(x=>esc(x.reason||'')).join('<br>'):'大きな未完了項目なし'}</p></div></div>`;
