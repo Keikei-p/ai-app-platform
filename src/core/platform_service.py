@@ -19,6 +19,7 @@ from .specialist_agents import SpecialistAgentRegistry
 from .model_router import ModelRouter
 from .knowledge_store import VerifiedKnowledgeStore
 from .knowledge_factory import KnowledgeFactory
+from .knowledge_imports import KnowledgeImportManager
 from .knowledge_intelligence import KnowledgeSearchEngine
 from .research_guard import ResearchIntake
 from .research_provider import GuardedResearchProvider
@@ -62,6 +63,7 @@ class PlatformService:
         self.model_router = ModelRouter(self.ai_engine)
         self.knowledge = VerifiedKnowledgeStore()
         self.knowledge_factory = KnowledgeFactory(self.knowledge)
+        self.knowledge_imports = KnowledgeImportManager(self.knowledge_factory)
         self.knowledge_search = KnowledgeSearchEngine(self.knowledge)
         self.research = ResearchIntake(self.knowledge)
         self.research_provider = GuardedResearchProvider()
@@ -143,6 +145,7 @@ class PlatformService:
                 "independent_recovery_review": True,
                 "validated_recovery_learning": True,
                 "knowledge_factory": True,
+                "resumable_knowledge_imports": True,
                 "local_semantic_knowledge_search": True,
                 "knowledge_confidence_feedback": True,
                 "secrets_guard": True,
@@ -484,6 +487,30 @@ class PlatformService:
 
     def ingest_knowledge_batch(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
         return self.knowledge_factory.ingest_batch(rows).to_dict()
+
+    def start_knowledge_import(self, name: str) -> dict[str, Any]:
+        return self.knowledge_imports.start(name).to_dict()
+
+    def ingest_knowledge_import_page(
+        self,
+        import_id: str,
+        *,
+        page_index: int,
+        rows: list[dict[str, Any]],
+        final: bool = False,
+    ) -> dict[str, Any]:
+        return self.knowledge_imports.ingest_page(
+            import_id,
+            page_index=page_index,
+            rows=rows,
+            final=final,
+        ).to_dict()
+
+    def knowledge_import(self, import_id: str) -> dict[str, Any]:
+        return self.knowledge_imports.get(import_id).to_dict()
+
+    def list_knowledge_imports(self, limit: int = 50) -> list[dict[str, Any]]:
+        return [row.to_dict() for row in self.knowledge_imports.list(limit)]
 
     def record_knowledge_outcome(
         self,
