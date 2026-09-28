@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 import json
 import re
 import sqlite3
@@ -27,14 +28,22 @@ class ScalableKnowledgeIndex:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fts_available = self._ensure_schema()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path, timeout=15)
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        return connection
+        try:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def _ensure_schema(self) -> bool:
-        with self._connect() as db:
+        with self._connection() as db:
             db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS knowledge_docs (
@@ -97,7 +106,7 @@ class ScalableKnowledgeIndex:
     ) -> dict[str, int | bool]:
         rows = list(items)
         signature = str(source_signature or "").strip()
-        with self._connect() as db:
+        with self._connection() as db:
             if signature:
                 current = db.execute(
                     "SELECT value FROM knowledge_index_meta WHERE key='source_signature'"
@@ -214,7 +223,7 @@ class ScalableKnowledgeIndex:
         sql += "ORDER BY bm25(knowledge_fts) LIMIT ?"
         args.append(bounded)
         try:
-            with self._connect() as db:
+            with self._connection() as db:
                 return [str(row[0]) for row in db.execute(sql, args)]
         except sqlite3.OperationalError:
             return []
@@ -223,7 +232,7 @@ class ScalableKnowledgeIndex:
         signature = str(source_signature or "").strip()
         if not signature:
             return False
-        with self._connect() as db:
+        with self._connection() as db:
             row = db.execute(
                 "SELECT value FROM knowledge_index_meta WHERE key='source_signature'"
             ).fetchone()
@@ -240,7 +249,7 @@ class ScalableKnowledgeIndex:
         unique = list(dict.fromkeys(requested))
         found: dict[str, KnowledgeItem] = {}
         batch_size = 400
-        with self._connect() as db:
+        with self._connection() as db:
             for start in range(0, len(unique), batch_size):
                 batch = unique[start:start + batch_size]
                 placeholders = ",".join("?" for _ in batch)
@@ -276,7 +285,7 @@ class ScalableKnowledgeIndex:
             return None
 
     def stats(self) -> dict[str, int | bool]:
-        with self._connect() as db:
+        with self._connection() as db:
             count = int(db.execute("SELECT COUNT(*) FROM knowledge_docs").fetchone()[0])
         return {
             "documents": count,
