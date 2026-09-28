@@ -77,7 +77,11 @@ class AgentToolExecutor:
         self.registry = registry or AgentToolRegistry()
         self.catalog = catalog or ProjectCatalog()
         self.knowledge = knowledge or VerifiedKnowledgeStore()
-        self.knowledge_search = KnowledgeSearchEngine(self.knowledge)
+        self.knowledge_search = (
+            KnowledgeSearchEngine(self.knowledge)
+            if hasattr(self.knowledge, "list")
+            else None
+        )
         self.research = research or GuardedResearchProvider()
         self.projects = projects or ProjectManager()
         self.tests = tests or ProjectTestRunner()
@@ -237,6 +241,16 @@ class AgentToolExecutor:
         if not hasattr(self.knowledge, "list"):
             rows = self.knowledge.search(query, verified_only=True, limit=limit)
             return {"knowledge": [x.to_dict() for x in rows], "ranking": []}
+        if self.knowledge_search is None:
+            rows = self.knowledge.search(query, verified_only=True, limit=limit)
+            return {
+                "knowledge": [
+                    row.to_dict() if hasattr(row, "to_dict") else row
+                    for row in rows
+                ],
+                "ranking": [],
+            }
+
         rows = self.knowledge_search.search(
             query,
             verified_only=True,
