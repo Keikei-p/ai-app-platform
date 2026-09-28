@@ -424,6 +424,16 @@ class PlatformAPI:
                         )
                         self._json(200, row)
                         return
+                    if path == "/api/v1/agent/task-graph":
+                        goal = str(data.get("goal") or "").strip()
+                        if not goal:
+                            raise ValueError("goal is required")
+                        row = api.service.task_graph_for(
+                            goal,
+                            str(data.get("project_slug") or "") or None,
+                        )
+                        self._json(200, row)
+                        return
                     if path == "/api/v1/agent/run-safe":
                         goal = str(data.get("goal") or "").strip()
                         project_slug = str(data.get("project_slug") or "").strip()
@@ -533,6 +543,10 @@ class PlatformAPI:
                     parts = [x for x in path.split("/") if x]
                     if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "health-check":
                         row = api.service.project_health(parts[3])
+                        self._json(200, row)
+                        return
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "projects"] and parts[4] == "release-guardian":
+                        row = api.service.release_guardian_status(parts[3])
                         self._json(200, row)
                         return
                     if len(parts) == 6 and parts[:3] == ["api", "v1", "projects"] and parts[4:] == ["build", "jobs"]:
