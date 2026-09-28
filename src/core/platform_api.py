@@ -439,6 +439,24 @@ class PlatformAPI:
                         )
                         self._json(200, row)
                         return
+                    if path == "/api/v1/agent/sandbox/parallel":
+                        goal = str(data.get("goal") or "").strip()
+                        project_slug = str(data.get("project_slug") or "").strip()
+                        roles_raw = data.get("roles")
+                        if not goal or not project_slug:
+                            raise ValueError("goal and project_slug are required")
+                        roles = None
+                        if roles_raw is not None:
+                            if not isinstance(roles_raw, list):
+                                raise ValueError("roles must be an array")
+                            roles = tuple(str(x).strip() for x in roles_raw if str(x).strip())
+                        row = api.service.run_parallel_sandbox_review(
+                            goal,
+                            project_slug,
+                            roles=roles,
+                        )
+                        self._json(200, row)
+                        return
                     if path == "/api/v1/research/fetch":
                         url = str(data.get("url") or "").strip()
                         if not url:
