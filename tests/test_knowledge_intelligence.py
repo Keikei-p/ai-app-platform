@@ -354,7 +354,7 @@ class KnowledgeFactoryTests(unittest.TestCase):
             self.assertEqual(result.rejected, 1)
             self.assertEqual(store.list(), [])
 
-    def test_source_version_and_retrieval_time_are_preserved(self):
+    def test_source_version_and_custom_retrieval_time_are_preserved(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             store = VerifiedKnowledgeStore(root / "knowledge.json")
