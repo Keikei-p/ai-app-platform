@@ -22,7 +22,7 @@ function setView(name){
   if(name==='projects')loadProjects();
   if(name==='missions')loadMissions();
   if(name==='downloads')loadDownloads();
-  if(name==='settings'){loadModelRoutes();loadEvolutionSummary();loadKnowledgeSummary();loadLearningSummary();loadSquadSummary();}
+  if(name==='settings'){loadModelRoutes();loadEvolutionSummary();loadKnowledgeSummary();loadLearningSummary();loadSquadSummary();loadHealthSummary();loadBenchmarkSummary();}
 }
 function message(role,text){
   $('#welcome').hidden=true;
@@ -535,6 +535,25 @@ async function loadKnowledgeSummary(){
     target.textContent='Untrusted '+counts.untrusted+' · Candidate '+counts.candidate+' · Verified '+counts.verified+' · Agentが再利用するのはVerifiedのみ';
   }catch(e){target.textContent='Knowledge状態を取得できませんでした';}
 }
+async function loadHealthSummary(){
+  const target=$('#healthSummary');if(!target)return;
+  try{
+    const data=await api('/api/v1/health/dashboard');
+    target.textContent='Status '+(data.status||'unknown')+' · Projects '+(data.project_count||0)+' · AI '+(data.specialist_count||0)+'人 · Missions '+(data.active_missions||0)+' active / '+(data.mission_count||0)+' total · Verified Learning '+(data.verified_learning_examples||0);
+  }catch(e){target.textContent='Aivy Healthを取得できませんでした';}
+}
+async function loadBenchmarkSummary(){
+  const target=$('#benchmarkSummary');if(!target)return;
+  try{
+    const data=await api('/api/v1/models/benchmark?capability=coding');
+    const rows=data.models||[];
+    if(!rows.length){
+      target.textContent='まだ実測データなし · 成功したビルドから自動蓄積';
+      return;
+    }
+    target.textContent='Coding実測 '+(data.observations||0)+'件 · '+rows.slice(0,3).map(x=>x.provider+'/'+x.model+' 成功率 '+Math.round((x.success_rate||0)*100)+'% / 品質 '+(x.average_quality||0)).join(' · ');
+  }catch(e){target.textContent='Model Benchmarkを取得できませんでした';}
+}
 async function loadSquadSummary(){
   const target=$('#squadSummary');if(!target)return;
   try{
@@ -557,7 +576,7 @@ async function boot(){
   try{
     const status=await api('/api/v1/status');state.csrf=status.csrf||'';
     $('#coreStatus').innerHTML='<i></i>Core接続';$('#coreStatus').classList.add('success');
-    await loadConversations();await loadProjects();await loadModelRoutes();await loadEvolutionSummary();await loadKnowledgeSummary();await loadLearningSummary();await loadSquadSummary();
+    await loadConversations();await loadProjects();await loadModelRoutes();await loadEvolutionSummary();await loadKnowledgeSummary();await loadLearningSummary();await loadSquadSummary();await loadHealthSummary();await loadBenchmarkSummary();
   }catch(e){$('#coreStatus').textContent='Core未接続';}
 }
 $('#composer').addEventListener('submit',e=>{e.preventDefault();send($('#prompt').value);});
