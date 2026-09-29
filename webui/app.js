@@ -714,12 +714,47 @@ async function loadLearningSummary(){
 }
 async function loadGrowthLab(){
   const headline=$('#growthHeadline');const summary=$('#growthSummary');const toggle=$('#toggleGrowth');
-  if(!headline||!summary||!toggle)return;
+  const driveHeadline=$('#selfDriveHeadline');const driveSummary=$('#selfDriveSummary');const driveToggle=$('#toggleSelfDrive');
+  if(!headline||!summary||!toggle||!driveHeadline||!driveSummary||!driveToggle)return;
   try{
-    const [data,practice]=await Promise.all([
+    const [data,practice,drive]=await Promise.all([
       api('/api/v1/growth/status'),
-      api('/api/v1/practice/status')
+      api('/api/v1/practice/status'),
+      api('/api/v1/self-drive/status')
     ]);
+
+    driveHeadline.textContent=drive.enabled?'自走モード ON':'自走モード OFF';
+    driveSummary.textContent=
+      '10分ごとに安全な優先タスクを最大1件 · Queue '+(drive.queue_count||0)+'件'+
+      ' · 承認待ち '+(drive.approval_waiting||0)+'件'+
+      (drive.background_active?' · Autopilot稼働中':'');
+    driveToggle.textContent=drive.enabled?'自走をOFF':'自走をON';
+    driveToggle.dataset.enabled=drive.enabled?'true':'false';
+
+    const driveQueue=$('#selfDriveQueue');
+    const driveApproval=$('#selfDriveApproval');
+    const driveLast=$('#selfDriveLast');
+    const queueRows=drive.queue||[];
+    if(driveQueue){
+      driveQueue.innerHTML=queueRows.length
+        ? queueRows.slice(0,6).map(x=>'<div class="self-drive-task"><div><strong>'+esc(x.title||x.kind||'task')+'</strong><p>'+esc(x.reason||'')+'</p></div><span class="self-drive-priority">P'+esc(x.priority||0)+'</span></div>').join('')
+        : '<span class="meta">今すぐ安全に進める作業はありません。待機中です。</span>';
+    }
+    if(driveApproval){
+      driveApproval.innerHTML=(drive.approval_waiting||0)>0
+        ? '<div class="self-drive-task"><div><strong>'+esc(drive.approval_waiting)+'件の承認待ち</strong><p>Build・公開など人の判断が必要な地点で停止しています。</p></div><span class="self-drive-state off">WAIT</span></div>'
+        : '<div class="self-drive-task"><div><strong>承認待ちなし</strong><p>現在、人の判断待ちで停止している自走タスクはありません。</p></div><span class="self-drive-state on">CLEAR</span></div>';
+    }
+    if(driveLast){
+      const last=drive.last_action||null;
+      if(!last){
+        driveLast.innerHTML='<span class="meta">まだ自走履歴はありません。</span>';
+      }else{
+        const task=last.task||{};const outcome=last.outcome||{};
+        driveLast.innerHTML='<div class="self-drive-task"><div><strong>'+esc(task.title||last.status||'自走')+'</strong><p>'+esc(outcome.message||outcome.status||last.status||'')+'</p><small>'+esc(last.created_at?fmt(last.created_at):'')+'</small></div><span class="self-drive-state '+(last.status==='completed'?'on':'off')+'">'+esc(last.status||'done')+'</span></div>';
+      }
+    }
+
     headline.textContent=data.enabled?'自律成長 ON':'自律成長 OFF';
     summary.textContent='Verified '+(data.verified_examples||0)+'件 · Skill '+(data.skills||0)+'件 · 平均 '+(data.average_score||0)+'/100'+(data.background_active?' · 放置成長ループ稼働中':'')+(data.practice_runner_connected?' · 自主トレ接続済み':'')+(data.last_run_at?' · 最終 '+fmt(data.last_run_at):'');
     toggle.textContent=data.enabled?'自律成長をOFF':'自律成長をON';
@@ -752,9 +787,38 @@ async function loadGrowthLab(){
       }
     }
   }catch(e){
+    driveHeadline.textContent='自走状態を取得できませんでした';
+    driveSummary.textContent=e.message;
     headline.textContent='成長状態を取得できませんでした';
     summary.textContent=e.message;
   }
+}
+async function toggleSelfDrive(){
+  const button=$('#toggleSelfDrive');if(!button)return;
+  const next=button.dataset.enabled!=='true';
+  button.disabled=true;
+  try{
+    await api('/api/v1/self-drive/settings',{method:'POST',body:JSON.stringify({enabled:next})});
+    toast(next?'自走モードをONにしました。':'自走モードをOFFにしました。',next?'success':'info');
+    await loadGrowthLab();
+  }catch(e){
+    toast('自走モードを変更できませんでした: '+e.message,'error');
+  }finally{button.disabled=false;}
+}
+async function runSelfDrive(){
+  const button=$('#runSelfDrive');if(!button)return;
+  button.disabled=true;button.textContent='自走中…';
+  try{
+    const data=await api('/api/v1/self-drive/run',{method:'POST',body:'{}'});
+    const task=data.task||{};const outcome=data.outcome||{};
+    const summary=data.status==='idle'
+      ? '安全に進める必要がある作業はありません。'
+      : (task.title||task.kind||'自走')+' → '+(outcome.status||data.status||'完了');
+    toast('Aivy自走: '+summary,data.status==='completed'?'success':'info');
+    await loadGrowthLab();
+  }catch(e){
+    toast('自走サイクルを完了できませんでした: '+e.message,'error');
+  }finally{button.disabled=false;button.textContent='今すぐ1サイクル';}
 }
 async function toggleGrowth(){
   const button=$('#toggleGrowth');if(!button)return;
@@ -794,6 +858,7 @@ async function runPractice(){
     result.textContent='自主トレを完了できませんでした: '+e.message;
   }finally{button.disabled=false;button.textContent='今すぐ自主トレ';}
 }
+
 async function boot(){
   try{
     const status=await api('/api/v1/status');state.csrf=status.csrf||'';
@@ -822,7 +887,7 @@ $('[data-starter-mode]').forEach(b=>b.onclick=()=>{
 $('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 $('[data-mobile-view]').forEach(b=>b.onclick=()=>setView(b.dataset.mobileView));
 $('#mobileNewChat').onclick=newChat;
-$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;storageSet('ui-theme',next);};
 document.addEventListener('keydown',e=>{
