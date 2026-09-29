@@ -14,7 +14,7 @@ function closeSidebar(){ $('#sidebar').classList.remove('open');$('#overlay').cl
 function setView(name){
   state.view=name;
   $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
-  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+  $$$('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'制作物',missions:'ミッション',lab:'IVY LAB',downloads:'ダウンロード',settings:'設定'};
   $('#topbarTitle').textContent=titles[name]||'Aivy';
   closeSidebar();
@@ -300,7 +300,7 @@ async function loadDownloads(){
 function setMode(mode){
   const allowed=['chat','app','web','automation','ivy_lab'];
   state.currentMode=allowed.includes(mode)?mode:'chat';
-  $('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.currentMode));
+  $$('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.currentMode));
   const labels={chat:'CHAT',app:'APP',web:'WEB',automation:'AUTOMATION',ivy_lab:'IVY LAB'};
   const status=$('#modeStatus');if(status)status.innerHTML='<i></i>'+labels[state.currentMode];
   const prompt=$('#prompt');
@@ -718,9 +718,9 @@ async function boot(){
 $('#composer').addEventListener('submit',e=>{e.preventDefault();send($('#prompt').value);});
 $('#prompt').addEventListener('input',autoGrow);
 $('#prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send(e.currentTarget.value);}});
-$('[data-prompt]').forEach(b=>b.onclick=()=>send(b.dataset.prompt));
-$('[data-mode]').forEach(b=>b.onclick=()=>{setMode(b.dataset.mode);$('#prompt')?.focus();});
-$('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+$$('[data-prompt]').forEach(b=>b.onclick=()=>send(b.dataset.prompt));
+$$('[data-mode]').forEach(b=>b.onclick=()=>{setMode(b.dataset.mode);$('#prompt')?.focus();});
+$$('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 $('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;localStorage.setItem('ui-theme',next);};
