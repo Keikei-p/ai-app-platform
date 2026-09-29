@@ -46,6 +46,15 @@ class ChatModeTests(unittest.TestCase):
         self.assertIn("APP MODE", app)
         self.assertIn("認証・権限", app)
 
+    def test_explicit_build_confirmation_is_not_absorbed_as_chat(self):
+        partner = ChatPartner()
+        self.assertFalse(
+            partner.is_conversation_only(
+                "この内容で作る",
+                has_generated=False,
+            )
+        )
+
     def test_project_question_is_conversation_not_build(self):
         partner = ChatPartner()
         self.assertTrue(
