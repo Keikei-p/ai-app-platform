@@ -79,8 +79,8 @@ class LanguageUnderstandingEngine:
 
     MODE_TERMS: dict[str, tuple[str, ...]] = {
         "ivy_lab": (
-            "ivy", "自己成長", "自律成長", "成長させ", "進化させ",
-            "学習して", "賢く", "skill", "スキル", "ivy lab", "アイビー自身",
+            "自己成長", "自律成長", "成長させ", "進化させ",
+            "学習して", "賢く", "skill", "スキル", "ivy lab",
             "自走", "オートパイロット", "放置で進め", "勝手に進め", "自分で進め",
         ),
         "web": (
