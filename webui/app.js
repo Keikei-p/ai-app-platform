@@ -475,6 +475,7 @@ async function runCouncil(){
 }
 async function executeBuild(slug,instruction){
   setBusy(true);
+  state.activeBuildStage='starting';
   message('assistant','Aivyが作成・デザイン確認・テスト・セキュリティ検査を開始しました。');
   const stageNames={
     queued:'待機中',starting:'開始中',preflight:'事前確認',understand:'内容確認',plan:'設計中',build:'コード生成中',
@@ -482,6 +483,11 @@ async function executeBuild(slug,instruction){
     verify:'テスト・Security確認中',visual:'Vision Design確認中',core_checked:'Core内部確認済み',
     postflight:'独立再検証',trace:'Evidence照合',certificate:'証明書作成',done:'完了',issue:'確認事項あり'
   };
+  const stageProgress={
+    queued:3,starting:6,preflight:10,understand:15,plan:22,build:38,enhance:50,package:58,
+    design:65,repair:70,verify:78,visual:84,core_checked:88,postflight:92,trace:95,certificate:98,done:100,issue:100
+  };
+  setTaskProgress(true,'Aivyが制作しています','開始しています…',5);
   try{
     const started=await api('/api/v1/projects/'+encodeURIComponent(slug)+'/build/jobs',{
       method:'POST',
@@ -497,9 +503,13 @@ async function executeBuild(slug,instruction){
       if(['completed','blocked','failed'].includes(job.status))break;
       await new Promise(resolve=>setTimeout(resolve,1000));
       job=await api('/api/v1/build/jobs/'+encodeURIComponent(started.job_id));
-      const label=stageNames[job.stage]||job.stage||'処理中';
+      const stage=job.stage||'starting';
+      state.activeBuildStage=stage;
+      const label=stageNames[stage]||stage||'処理中';
+      const percent=stageProgress[stage]??Math.min(96,8+Math.floor(i/12));
       $('#coreStatus').innerHTML='<i></i>'+esc(label);
       $('#coreStatus').classList.add('success');
+      setTaskProgress(true,'Aivyが制作しています',label,percent);
     }
     if(!['completed','blocked','failed'].includes(job.status)){
       throw new Error('生成処理の状態確認がタイムアウトしました');
@@ -508,17 +518,24 @@ async function executeBuild(slug,instruction){
       throw new Error(job.error||job.message||'Build Job failed');
     }
     const result=job.result||{};
+    state.activeBuildStage=job.status==='completed'?'done':'issue';
+    setTaskProgress(true,job.status==='completed'?'制作完了':'確認が必要です',job.message||result.message||'',100);
     message('assistant',result.message||job.message||'確認が完了しました。');
     await loadProjects();
     await loadConversations();
     await loadDownloads();
     await showProject(slug);
+    toast(job.status==='completed'?'制作・検証が完了しました。':'確認が必要な項目があります。',job.status==='completed'?'success':'info');
   }catch(e){
+    state.activeBuildStage='issue';
+    setTaskProgress(true,'処理を完了できませんでした',e.message,100);
     message('assistant','生成を完了できませんでした: '+e.message);
+    toast('生成処理でエラーが発生しました。','error');
   }finally{
     $('#coreStatus').innerHTML='<i></i>Core接続';
     $('#coreStatus').classList.add('success');
     setBusy(false);
+    setTimeout(()=>setTaskProgress(false),2200);
   }
 }
 async function approveBuild(){
