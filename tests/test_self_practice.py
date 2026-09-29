@@ -61,6 +61,7 @@ class SelfPracticeTests(unittest.TestCase):
             rows = detector.detect()
             self.assertTrue(any(x.kind == "training_data_scarcity" for x in rows))
             self.assertTrue(any(x.kind == "mode_experience" for x in rows))
+            self.assertTrue(all(x.evidence_refs for x in rows))
 
     def test_one_synthetic_practice_can_promote_verified_skill(self):
         with TemporaryDirectory() as tmp:
