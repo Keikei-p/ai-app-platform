@@ -89,6 +89,7 @@ class LanguageUnderstandingEngine:
         "app": (
             "アプリ", "システム", "ツール", "webアプリ", "android",
             "iphone", "ios", "windows", "apk", "aab", "exe",
+            "作って", "作りたい", "開発して", "ログイン", "管理画面",
         ),
     }
 
