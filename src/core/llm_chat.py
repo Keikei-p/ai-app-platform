@@ -273,6 +273,40 @@ class AIChatEngine:
             return self._openai_reply(model, key, history, user_text, system_instruction)
         return self._gemini_reply(model, key, history, user_text, system_instruction)
 
+    def reply_resilient(
+        self,
+        history: list[dict],
+        user_text: str,
+        system_instruction: str,
+    ) -> str:
+        """Use the configured cloud model, then fall back to local Ollama.
+
+        Local fallback never needs an API key and only talks to localhost by
+        default. If neither path is available, the caller can use its
+        deterministic fallback response.
+        """
+        errors: list[str] = []
+        try:
+            status = self.status()
+            if status.connected:
+                return self.reply(history, user_text, system_instruction)
+        except Exception as exc:
+            errors.append(f"configured:{type(exc).__name__}")
+
+        model = os.environ.get("AIVY_OLLAMA_MODEL", "qwen2.5:7b").strip() or "qwen2.5:7b"
+        base_url = os.environ.get("AIVY_OLLAMA_URL", "http://127.0.0.1:11434").strip().rstrip("/")
+        try:
+            return self._ollama_reply(
+                model,
+                history,
+                user_text,
+                system_instruction,
+                base_url=base_url,
+            )
+        except Exception as exc:
+            errors.append(f"ollama:{type(exc).__name__}")
+        raise RuntimeError("AI conversation providers unavailable: " + ", ".join(errors))
+
     def reply_routed(
         self,
         provider: str,
@@ -375,6 +409,49 @@ class AIChatEngine:
         if not isinstance(data, dict):
             raise RuntimeError("AI API returned an invalid response")
         return data
+
+    def _ollama_reply(
+        self,
+        model: str,
+        history: list[dict],
+        user_text: str,
+        system_instruction: str,
+        *,
+        base_url: str = "http://127.0.0.1:11434",
+    ) -> str:
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_instruction},
+        ]
+        for row in history[-30:]:
+            content = str(row.get("content") or "").strip()
+            if not content:
+                continue
+            role = "user" if row.get("role") == "user" else "assistant"
+            messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": user_text})
+        data = self._request_json(
+            base_url + "/api/chat",
+            {},
+            {
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": 0.45,
+                    "num_predict": 1600,
+                },
+            },
+            timeout=90,
+        )
+        message = data.get("message")
+        if isinstance(message, dict):
+            content = str(message.get("content") or "").strip()
+            if content:
+                return content
+        response = str(data.get("response") or "").strip()
+        if response:
+            return response
+        raise RuntimeError("Ollama response did not contain text")
 
     def _openai_reply(self, model: str, key: str, history: list[dict], user_text: str, system_instruction: str) -> str:
         transcript = []
