@@ -382,6 +382,12 @@ class PracticeSandbox:
             "training_data_scarcity": "clear_goal edge_cases synthetic_examples verification",
         }
         core = guidance.get(task.synthetic_fixture["weakness_kind"], "requirements verification")
+        if task.synthetic_fixture["weakness_kind"] == "mode_experience":
+            core += {
+                "web": " seo semantic_html responsive core_web_vitals accessibility",
+                "automation": " idempotency retries audit_log stop_control secret_isolation",
+                "app": " authentication permissions data_integrity error_states mobile_usability",
+            }.get(task.mode, "")
         return (
             f"{task.mode.upper()} verified practice strategy: {core}. "
             "tests design security accessibility performance regression verification. "
@@ -483,14 +489,20 @@ class SelfPracticeEngine:
 
     def status(self) -> dict[str, Any]:
         weaknesses = self.detector.detect(12)
-        recent = self.recent(10)
-        promoted = sum(1 for row in recent if row.get("promotion", {}).get("promoted"))
+        recent = self.recent(50)
+        promoted_ids = self._promoted_task_ids(recent)
+        queue = []
+        for weakness in weaknesses:
+            task = self.planner.plan(weakness)
+            if task.task_id in promoted_ids:
+                continue
+            queue.append(task.to_dict())
+            if len(queue) >= 5:
+                break
+        promoted = sum(1 for row in recent[:10] if row.get("promotion", {}).get("promoted"))
         return {
             "weaknesses": [x.to_dict() for x in weaknesses],
-            "practice_queue": [
-                self.planner.plan(x).to_dict()
-                for x in weaknesses[:5]
-            ],
+            "practice_queue": queue,
             "last_practice": recent[0] if recent else None,
             "recent_promoted": promoted,
             "synthetic_only": True,
@@ -522,8 +534,24 @@ class SelfPracticeEngine:
                 self._append(result)
                 return result
 
-            weakness = weaknesses[0]
-            task = self.planner.plan(weakness)
+            promoted_ids = self._promoted_task_ids(self.recent(100))
+            selected = None
+            for weakness in weaknesses:
+                task = self.planner.plan(weakness)
+                if task.task_id not in promoted_ids:
+                    selected = (weakness, task)
+                    break
+            if selected is None:
+                result = {
+                    "status": "practice_queue_clear",
+                    "promoted": False,
+                    "created_at": _now(),
+                    "reason": "all current evidence-backed weaknesses already have promoted practice skills",
+                }
+                self._append(result)
+                return result
+
+            weakness, task = selected
             practice = self.sandbox.run(task)
             evidence_ref = self._save_evidence(
                 task.task_id,
@@ -587,6 +615,18 @@ class SelfPracticeEngine:
             except Exception:
                 continue
         return list(reversed(rows))
+
+    @staticmethod
+    def _promoted_task_ids(rows: list[dict[str, Any]]) -> set[str]:
+        out: set[str] = set()
+        for row in rows:
+            if not row.get("promotion", {}).get("promoted"):
+                continue
+            task = (row.get("practice") or {}).get("task") or {}
+            task_id = str(task.get("task_id") or "").strip()
+            if task_id:
+                out.add(task_id)
+        return out
 
     def _append(self, result: dict[str, Any]) -> None:
         with self.history_path.open("a", encoding="utf-8") as handle:
