@@ -1169,13 +1169,12 @@ class PlatformService:
                     practice = self.self_practice.run_one()
 
                 reply = ""
-                ai_status = self.ai_engine.status()
-                if ai_status.connected and not (
+                if not (
                     growth_request or practice_request or self_drive_request
                 ):
                     try:
-                        reply = self.ai_engine.reply(
-                            prior_rows[-20:],
+                        reply = self.ai_engine.reply_resilient(
+                            prior_rows,
                             interpreted,
                             (
                                 "あなたはAivy自身についてユーザーと話すIVY LAB会話AIです。"
@@ -1263,13 +1262,11 @@ class PlatformService:
 
             if intent.kind in {"chat", "project_question"}:
                 reply = ""
-                ai_status = self.ai_engine.status()
                 drive_status = self.self_drive.status()
-                if ai_status.connected:
-                    try:
-                        reply = self.ai_engine.reply(
-                            prior_rows,
-                            interpreted,
+                try:
+                    reply = self.ai_engine.reply_resilient(
+                        prior_rows,
+                        interpreted,
                             self.conversation_brain.system_instruction(
                                 mode=mode,
                                 continuity=continuity,
@@ -1355,13 +1352,11 @@ class PlatformService:
                 "verified_memory": list(detail.get("project_memory") or [])[:5],
             }
             reply = ""
-            ai_status = self.ai_engine.status()
-            if ai_status.connected:
-                try:
-                    drive_status = self.self_drive.status()
-                    reply = self.ai_engine.reply(
-                        prior_rows,
-                        interpreted,
+            try:
+                drive_status = self.self_drive.status()
+                reply = self.ai_engine.reply_resilient(
+                    prior_rows,
+                    interpreted,
                         self.conversation_brain.system_instruction(
                             mode=mode,
                             continuity=continuity,
