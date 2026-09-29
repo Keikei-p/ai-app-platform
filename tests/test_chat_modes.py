@@ -27,6 +27,25 @@ class ChatModeTests(unittest.TestCase):
             self.assertEqual(state["current_mode"], "web")
             self.assertIn("web", state["targets"])
 
+    def test_modes_add_distinct_build_quality_guidance(self):
+        partner = ChatPartner()
+        base = {
+            "goal": "作成",
+            "usage_context": "利用者が使う",
+            "targets": ["web"],
+            "design_style": "modern",
+            "features": [],
+        }
+        web = partner._compose({**base, "current_mode": "web"})
+        automation = partner._compose({**base, "current_mode": "automation"})
+        app = partner._compose({**base, "current_mode": "app"})
+        self.assertIn("WEB MODE", web)
+        self.assertIn("SEO", web)
+        self.assertIn("AUTOMATION MODE", automation)
+        self.assertIn("重複実行防止", automation)
+        self.assertIn("APP MODE", app)
+        self.assertIn("認証・権限", app)
+
     def test_project_question_is_conversation_not_build(self):
         partner = ChatPartner()
         self.assertTrue(
