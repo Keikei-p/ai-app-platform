@@ -211,3 +211,21 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .message.thinking .bubble i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.35;animation:aivy-thinking 1.15s infinite ease-in-out}
 .message.thinking .bubble i:nth-child(2){animation-delay:.12s}.message.thinking .bubble i:nth-child(3){animation-delay:.24s}.message.thinking .bubble i:nth-child(4){animation-delay:.36s}
 @keyframes aivy-thinking{0%,70%,100%{transform:translateY(0);opacity:.3}35%{transform:translateY(-4px);opacity:.9}}
+
+
+.daily-backlog{margin-bottom:14px;border-color:color-mix(in srgb,var(--accent) 18%,var(--border))}
+.daily-backlog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.daily-backlog-head h3{margin:6px 0 6px;font-size:1.2rem;letter-spacing:-.025em}
+.daily-backlog-head p{margin:0;color:var(--muted);font-size:.78rem}
+.daily-backlog-head .agent-action{width:auto;min-width:150px;padding:0 14px}
+.daily-backlog-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:14px 0}
+.daily-backlog-stats>div{border:1px solid var(--border);border-radius:12px;background:var(--surface-soft);padding:10px 12px}
+.daily-backlog-stats strong{display:block;font-size:1.05rem;line-height:1.1}.daily-backlog-stats span{display:block;margin-top:4px;color:var(--muted);font-size:.64rem}
+.daily-focus{display:grid;gap:8px}
+.daily-focus-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:10px 11px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.daily-focus-rank{width:25px;height:25px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:.68rem;font-weight:900}
+.daily-focus-row strong{font-size:.78rem}.daily-focus-row p{margin:4px 0 0;color:var(--muted);font-size:.7rem;line-height:1.45}
+.daily-focus-status{border-radius:999px;padding:4px 8px;font-size:.61rem;font-weight:850;background:var(--surface-soft);color:var(--muted)}
+.daily-focus-status.waiting_approval{background:#fef0c7;color:#b54708}.daily-focus-status.todo{background:var(--accent-soft);color:var(--accent)}
+.daily-focus-status.completed{background:#dcfae6;color:#067647}.daily-focus-status.failed{background:#fee4e2;color:#b42318}
+@media(max-width:760px){.daily-backlog-head{display:block}.daily-backlog-head .agent-action{width:100%;margin-top:12px}.daily-backlog-stats{grid-template-columns:1fr 1fr}}
