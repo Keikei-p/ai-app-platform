@@ -24,6 +24,12 @@ class LanguageUnderstandingTests(unittest.TestCase):
         row = self.engine.interpret("美容室のホームページを作りたい")
         self.assertEqual(row.mode, "web")
 
+    def test_rough_japanese_input_is_normalized_without_losing_intent(self):
+        row = self.engine.interpret("本番実装に知被けるようにやって、モーdも確認")
+        self.assertIn("本番実装に近づけ", row.interpreted_text)
+        self.assertIn("モード", row.interpreted_text)
+        self.assertEqual(row.mode, "app")
+
     def test_reference_without_context_lowers_confidence(self):
         without_context = self.engine.interpret("さっきのボタンもっと大きくして")
         with_context = self.engine.interpret(
