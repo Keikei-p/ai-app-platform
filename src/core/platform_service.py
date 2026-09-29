@@ -114,6 +114,7 @@ class PlatformService:
         self.production_monitor = ProductionMonitor()
         self.learning_flywheel = AivyLearningFlywheel()
         self.autonomous_growth = AutonomousGrowthEngine(self.learning_flywheel)
+        self.autonomous_growth.start_background()
         self.missions = MissionStore()
         self.parallel_sandboxes = ParallelSandboxWorkerPool(
             engine=self.ai_engine,
