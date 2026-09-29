@@ -9,6 +9,7 @@ from .ai_core import AICore, CoreResult
 from .agent_runtime import AgentOrchestrator, EvidenceLedger
 from .checkpoint_manager import CheckpointManager
 from .chat_partner import ChatPartner
+from .conversation_brain import ConversationBrain
 from .config import WORKSPACE_DIR
 from .database import list_projects
 from .path_security import safe_child
@@ -75,6 +76,7 @@ class PlatformService:
         self.catalog = ProjectCatalog()
         self.conversations = ConversationStore()
         self.chat = ChatPartner()
+        self.conversation_brain = ConversationBrain()
         self.core = AICore()
         self.tools = AgentToolRegistry()
         self.specialists = SpecialistAgentRegistry(self.tools)
