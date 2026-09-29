@@ -737,11 +737,30 @@ async function loadGrowthLab(){
   const driveHeadline=$('#selfDriveHeadline');const driveSummary=$('#selfDriveSummary');const driveToggle=$('#toggleSelfDrive');
   if(!headline||!summary||!toggle||!driveHeadline||!driveSummary||!driveToggle)return;
   try{
-    const [data,practice,drive]=await Promise.all([
+    const [data,practice,drive,backlog]=await Promise.all([
       api('/api/v1/growth/status'),
       api('/api/v1/practice/status'),
-      api('/api/v1/self-drive/status')
+      api('/api/v1/self-drive/status'),
+      api('/api/v1/backlog/today')
     ]);
+
+    const counts=backlog.counts||{};
+    const focus=backlog.focus||[];
+    $('#backlogHeadline').textContent='今日のAivy · '+esc(backlog.date||'');
+    $('#backlogSummary').textContent=
+      (backlog.self_drive_enabled?'自走ON':'自走OFF')+
+      ' · 安全に自動実行できる項目 '+(backlog.safe_auto_count||0)+'件'+
+      ' · 人の判断待ち '+(backlog.approval_waiting||0)+'件';
+    $('#backlogTodo').textContent=counts.todo||0;
+    $('#backlogApproval').textContent=counts.waiting_approval||0;
+    $('#backlogDone').textContent=counts.completed||0;
+    $('#backlogFailed').textContent=counts.failed||0;
+    const focusTarget=$('#backlogFocus');
+    if(focusTarget){
+      focusTarget.innerHTML=focus.length
+        ? focus.map((x,i)=>'<div class="daily-focus-row"><span class="daily-focus-rank">'+(i+1)+'</span><div><strong>'+esc(x.title||x.kind||'task')+'</strong><p>'+esc(x.reason||'')+(x.target?' · '+esc(x.target):'')+'</p></div><span class="daily-focus-status '+esc(x.status||'todo')+'">'+esc(x.status||'todo')+'</span></div>').join('')
+        : '<span class="meta">今日の安全な自走タスクは完了しています。新しいEvidenceが出るまで待機します。</span>';
+    }
 
     driveHeadline.textContent=drive.enabled?'自走モード ON':'自走モード OFF';
     driveSummary.textContent=
@@ -812,6 +831,17 @@ async function loadGrowthLab(){
     headline.textContent='成長状態を取得できませんでした';
     summary.textContent=e.message;
   }
+}
+async function refreshBacklog(){
+  const button=$('#refreshBacklog');if(!button)return;
+  button.disabled=true;button.textContent='再整理中…';
+  try{
+    await api('/api/v1/backlog/refresh',{method:'POST',body:'{}'});
+    await loadGrowthLab();
+    toast('今日のバックログを最新状態へ整理しました。','success');
+  }catch(e){
+    toast('バックログを更新できませんでした: '+e.message,'error');
+  }finally{button.disabled=false;button.textContent='今日の予定を再整理';}
 }
 async function toggleSelfDrive(){
   const button=$('#toggleSelfDrive');if(!button)return;
@@ -907,7 +937,7 @@ document.querySelectorAll('[data-starter-mode]').forEach(b=>b.onclick=()=>{
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 document.querySelectorAll('[data-mobile-view]').forEach(b=>b.onclick=()=>setView(b.dataset.mobileView));
 $('#mobileNewChat').onclick=newChat;
-$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;storageSet('ui-theme',next);};
 document.addEventListener('keydown',e=>{
