@@ -60,6 +60,7 @@ from .task_graph import TaskGraphPlanner
 from .release_guardian import ReleaseGuardian
 from .autonomous_growth import AutonomousGrowthEngine
 from .self_practice import SelfPracticeEngine
+from .self_drive import SelfDriveEngine
 
 
 class PlatformService:
@@ -147,6 +148,18 @@ class PlatformService:
             model_router=self.model_router,
             knowledge=self.knowledge,
         )
+        self.self_drive = SelfDriveEngine(
+            list_projects=self.list_project_cards,
+            health_check=self.project_health,
+            list_missions=self.list_missions,
+            safe_mission_cycle=lambda mission_id: self.run_mission_cycle(
+                mission_id,
+                approved_build=False,
+            ),
+            growth_cycle=self.run_autonomous_growth_cycle,
+            practice_cycle=self.run_self_practice,
+        )
+        self.self_drive.start_background()
 
     def status(self) -> dict[str, Any]:
         return {
@@ -221,6 +234,9 @@ class PlatformService:
                 "evidence_backed_self_practice": True,
                 "synthetic_practice_sandbox": True,
                 "bounded_background_practice": True,
+                "self_drive_scheduler": True,
+                "self_drive_priority_queue": True,
+                "self_drive_approval_boundary": True,
             },
         }
 
@@ -698,6 +714,15 @@ class PlatformService:
 
     def set_autonomous_growth(self, enabled: bool) -> dict[str, Any]:
         return self.autonomous_growth.set_enabled(enabled)
+
+    def self_drive_status(self) -> dict[str, Any]:
+        return self.self_drive.status()
+
+    def run_self_drive_cycle(self) -> dict[str, Any]:
+        return self.self_drive.run_cycle(trigger="manual")
+
+    def set_self_drive(self, enabled: bool) -> dict[str, Any]:
+        return self.self_drive.set_enabled(enabled)
 
     def learning_examples(self, limit: int = 50) -> list[dict[str, Any]]:
         return [x.to_dict() for x in self.learning_flywheel.recent(max(1, min(limit, 200)))]
