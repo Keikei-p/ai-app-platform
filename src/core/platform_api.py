@@ -161,6 +161,9 @@ class PlatformAPI:
                     if path == "/api/v1/practice/status":
                         self._json(200, api.service.self_practice_status())
                         return
+                    if path == "/api/v1/self-drive/status":
+                        self._json(200, api.service.self_drive_status())
+                        return
                     if path == "/api/v1/learning/examples":
                         query = parse_qs(parsed.query)
                         limit = max(1, min(int((query.get("limit") or ["50"])[0]), 200))
@@ -299,6 +302,14 @@ class PlatformAPI:
                         return
                     if path == "/api/v1/practice/run":
                         self._json(200, api.service.run_self_practice())
+                        return
+                    if path == "/api/v1/self-drive/run":
+                        self._json(200, api.service.run_self_drive_cycle())
+                        return
+                    if path == "/api/v1/self-drive/settings":
+                        if "enabled" not in data or not isinstance(data.get("enabled"), bool):
+                            raise ValueError("enabled boolean is required")
+                        self._json(200, api.service.set_self_drive(bool(data["enabled"])))
                         return
                     if path == "/api/v1/growth/settings":
                         if "enabled" not in data or not isinstance(data.get("enabled"), bool):
