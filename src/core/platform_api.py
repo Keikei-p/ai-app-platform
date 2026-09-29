@@ -164,6 +164,9 @@ class PlatformAPI:
                     if path == "/api/v1/self-drive/status":
                         self._json(200, api.service.self_drive_status())
                         return
+                    if path == "/api/v1/backlog/today":
+                        self._json(200, api.service.autonomous_backlog_status())
+                        return
                     if path == "/api/v1/learning/examples":
                         query = parse_qs(parsed.query)
                         limit = max(1, min(int((query.get("limit") or ["50"])[0]), 200))
@@ -310,6 +313,9 @@ class PlatformAPI:
                         if "enabled" not in data or not isinstance(data.get("enabled"), bool):
                             raise ValueError("enabled boolean is required")
                         self._json(200, api.service.set_self_drive(bool(data["enabled"])))
+                        return
+                    if path == "/api/v1/backlog/refresh":
+                        self._json(200, api.service.autonomous_backlog_status())
                         return
                     if path == "/api/v1/growth/settings":
                         if "enabled" not in data or not isinstance(data.get("enabled"), bool):
