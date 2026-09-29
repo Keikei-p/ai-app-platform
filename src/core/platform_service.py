@@ -1258,27 +1258,32 @@ class PlatformService:
                     "thread": asdict(self.conversations.get(thread_id)),
                 }
 
-            if mode == "chat" and not self.chat.is_project_request(interpreted):
+            if intent.kind in {"chat", "project_question"}:
                 reply = ""
                 ai_status = self.ai_engine.status()
+                drive_status = self.self_drive.status()
                 if ai_status.connected:
                     try:
                         reply = self.ai_engine.reply(
-                            prior_rows[-20:],
+                            prior_rows,
                             interpreted,
-                            (
-                                "あなたはAivy。自然な日本語で会話するAI開発パートナーです。"
-                                "誤字、脱字、表記揺れ、省略、音声入力の崩れを前後文脈から補って理解してください。"
-                                "ただし意味が分岐する時や、削除・本番公開・権限・課金など危険操作は勝手に決めつけません。"
-                                "実行していないテスト、変更、公開を実行済みと表現しないでください。"
-                                "会話は親しみやすく、必要以上に堅くしません。"
+                            self.conversation_brain.system_instruction(
+                                mode=mode,
+                                continuity=continuity,
+                                project_context={},
+                                self_drive_context={
+                                    "enabled": drive_status.get("enabled"),
+                                    "queue_count": drive_status.get("queue_count"),
+                                    "approval_waiting": drive_status.get("approval_waiting"),
+                                },
                             ),
                         ).strip()
                     except Exception:
                         reply = ""
                 if not reply:
-                    reply = self.chat.opening_response(interpreted) or (
-                        "もちろん。普通の相談でも大丈夫です。作りたいものや困っていることを、そのまま話してください。"
+                    reply = self.conversation_brain.fallback_reply(
+                        interpreted,
+                        has_project=False,
                     )
                 self.conversations.append(thread_id, "user", clean)
                 self.conversations.append(thread_id, "assistant", reply)
@@ -1288,6 +1293,7 @@ class PlatformService:
                     "instruction": None,
                     "project_slug": None,
                     "mode": mode,
+                    "intent": intent.to_dict(),
                     "understanding": understood.to_dict(),
                     "thread": asdict(self.conversations.get(thread_id)),
                 }
