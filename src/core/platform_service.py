@@ -1267,19 +1267,19 @@ class PlatformService:
                     reply = self.ai_engine.reply_resilient(
                         prior_rows,
                         interpreted,
-                            self.conversation_brain.system_instruction(
-                                mode=mode,
-                                continuity=continuity,
-                                project_context={},
-                                self_drive_context={
-                                    "enabled": drive_status.get("enabled"),
-                                    "queue_count": drive_status.get("queue_count"),
-                                    "approval_waiting": drive_status.get("approval_waiting"),
-                                },
-                            ),
-                        ).strip()
-                    except Exception:
-                        reply = ""
+                        self.conversation_brain.system_instruction(
+                            mode=mode,
+                            continuity=continuity,
+                            project_context={},
+                            self_drive_context={
+                                "enabled": drive_status.get("enabled"),
+                                "queue_count": drive_status.get("queue_count"),
+                                "approval_waiting": drive_status.get("approval_waiting"),
+                            },
+                        ),
+                    ).strip()
+                except Exception:
+                    reply = ""
                 if not reply:
                     reply = self.conversation_brain.fallback_reply(
                         interpreted,
@@ -1357,19 +1357,19 @@ class PlatformService:
                 reply = self.ai_engine.reply_resilient(
                     prior_rows,
                     interpreted,
-                        self.conversation_brain.system_instruction(
-                            mode=mode,
-                            continuity=continuity,
-                            project_context=context,
-                            self_drive_context={
-                                "enabled": drive_status.get("enabled"),
-                                "queue_count": drive_status.get("queue_count"),
-                                "approval_waiting": drive_status.get("approval_waiting"),
-                            },
-                        ),
-                    ).strip()
-                except Exception:
-                    reply = ""
+                    self.conversation_brain.system_instruction(
+                        mode=mode,
+                        continuity=continuity,
+                        project_context=context,
+                        self_drive_context={
+                            "enabled": drive_status.get("enabled"),
+                            "queue_count": drive_status.get("queue_count"),
+                            "approval_waiting": drive_status.get("approval_waiting"),
+                        },
+                    ),
+                ).strip()
+            except Exception:
+                reply = ""
             if not reply:
                 reply = self.conversation_brain.fallback_reply(
                     interpreted,
