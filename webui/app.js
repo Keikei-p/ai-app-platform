@@ -541,7 +541,7 @@ async function loadModelRoutes(){
           <button class="route-save" type="button">保存</button>
         </div>`;
       }).join('');
-      $('#modelRouteControls .route-save').forEach(button=>{
+      $$('#modelRouteControls .route-save').forEach(button=>{
         button.onclick=async()=>{
           const row=button.closest('.route-row');
           const capability=row.dataset.capability;
