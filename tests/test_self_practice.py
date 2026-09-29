@@ -94,6 +94,53 @@ class SelfPracticeTests(unittest.TestCase):
             self.assertEqual(len(growth.skills()), 1)
             self.assertTrue((root / result["evidence_ref"]).is_file())
 
+    def test_practice_queue_advances_after_promotion(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            learning = FakeLearning([example()])
+            growth = AutonomousGrowthEngine(
+                learning=learning,
+                skills_path=root / "skills.json",
+                settings_path=root / "growth.json",
+            )
+            engine = SelfPracticeEngine(
+                learning=learning,
+                benchmark=ModelBenchmarkStore(root / "bench.jsonl"),
+                arena=CandidateArena(),
+                promote_skill=growth.promote_practice_skill,
+                history_path=root / "practice.jsonl",
+                workspace_dir=root / "workspace",
+                evidence_dir=root / "practice_evidence",
+            )
+            first = engine.run_one()
+            second = engine.run_one()
+            self.assertTrue(first["promotion"]["promoted"])
+            self.assertTrue(second["promotion"]["promoted"])
+            first_task = first["practice"]["task"]["task_id"]
+            second_task = second["practice"]["task"]["task_id"]
+            self.assertNotEqual(first_task, second_task)
+            self.assertEqual(len(growth.skills()), 2)
+
+    def test_guardian_reports_become_evidence_backed_weaknesses(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "workspace" / "demo" / ".aiapp" / "reports"
+            reports.mkdir(parents=True)
+            (reports / "accessibility_guardian.json").write_text(
+                '{"status":"blocked","issues":[{"severity":"high","rule":"label"}]}',
+                encoding="utf-8",
+            )
+            detector = WeaknessDetector(
+                FakeLearning([example() for _ in range(8)]),
+                ModelBenchmarkStore(root / "bench.jsonl"),
+                root / "workspace",
+            )
+            rows = detector.detect()
+            accessibility = [x for x in rows if x.kind == "accessibility"]
+            self.assertTrue(accessibility)
+            self.assertTrue(accessibility[0].evidence_refs)
+            self.assertIn("accessibility_guardian.json", accessibility[0].evidence_refs[0])
+
     def test_promotion_rejects_low_score_or_missing_evidence(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
