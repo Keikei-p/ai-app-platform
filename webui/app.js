@@ -630,11 +630,41 @@ async function loadGrowthLab(){
   const headline=$('#growthHeadline');const summary=$('#growthSummary');const toggle=$('#toggleGrowth');
   if(!headline||!summary||!toggle)return;
   try{
-    const data=await api('/api/v1/growth/status');
+    const [data,practice]=await Promise.all([
+      api('/api/v1/growth/status'),
+      api('/api/v1/practice/status')
+    ]);
     headline.textContent=data.enabled?'自律成長 ON':'自律成長 OFF';
-    summary.textContent='Verified '+(data.verified_examples||0)+'件 · Skill '+(data.skills||0)+'件 · 平均 '+(data.average_score||0)+'/100'+(data.background_active?' · 放置成長ループ稼働中':'')+(data.last_run_at?' · 最終 '+fmt(data.last_run_at):'');
+    summary.textContent='Verified '+(data.verified_examples||0)+'件 · Skill '+(data.skills||0)+'件 · 平均 '+(data.average_score||0)+'/100'+(data.background_active?' · 放置成長ループ稼働中':'')+(data.practice_runner_connected?' · 自主トレ接続済み':'')+(data.last_run_at?' · 最終 '+fmt(data.last_run_at):'');
     toggle.textContent=data.enabled?'自律成長をOFF':'自律成長をON';
     toggle.dataset.enabled=data.enabled?'true':'false';
+
+    const weaknesses=practice.weaknesses||[];
+    const queue=practice.practice_queue||[];
+    const last=practice.last_practice||null;
+    const weaknessTarget=$('#practiceWeaknesses');
+    const queueTarget=$('#practiceQueue');
+    const lastTarget=$('#lastPractice');
+
+    if(weaknessTarget){
+      weaknessTarget.innerHTML=weaknesses.length
+        ? weaknesses.slice(0,6).map(x=>'<div class="practice-row"><div><strong>'+esc(x.kind||'weakness')+'</strong><p>'+esc(x.summary||'')+'</p></div><span class="practice-severity '+esc(x.severity||'low')+'">'+esc(x.severity||'low')+'</span></div>').join('')
+        : '<span class="meta">現在、優先自主トレ対象はありません。</span>';
+    }
+    if(queueTarget){
+      queueTarget.innerHTML=queue.length
+        ? queue.slice(0,5).map((x,i)=>'<div class="practice-row"><div><strong>#'+(i+1)+' '+esc(x.title||'practice')+'</strong><p>'+esc(x.objective||'')+'</p></div><span class="chip">'+esc(x.mode||'app').toUpperCase()+'</span></div>').join('')
+        : '<span class="meta">Practice Queueは空です。</span>';
+    }
+    if(lastTarget){
+      if(!last){
+        lastTarget.innerHTML='<span class="meta">まだ自主トレ履歴はありません。</span>';
+      }else{
+        const promotion=last.promotion||{};
+        const weakness=last.weakness||{};
+        lastTarget.innerHTML='<div class="practice-row"><div><strong>'+esc(last.status||'completed')+'</strong><p>'+esc(weakness.summary||'')+'</p><small>'+esc(last.created_at?fmt(last.created_at):'')+'</small></div><span class="practice-promotion '+(promotion.promoted?'promoted':'rejected')+'">'+(promotion.promoted?'Skill昇格':'未昇格')+'</span></div>';
+      }
+    }
   }catch(e){
     headline.textContent='成長状態を取得できませんでした';
     summary.textContent=e.message;
@@ -662,6 +692,22 @@ async function runGrowth(){
     result.textContent='成長サイクルを完了できませんでした: '+e.message;
   }finally{button.disabled=false;button.textContent='今すぐ成長サイクル';}
 }
+async function runPractice(){
+  const button=$('#runPractice');const result=$('#growthResult');if(!button||!result)return;
+  button.disabled=true;button.textContent='自主トレ中…';
+  result.textContent='Evidenceから最優先の弱点を1件選び、Synthetic Sandboxで練習しています…';
+  try{
+    const data=await api('/api/v1/practice/run',{method:'POST',body:'{}'});
+    const promotion=data.promotion||{};
+    const weakness=data.weakness||{};
+    const practice=data.practice||{};
+    const arena=practice.arena||{};
+    result.textContent='自主トレ '+(data.status||'completed')+' · '+(weakness.kind||'弱点なし')+' · Arena '+(arena.status||'n/a')+' · '+(promotion.promoted?'Verified Skillへ昇格':'昇格なし')+' · 本体コード変更なし';
+    await loadGrowthLab();
+  }catch(e){
+    result.textContent='自主トレを完了できませんでした: '+e.message;
+  }finally{button.disabled=false;button.textContent='今すぐ自主トレ';}
+}
 async function boot(){
   try{
     const status=await api('/api/v1/status');state.csrf=status.csrf||'';
@@ -675,7 +721,7 @@ $('#prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.p
 $('[data-prompt]').forEach(b=>b.onclick=()=>send(b.dataset.prompt));
 $('[data-mode]').forEach(b=>b.onclick=()=>{setMode(b.dataset.mode);$('#prompt')?.focus();});
 $('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
-$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;localStorage.setItem('ui-theme',next);};
 document.documentElement.dataset.theme=localStorage.getItem('ui-theme')||'system';
