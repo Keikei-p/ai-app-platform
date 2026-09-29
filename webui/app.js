@@ -15,7 +15,7 @@ function setView(name){
   state.view=name;
   $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
   $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
-  const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'作成したアプリ',missions:'ミッション',lab:'IVY LAB',downloads:'ダウンロード',settings:'設定'};
+  const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'制作物',missions:'ミッション',lab:'IVY LAB',downloads:'ダウンロード',settings:'設定'};
   $('#topbarTitle').textContent=titles[name]||'Aivy';
   closeSidebar();
   if(name==='conversations')loadConversations();
