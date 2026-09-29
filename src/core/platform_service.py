@@ -178,6 +178,9 @@ class PlatformService:
                 "ios_signed_ipa": False,
                 "social_automation": True,
                 "persistent_conversations": True,
+                "context_aware_conversation": True,
+                "long_conversation_continuity": True,
+                "conversation_intent_routing": True,
                 "artifact_catalog": True,
                 "agent_planning": True,
                 "registered_agent_tools": len(self.tools.list()),
@@ -1417,6 +1420,7 @@ class PlatformService:
             "instruction": decision.instruction,
             "project_slug": slug,
             "mode": mode,
+            "intent": intent.to_dict(),
             "understanding": understood.to_dict(),
             "thread": asdict(current) if current else None,
         }
