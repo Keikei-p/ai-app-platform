@@ -201,3 +201,13 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .self-drive-state{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 8px;font-size:.64rem;font-weight:850}
 .self-drive-state.on{background:#dcfae6;color:#067647}.self-drive-state.off{background:var(--surface-soft);color:var(--muted);border:1px solid var(--border)}
 @media(max-width:900px){.self-drive-hero{display:block}.self-drive-hero .growth-actions{margin-top:16px;justify-content:flex-start}.self-drive-dashboard{grid-template-columns:1fr}}
+
+
+.message.assistant{flex-wrap:wrap}
+.message-actions{width:100%;padding-left:2px;margin-top:-8px}
+.message-actions button{border:0;background:transparent;color:var(--muted);font-size:.64rem;padding:3px 5px;border-radius:7px;cursor:pointer}
+.message-actions button:hover{background:var(--surface-soft);color:var(--text)}
+.message.thinking .bubble{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:.8rem}
+.message.thinking .bubble i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.35;animation:aivy-thinking 1.15s infinite ease-in-out}
+.message.thinking .bubble i:nth-child(2){animation-delay:.12s}.message.thinking .bubble i:nth-child(3){animation-delay:.24s}.message.thinking .bubble i:nth-child(4){animation-delay:.36s}
+@keyframes aivy-thinking{0%,70%,100%{transform:translateY(0);opacity:.3}35%{transform:translateY(-4px);opacity:.9}}
