@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 import hashlib
 import json
 import threading
@@ -60,6 +60,7 @@ class AutonomousGrowthEngine:
         self.settings_path = settings_path or (DATA_DIR / "aivy_autonomous_growth.json")
         self.skills_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+        self._practice_runner: Callable[[], dict[str, Any]] | None = None
 
     def settings(self) -> dict[str, Any]:
         default = {
@@ -97,6 +98,12 @@ class AutonomousGrowthEngine:
             self.start_background()
         return cfg
 
+    def set_practice_runner(
+        self,
+        runner: Callable[[], dict[str, Any]] | None,
+    ) -> None:
+        self._practice_runner = runner
+
     def start_background(self) -> bool:
         """Start one safe daemon growth loop per data path.
 
@@ -130,6 +137,16 @@ class AutonomousGrowthEngine:
                 except Exception:
                     # Autonomous learning must never crash the host application.
                     pass
+                if self._practice_runner is not None:
+                    try:
+                        practice = self._practice_runner()
+                        raw = self._read_settings_raw()
+                        raw.update(self.settings())
+                        raw["last_background_practice"] = practice
+                        self._write_json(self.settings_path, raw)
+                    except Exception:
+                        # Practice is bounded and must never crash Aivy.
+                        pass
 
     def status(self) -> dict[str, Any]:
         cfg = self.settings()
@@ -145,7 +162,9 @@ class AutonomousGrowthEngine:
             "average_score": float(learning.get("average_score") or 0.0),
             "last_run_at": raw.get("last_run_at"),
             "last_result": raw.get("last_result"),
+            "last_background_practice": raw.get("last_background_practice"),
             "background_active": str(self.settings_path.resolve()) in _BACKGROUND_PATHS,
+            "practice_runner_connected": self._practice_runner is not None,
             "allow_source_self_edit": False,
             "allow_main_merge": False,
             "allow_external_publish": False,
@@ -254,6 +273,67 @@ class AutonomousGrowthEngine:
         }
         self._record_cycle(result)
         return result
+
+    def promote_practice_skill(
+        self,
+        *,
+        mode: str,
+        title: str,
+        lesson: str,
+        score: int,
+        evidence_ref: str,
+        source_id: str,
+    ) -> dict[str, Any]:
+        clean_lesson = " ".join(str(lesson or "").split()).strip()
+        clean_evidence = str(evidence_ref or "").strip()
+        clean_source = str(source_id or "").strip()
+        clean_mode = str(mode or "app").strip().lower()
+        if clean_mode not in {"app", "web", "automation"}:
+            clean_mode = "app"
+        if not clean_lesson:
+            return {"promoted": False, "reason": "lesson_required"}
+        if int(score) < 90:
+            return {"promoted": False, "reason": "practice_score_below_90"}
+        if not clean_evidence:
+            return {"promoted": False, "reason": "evidence_required"}
+        if not clean_source:
+            return {"promoted": False, "reason": "source_id_required"}
+
+        identity = ("practice\n" + clean_mode + "\n" + clean_lesson).encode("utf-8")
+        skill_id = hashlib.sha256(identity).hexdigest()[:24]
+        with self._lock:
+            current = {skill.skill_id: skill for skill in self.skills()}
+            existing = current.get(skill_id)
+            sources = tuple(dict.fromkeys(
+                (*existing.source_examples, clean_source, clean_evidence)
+                if existing is not None
+                else (clean_source, clean_evidence)
+            ))[-50:]
+            item = GrowthSkill(
+                skill_id=skill_id,
+                mode=clean_mode,
+                title=str(title or "Verified Self-Practice Skill")[:180],
+                lesson=clean_lesson[:1600],
+                best_score=max(int(score), existing.best_score if existing else 0),
+                evidence_count=len(sources),
+                source_examples=sources,
+                updated_at=_now(),
+            )
+            current[skill_id] = item
+            rows = sorted(
+                current.values(),
+                key=lambda x: (x.best_score, x.evidence_count, x.updated_at),
+                reverse=True,
+            )[:500]
+            self._write_json(self.skills_path, [x.to_dict() for x in rows])
+        return {
+            "promoted": True,
+            "skill": item.to_dict(),
+            "source_code_mutated": False,
+            "main_merged": False,
+            "external_publish": False,
+            "paid_action": False,
+        }
 
     def skills(self) -> list[GrowthSkill]:
         if not self.skills_path.is_file():
