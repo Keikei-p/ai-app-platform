@@ -343,8 +343,12 @@ class PracticeSandbox:
             strategy = self._candidate_strategy(task)
             (root / "candidate_skill.txt").write_text(strategy, encoding="utf-8")
             checks = self._evaluate_strategy(task, strategy)
+            dimensions = self._dimension_review(strategy)
             baseline = self._baseline_report(task)
-            candidate = self._candidate_report(task, checks)
+            candidate = self._candidate_report(
+                task,
+                {**checks, "all_passed": bool(checks.get("all_passed")) and bool(dimensions.get("all_passed"))},
+            )
             arena = self.arena.compare_reports(baseline, {"practice_candidate": candidate})
             winner = arena.winner_id == "practice_candidate"
             return {
@@ -352,6 +356,7 @@ class PracticeSandbox:
                 "task": task.to_dict(),
                 "strategy": strategy,
                 "checks": checks,
+                "dimension_review": dimensions,
                 "arena": arena.to_dict(),
                 "synthetic_only": True,
                 "sandbox_destroyed_after_run": True,
@@ -379,6 +384,7 @@ class PracticeSandbox:
         core = guidance.get(task.synthetic_fixture["weakness_kind"], "requirements verification")
         return (
             f"{task.mode.upper()} verified practice strategy: {core}. "
+            "tests design security accessibility performance regression verification. "
             "protected_scope stays unchanged; use synthetic fixtures only; "
             "no network, no secrets, no billing, no production access, no external publish."
         )
@@ -394,6 +400,23 @@ class PracticeSandbox:
             "protected_scope stays unchanged" in lowered
             and not any(token in lowered for token in self.FORBIDDEN_TOKENS)
         )
+        rows["all_passed"] = all(rows.values())
+        return rows
+
+    @staticmethod
+    def _dimension_review(strategy: str) -> dict[str, Any]:
+        lowered = strategy.lower()
+        rows = {
+            name: name in lowered
+            for name in (
+                "tests",
+                "design",
+                "security",
+                "accessibility",
+                "performance",
+                "regression",
+            )
+        }
         rows["all_passed"] = all(rows.values())
         return rows
 
@@ -445,8 +468,9 @@ class SelfPracticeEngine:
         arena: CandidateArena | None = None,
         promote_skill: Callable[..., dict[str, Any]] | None = None,
         history_path: Path | None = None,
+        workspace_dir: Path | None = None,
     ):
-        self.detector = WeaknessDetector(learning, benchmark)
+        self.detector = WeaknessDetector(learning, benchmark, workspace_dir)
         self.planner = SelfPracticePlanner()
         self.sandbox = PracticeSandbox(arena)
         self.promote_skill = promote_skill
@@ -471,6 +495,8 @@ class SelfPracticeEngine:
             "network_allowed": False,
             "paid_actions_allowed": False,
             "production_access_allowed": False,
+            "gpu_required": False,
+            "compute_budget": {"max_tasks_per_cycle": 1, "max_parallel_tasks": 1},
             "source_self_edit_allowed": False,
             "protected_scope": list(PROTECTED_SCOPE),
         }
@@ -496,7 +522,16 @@ class SelfPracticeEngine:
             weakness = weaknesses[0]
             task = self.planner.plan(weakness)
             practice = self.sandbox.run(task)
-            evidence_ref = self._evidence_ref(task.task_id)
+            evidence_ref = self._save_evidence(
+                task.task_id,
+                {
+                    "created_at": _now(),
+                    "weakness": weakness.to_dict(),
+                    "practice": practice,
+                    "synthetic_only": True,
+                    "protected_scope": list(PROTECTED_SCOPE),
+                },
+            )
             promotion = {
                 "promoted": False,
                 "reason": "candidate did not pass promotion gate",
@@ -524,6 +559,7 @@ class SelfPracticeEngine:
                 "created_at": _now(),
                 "weakness": weakness.to_dict(),
                 "practice": practice,
+                "evidence_ref": evidence_ref,
                 "promotion": promotion,
                 "protected_scope_unchanged": True,
             }
@@ -553,6 +589,12 @@ class SelfPracticeEngine:
         with self.history_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(result, ensure_ascii=False) + "\n")
 
-    def _evidence_ref(self, task_id: str) -> str:
-        return f"aivy-self-practice:{task_id}"
+    def _save_evidence(self, task_id: str, payload: dict[str, Any]) -> str:
+        root = DATA_DIR / "aivy_practice_reports"
+        root.mkdir(parents=True, exist_ok=True)
+        path = root / f"{task_id}.json"
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+        return f"aivy_practice_reports/{path.name}"
 
