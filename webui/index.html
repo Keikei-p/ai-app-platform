@@ -26,6 +26,7 @@
         <button data-view="conversations" class="nav-item">◷ <span>最近の会話</span></button>
         <button data-view="projects" class="nav-item">▦ <span>作成したアプリ</span></button>
         <button data-view="missions" class="nav-item">◎ <span>ミッション</span></button>
+        <button data-view="lab" class="nav-item">✦ <span>IVY LAB</span></button>
         <button data-view="downloads" class="nav-item">↓ <span>ダウンロード</span></button>
       </nav>
 
@@ -46,6 +47,7 @@
         <button class="icon-button mobile-only" id="openSidebar" aria-label="メニューを開く">☰</button>
         <div class="topbar-title" id="topbarTitle">新しいチャット</div>
         <div class="topbar-actions">
+          <span class="status-pill success" id="modeStatus"><i></i>CHAT</span>
           <span class="status-pill" id="coreStatus"><i></i>Core確認中</span>
           <button class="icon-button" id="themeToggle" aria-label="テーマを切り替える">◐</button>
         </div>
@@ -57,7 +59,14 @@
             <div class="spark">A</div>
             <div class="eyebrow">AIVY · AI APP DEVELOPMENT PARTNER</div>
             <h1>何を作りたいですか？</h1>
-            <p>アイデアをそのまま話してください。Aivyが目的を整理し、検証済みの経験と専門AIを使って次のステップを考えます。</p>
+            <p>アイデアをそのまま話してください。誤字や言い間違いも文脈から補い、Aivyが会話・アプリ・サイト・自動化・自己成長を振り分けます。</p>
+            <div class="mode-switch" aria-label="Aivyモード">
+              <button type="button" data-mode="chat" class="active">CHAT</button>
+              <button type="button" data-mode="app">APP</button>
+              <button type="button" data-mode="web">WEB</button>
+              <button type="button" data-mode="automation">AUTOMATION</button>
+              <button type="button" data-mode="ivy_lab">IVY LAB</button>
+            </div>
             <div class="suggestions">
               <button data-prompt="SNSの投稿を自動化するアプリを作りたい">SNS自動投稿</button>
               <button data-prompt="営業実績をスマホで管理するアプリを作りたい">営業管理</button>
@@ -111,6 +120,31 @@
             <p class="meta">コード生成の直前で人の承認を要求します。停止・再起動後もミッション状態は保存されます。</p>
           </div>
           <div class="mission-grid" id="missionGrid"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-lab">
+        <div class="page">
+          <div class="page-heading">
+            <div><span class="eyebrow">IVY LAB</span><h2>自律成長</h2><p>検証済みの成功体験だけをSkillへ変換し、次の制作に再利用します。</p></div>
+          </div>
+          <div class="growth-hero data-card">
+            <div>
+              <span class="eyebrow">AUTONOMOUS GROWTH</span>
+              <h3 id="growthHeadline">成長状態を確認しています…</h3>
+              <p id="growthSummary">Verified Learningを読み込んでいます。</p>
+            </div>
+            <div class="growth-actions">
+              <button id="toggleGrowth" class="agent-action secondary" type="button">自律成長を切替</button>
+              <button id="runGrowth" class="agent-action" type="button">今すぐ成長サイクル</button>
+            </div>
+          </div>
+          <div class="growth-grid">
+            <article class="data-card"><h3>安全範囲</h3><p>成功ビルドのSkill化・再利用のみ自動。Aivy本体ソース、main、秘密情報、課金、本番公開は自動変更しません。</p></article>
+            <article class="data-card"><h3>成長の使われ方</h3><p>次のAPP / WEB / AUTOMATION生成時に、関連するVerified Skillを自動でプロンプトへ加えます。</p></article>
+            <article class="data-card"><h3>学習根拠</h3><p>Tests / Design / Security / Previewを通過したEvidence付き成功例だけをSkill候補にします。</p></article>
+          </div>
+          <div id="growthResult" class="data-card growth-result">まだ手動成長サイクルは実行していません。</div>
         </div>
       </section>
 
