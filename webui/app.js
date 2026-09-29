@@ -46,8 +46,9 @@ function setTaskProgress(visible,label='',detail='',percent=0){
 }
 function renderResume(){
   const box=$('#resumeWork');if(!box)return;
-  const thread=state.conversations[0]||null;
-  const project=state.projects[0]||null;
+  const preferred=storageGet('aivy-last-thread','');
+  const thread=state.conversations.find(x=>x.thread_id===preferred)||state.conversations[0]||null;
+  const project=(thread?.project_slug?state.projects.find(x=>x.slug===thread.project_slug):null)||state.projects[0]||null;
   if(!thread&&!project){box.hidden=true;return;}
   box.hidden=false;
   const title=thread?.title||project?.name||'前回の続き';
@@ -98,6 +99,7 @@ async function loadConversations(query=''){
   $$('#conversationGrid [data-thread]').forEach(c=>c.onclick=()=>openConversation(c.dataset.thread));
 }
 async function openConversation(id){
+  saveDraft();
   const row=state.conversations.find(x=>x.thread_id===id)||{thread_id:id,title:'会話'};
   state.currentThread=row;storageSet('aivy-last-thread',id);$('#messages').innerHTML='';$('#welcome').hidden=true;
   const data=await api('/api/v1/conversations/'+encodeURIComponent(id)+'/messages');
@@ -796,17 +798,36 @@ async function boot(){
   try{
     const status=await api('/api/v1/status');state.csrf=status.csrf||'';
     $('#coreStatus').innerHTML='<i></i>Core接続';$('#coreStatus').classList.add('success');
-    await loadConversations();await loadProjects();await loadModelRoutes();await loadEvolutionSummary();await loadKnowledgeSummary();await loadLearningSummary();await loadSquadSummary();await loadHealthSummary();await loadBenchmarkSummary();
-  }catch(e){$('#coreStatus').textContent='Core未接続';}
+    await Promise.all([loadConversations(),loadProjects()]);
+    await Promise.all([loadModelRoutes(),loadEvolutionSummary(),loadKnowledgeSummary(),loadLearningSummary(),loadSquadSummary(),loadHealthSummary(),loadBenchmarkSummary()]);
+    renderResume();
+  }catch(e){
+    $('#coreStatus').textContent='Core未接続';
+    toast('Aivy Coreへ接続できません。起動状態を確認してください。','error');
+  }
 }
 $('#composer').addEventListener('submit',e=>{e.preventDefault();send($('#prompt').value);});
-$('#prompt').addEventListener('input',autoGrow);
+$('#prompt').addEventListener('input',()=>{autoGrow();saveDraft();});
 $('#prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send(e.currentTarget.value);}});
-$$('[data-prompt]').forEach(b=>b.onclick=()=>send(b.dataset.prompt));
-$$('[data-mode]').forEach(b=>b.onclick=()=>{setMode(b.dataset.mode);$('#prompt')?.focus();});
-$$('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+$('[data-prompt]').forEach(b=>b.onclick=()=>send(b.dataset.prompt));
+$('[data-mode]').forEach(b=>b.onclick=()=>{setMode(b.dataset.mode);$('#prompt')?.focus();});
+$('[data-starter-mode]').forEach(b=>b.onclick=()=>{
+  setMode(b.dataset.starterMode);
+  const prompt=$('#prompt');if(!prompt)return;
+  prompt.value='';
+  prompt.placeholder=b.dataset.starterText||'そのまま話してください…';
+  saveDraft();autoGrow();prompt.focus();
+  toast((b.querySelector('strong')?.textContent||'Aivy')+'モードで始めます。','success');
+});
+$('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+$('[data-mobile-view]').forEach(b=>b.onclick=()=>setView(b.dataset.mobileView));
+$('#mobileNewChat').onclick=newChat;
 $('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
-$('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;localStorage.setItem('ui-theme',next);};
-document.documentElement.dataset.theme=localStorage.getItem('ui-theme')||'system';
-setMode('chat');boot();
+$('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;storageSet('ui-theme',next);};
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){$('#inspector')?.classList.remove('open');closeSidebar();}
+  if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName||'')){e.preventDefault();$('#prompt')?.focus();}
+});
+document.documentElement.dataset.theme=storageGet('ui-theme','system');
+setMode(storageGet('aivy-mode','chat'));restoreDraft();setView('home');boot();
