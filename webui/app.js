@@ -82,8 +82,27 @@ function message(role,text){
   $('#welcome').hidden=true;
   const wrap=document.createElement('div');wrap.className='message '+role;
   const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=text;
+  wrap.append(bubble);
+  if(role==='assistant'){
+    const actions=document.createElement('div');actions.className='message-actions';
+    const copy=document.createElement('button');copy.type='button';copy.textContent='コピー';
+    copy.onclick=async()=>{
+      try{await navigator.clipboard.writeText(String(text||''));copy.textContent='コピー済み';setTimeout(()=>copy.textContent='コピー',1200);}
+      catch{copy.textContent='コピー失敗';setTimeout(()=>copy.textContent='コピー',1200);}
+    };
+    actions.append(copy);wrap.append(actions);
+  }
+  $('#messages').append(wrap);wrap.scrollIntoView({behavior:'smooth',block:'end'});
+}
+function showThinking(){
+  removeThinking();
+  $('#welcome').hidden=true;
+  const wrap=document.createElement('div');wrap.className='message assistant thinking';wrap.id='aivyThinking';
+  const bubble=document.createElement('div');bubble.className='bubble';
+  bubble.innerHTML='<span>Aivyが考えています</span><i></i><i></i><i></i>';
   wrap.append(bubble);$('#messages').append(wrap);wrap.scrollIntoView({behavior:'smooth',block:'end'});
 }
+function removeThinking(){const row=$('#aivyThinking');if(row)row.remove();}
 function renderRecent(){
   $('#recentChats').innerHTML=state.conversations.slice(0,8).map(x=>`<button class="recent-item" data-thread="${esc(x.thread_id)}">${x.pinned?'★ ':''}${esc(x.title)}</button>`).join('')||'<div class="empty">まだ会話はありません。</div>';
   $$('#recentChats [data-thread]').forEach(b=>b.onclick=()=>openConversation(b.dataset.thread));
