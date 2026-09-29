@@ -22,6 +22,29 @@ class SelfDriveUIContractTests(unittest.TestCase):
         self.assertIn("self_drive_scheduler", service)
         self.assertIn("self_drive_approval_boundary", service)
 
+    def test_daily_backlog_api_and_ui_are_wired(self):
+        api = (ROOT / "src" / "core" / "platform_api.py").read_text(encoding="utf-8")
+        service = (ROOT / "src" / "core" / "platform_service.py").read_text(encoding="utf-8")
+        html = (ROOT / "webui" / "index.html").read_text(encoding="utf-8")
+        app = (ROOT / "webui" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('"/api/v1/backlog/today"', api)
+        self.assertIn('"/api/v1/backlog/refresh"', api)
+        self.assertIn("AutonomousBacklog", service)
+        self.assertIn("persistent_daily_backlog", service)
+        for token in (
+            'id="backlogHeadline"',
+            'id="backlogFocus"',
+            'id="backlogTodo"',
+            'id="backlogApproval"',
+            'id="backlogDone"',
+            'id="backlogFailed"',
+            'id="refreshBacklog"',
+        ):
+            self.assertIn(token, html)
+        self.assertIn("/api/v1/backlog/today", app)
+        self.assertIn("/api/v1/backlog/refresh", app)
+        self.assertIn("async function refreshBacklog()", app)
+
     def test_ivy_lab_shows_autopilot_controls_and_queue(self):
         html = (ROOT / "webui" / "index.html").read_text(encoding="utf-8")
         app = (ROOT / "webui" / "app.js").read_text(encoding="utf-8")
