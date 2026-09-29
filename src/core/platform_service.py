@@ -1100,49 +1100,76 @@ class PlatformService:
 
         if not thread.project_slug:
             if mode == "ivy_lab":
+                practice_request = any(
+                    word in interpreted
+                    for word in ("自主トレ", "自主練", "練習して", "弱点を鍛え", "弱点を直")
+                )
                 growth_request = any(
                     word in interpreted
-                    for word in ("成長させ", "成長して", "学習して", "賢くな", "自主トレ", "自己成長")
+                    for word in ("成長させ", "成長して", "学習して", "賢くな", "自己成長")
                 )
                 growth = (
                     self.autonomous_growth.run_cycle()
                     if growth_request
                     else self.autonomous_growth.status()
                 )
+                practice = None
+                if practice_request or growth_request:
+                    practice = self.self_practice.run_one()
+
                 reply = ""
                 ai_status = self.ai_engine.status()
-                if ai_status.connected and not growth_request:
+                if ai_status.connected and not (growth_request or practice_request):
                     try:
                         reply = self.ai_engine.reply(
                             prior_rows[-20:],
                             interpreted,
                             (
                                 "あなたはAivy自身についてユーザーと話すIVY LAB会話AIです。"
-                                "Aivyの成長はEvidence付き成功例のSkill化を中心に説明してください。"
-                                "自律成長はAivy本体ソース、main、秘密情報、課金、本番公開を勝手に変更しません。"
+                                "Aivyの成長はEvidence付き成功例のSkill化と、"
+                                "Synthetic Sandboxでの弱点自主トレを中心に説明してください。"
+                                "自主トレはTests / Design / Security / Accessibility / Performance / Regressionを比較し、"
+                                "90点以上かつEvidence付きの改善だけをSkillへ昇格します。"
+                                "Aivy本体ソース、main、秘密情報、課金、本番DB、本番公開、"
+                                "Safety / Security / Permissions / Approvalは勝手に変更しません。"
                                 "実際に行っていない自己改造やテストを行ったとは言わないでください。"
                                 "\ngrowth_status:\n"
                                 + json.dumps(growth, ensure_ascii=False)
+                                + "\npractice_status:\n"
+                                + json.dumps(self.self_practice.status(), ensure_ascii=False)
                             ),
                         ).strip()
                     except Exception:
                         reply = ""
                 if not reply:
-                    if growth_request:
+                    if practice_request or growth_request:
+                        promotion = (practice or {}).get("promotion") or {}
+                        weakness = (practice or {}).get("weakness") or {}
                         reply = (
-                            "安全な成長サイクルを実行しました。"
-                            f" Skill追加 {growth.get('skills_added', 0)}件、"
-                            f"更新 {growth.get('skills_updated', 0)}件、"
-                            f"合計 {growth.get('total_skills', growth.get('skills', 0))}件です。"
-                            " 本体ソース、main、本番公開、課金、秘密情報には触れていません。"
+                            "安全な成長処理を実行しました。"
+                            f" Skill整理: 追加 {growth.get('skills_added', 0)}件 / "
+                            f"更新 {growth.get('skills_updated', 0)}件。"
+                            f" 自主トレ: {(practice or {}).get('status', '未実行')}。"
+                            + (
+                                f" 対象弱点: {weakness.get('kind')}。"
+                                if weakness.get("kind") else ""
+                            )
+                            + (
+                                " 練習結果はVerified Skillへ昇格しました。"
+                                if promotion.get("promoted")
+                                else " 昇格条件を満たさない結果は採用していません。"
+                            )
+                            + " 本体ソース、main、本番DB、本番公開、課金、秘密情報には触れていません。"
                         )
                     else:
+                        practice_status = self.self_practice.status()
                         reply = (
-                            "IVY LABとして受け取りました。Aivyは検証済みの成功ビルドだけを"
-                            "Skill化して次の制作へ再利用します。現在は "
+                            "IVY LABとして受け取りました。Aivyは検証済み成功ビルドをSkill化し、"
+                            "Evidenceから弱点を検出してSynthetic Sandboxで自主トレします。現在は "
                             f"{growth.get('skills', 0)} Skill / "
-                            f"{growth.get('verified_examples', 0)} Verified Example。"
-                            "本体ソース、main、本番公開、課金、秘密情報は自律成長から除外しています。"
+                            f"{growth.get('verified_examples', 0)} Verified Example / "
+                            f"{len(practice_status.get('weaknesses') or [])} Weakness。"
+                            " 本体ソース、main、本番DB、本番公開、課金、秘密情報は自律成長から除外しています。"
                         )
                 self.conversations.append(thread_id, "user", clean)
                 self.conversations.append(thread_id, "assistant", reply)
@@ -1154,6 +1181,7 @@ class PlatformService:
                     "mode": mode,
                     "understanding": understood.to_dict(),
                     "growth": growth,
+                    "practice": practice,
                     "thread": asdict(self.conversations.get(thread_id)),
                 }
 
