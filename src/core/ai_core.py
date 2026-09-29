@@ -29,6 +29,7 @@ from .knowledge_store import VerifiedKnowledgeStore
 from .evaluation_engine import EvaluationEngine
 from .visual_design_ai import VisualDesignAI
 from .browser_capture import BrowserScreenshotCapture
+from .autonomous_growth import AutonomousGrowthEngine
 
 @dataclass
 class CoreResult:
@@ -80,6 +81,7 @@ class AICore:
         self.evaluation = EvaluationEngine()
         self.visual_design = VisualDesignAI()
         self.screenshot_capture = BrowserScreenshotCapture()
+        self.autonomous_growth = AutonomousGrowthEngine()
 
     def execute(
         self,
@@ -112,10 +114,12 @@ class AICore:
 
         emit("plan", "要件を整理して設計しています")
         lessons = self.memory.lessons_for(instruction, verified_only=True)
+        growth_lessons = self.autonomous_growth.context_for(instruction, limit=5)
+        lessons = list(dict.fromkeys([*lessons, *growth_lessons]))
         verified_knowledge = self.knowledge.search(instruction, verified_only=True, limit=5)
         enriched = instruction
         if lessons:
-            enriched += "\n検証済みの改善学習: " + " / ".join(lessons)
+            enriched += "\n検証済みの改善学習・Skill: " + " / ".join(lessons)
         if verified_knowledge:
             enriched += "\n検証済みKnowledge: " + " / ".join(
                 item.statement for item in verified_knowledge
