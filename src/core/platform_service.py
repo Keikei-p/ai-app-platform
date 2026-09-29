@@ -1318,7 +1318,14 @@ class PlatformService:
             project_name = str(meta.get("name") or slug)
             has_generated = (project_dir / "app_spec.json").is_file()
 
-        if thread.project_slug and intent.kind in {"chat", "project_question"}:
+        if (
+            thread.project_slug
+            and intent.kind in {"chat", "project_question"}
+            and self.chat.is_conversation_only(
+                clean,
+                has_generated=has_generated,
+            )
+        ):
             detail = self.project_detail(slug)
             card = dict(detail.get("card") or {})
             readiness = dict(detail.get("readiness") or {})
