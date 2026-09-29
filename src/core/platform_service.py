@@ -1182,10 +1182,12 @@ class PlatformService:
                 )
 
                 self_drive = self.self_drive.status()
+                backlog = self.autonomous_backlog.refresh()
                 drive_cycle = None
                 if self_drive_request:
                     self_drive = self.self_drive.set_enabled(True)
                     drive_cycle = self.self_drive.run_cycle(trigger="chat")
+                    backlog = self.autonomous_backlog.refresh()
 
                 growth = (
                     self.autonomous_growth.run_cycle()
@@ -1214,6 +1216,8 @@ class PlatformService:
                                 "実際に行っていない自己改造やテストを行ったとは言わないでください。"
                                 "\nself_drive_status:\n"
                                 + json.dumps(self_drive, ensure_ascii=False)
+                                + "\ndaily_backlog:\n"
+                                + json.dumps(backlog, ensure_ascii=False)
                                 + "\ngrowth_status:\n"
                                 + json.dumps(growth, ensure_ascii=False)
                                 + "\npractice_status:\n"
@@ -1263,10 +1267,14 @@ class PlatformService:
                         )
                     else:
                         practice_status = self.self_practice.status()
+                        focus = list(backlog.get("focus") or [])
+                        top_focus = str((focus[0] if focus else {}).get("title") or "待機")
                         reply = (
                             "IVY LABとして受け取りました。現在の自走モードは "
                             f"{'ON' if self_drive.get('enabled') else 'OFF'}。"
+                            f" 今日の最優先: {top_focus}。"
                             f" 安全な待機タスク {self_drive.get('queue_count', 0)}件 / "
+                            f"承認待ち {backlog.get('approval_waiting', 0)}件 / "
                             f"{growth.get('skills', 0)} Skill / "
                             f"{growth.get('verified_examples', 0)} Verified Example / "
                             f"{len(practice_status.get('weaknesses') or [])} Weakness。"
@@ -1284,6 +1292,7 @@ class PlatformService:
                     "growth": growth,
                     "practice": practice,
                     "self_drive": self_drive,
+                    "backlog": backlog,
                     "drive_cycle": drive_cycle,
                     "thread": asdict(self.conversations.get(thread_id)),
                 }
