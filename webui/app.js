@@ -1,4 +1,4 @@
-const state={csrf:'',view:'home',conversations:[],projects:[],currentThread:null,lastGoal:'',pendingInstruction:null,busy:false};
+const state={csrf:'',view:'home',conversations:[],projects:[],currentThread:null,lastGoal:'',pendingInstruction:null,busy:false,currentMode:'chat'};
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
 const api=async(path,options={})=>{
@@ -15,12 +15,13 @@ function setView(name){
   state.view=name;
   $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
   $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
-  const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'作成したアプリ',missions:'ミッション',downloads:'ダウンロード',settings:'設定'};
+  const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'作成したアプリ',missions:'ミッション',lab:'IVY LAB',downloads:'ダウンロード',settings:'設定'};
   $('#topbarTitle').textContent=titles[name]||'Aivy';
   closeSidebar();
   if(name==='conversations')loadConversations();
   if(name==='projects')loadProjects();
   if(name==='missions')loadMissions();
+  if(name==='lab')loadGrowthLab();
   if(name==='downloads')loadDownloads();
   if(name==='settings'){loadModelRoutes();loadEvolutionSummary();loadKnowledgeSummary();loadLearningSummary();loadSquadSummary();loadHealthSummary();loadBenchmarkSummary();}
 }
@@ -296,9 +297,27 @@ async function loadDownloads(){
       <div class="meta">${esc(x.guide)}${x.available&&x.artifact_id?`<div class="download-action"><a class="download-link" href="/api/v1/artifacts/download?project=${encodeURIComponent(x.project_slug)}&id=${encodeURIComponent(x.artifact_id)}">ダウンロード</a></div>`:''}</div>
     </div>`).join('')||'<div class="empty">まだ配布対象の成果物はありません。</div>';
 }
+function setMode(mode){
+  const allowed=['chat','app','web','automation','ivy_lab'];
+  state.currentMode=allowed.includes(mode)?mode:'chat';
+  $('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.currentMode));
+  const labels={chat:'CHAT',app:'APP',web:'WEB',automation:'AUTOMATION',ivy_lab:'IVY LAB'};
+  const status=$('#modeStatus');if(status)status.innerHTML='<i></i>'+labels[state.currentMode];
+  const prompt=$('#prompt');
+  if(prompt){
+    const placeholders={
+      chat:'何でも話してください…',
+      app:'作りたいアプリをそのまま話してください…',
+      web:'作りたいサイトやデザインを話してください…',
+      automation:'自動化したい作業を話してください…',
+      ivy_lab:'Aivyに成長してほしい内容を話してください…'
+    };
+    prompt.placeholder=placeholders[state.currentMode]||placeholders.chat;
+  }
+}
 async function newChat(){
   const row=await api('/api/v1/conversations',{method:'POST',body:JSON.stringify({title:'新しいチャット'})});
-  state.currentThread=row;$('#messages').innerHTML='';$('#welcome').hidden=false;$('#topbarTitle').textContent='新しいチャット';setView('home');await loadConversations();
+  state.currentThread=row;$('#messages').innerHTML='';$('#welcome').hidden=false;$('#topbarTitle').textContent='新しいチャット';setMode('chat');setView('home');await loadConversations();
 }
 async function planGoal(text){
   const projectSlug=state.currentThread?.project_slug||null;
@@ -450,9 +469,10 @@ async function approveBuild(){
   try{
     const decision=await api('/api/v1/chat/turn',{
       method:'POST',
-      body:JSON.stringify({thread_id:state.currentThread.thread_id,message:'この内容で作る'})
+      body:JSON.stringify({thread_id:state.currentThread.thread_id,message:'この内容で作る',mode:state.currentMode})
     });
     if(decision.thread)state.currentThread=decision.thread;
+    if(decision.mode)setMode(decision.mode);
     message('assistant',decision.message||'確認しました。');
     if(decision.action!=='build'||!decision.project_slug||!decision.instruction){
       throw new Error('生成承認状態を確認できませんでした');
@@ -472,7 +492,7 @@ async function send(text){
   try{
     const decision=await api('/api/v1/chat/turn',{
       method:'POST',
-      body:JSON.stringify({thread_id:state.currentThread.thread_id,message:text})
+      body:JSON.stringify({thread_id:state.currentThread.thread_id,message:text,mode:state.currentMode})
     });
     if(decision.thread)state.currentThread=decision.thread;
     message('assistant',decision.message||'確認しました。');
@@ -605,6 +625,42 @@ async function loadLearningSummary(){
     target.textContent='Verified '+(data.verified_examples||0)+'件 · 平均 '+(data.average_score||0)+'/100 · AI利用 '+(data.ai_backed_examples||0)+'件 · 教師候補を安全に蓄積中'+suffix;
   }catch(e){target.textContent='Learning状態を取得できませんでした';}
 }
+async function loadGrowthLab(){
+  const headline=$('#growthHeadline');const summary=$('#growthSummary');const toggle=$('#toggleGrowth');
+  if(!headline||!summary||!toggle)return;
+  try{
+    const data=await api('/api/v1/growth/status');
+    headline.textContent=data.enabled?'自律成長 ON':'自律成長 OFF';
+    summary.textContent='Verified '+(data.verified_examples||0)+'件 · Skill '+(data.skills||0)+'件 · 平均 '+(data.average_score||0)+'/100'+(data.last_run_at?' · 最終 '+fmt(data.last_run_at):'');
+    toggle.textContent=data.enabled?'自律成長をOFF':'自律成長をON';
+    toggle.dataset.enabled=data.enabled?'true':'false';
+  }catch(e){
+    headline.textContent='成長状態を取得できませんでした';
+    summary.textContent=e.message;
+  }
+}
+async function toggleGrowth(){
+  const button=$('#toggleGrowth');if(!button)return;
+  const next=button.dataset.enabled!=='true';
+  button.disabled=true;
+  try{
+    await api('/api/v1/growth/settings',{method:'POST',body:JSON.stringify({enabled:next})});
+    await loadGrowthLab();
+  }catch(e){
+    $('#growthResult').textContent='設定変更に失敗: '+e.message;
+  }finally{button.disabled=false;}
+}
+async function runGrowth(){
+  const button=$('#runGrowth');const result=$('#growthResult');if(!button||!result)return;
+  button.disabled=true;button.textContent='成長中…';result.textContent='Verified Evidenceから再利用Skillを整理しています…';
+  try{
+    const data=await api('/api/v1/growth/run',{method:'POST',body:'{}'});
+    result.textContent='成長サイクル '+(data.status||'completed')+' · Skill追加 '+(data.skills_added||0)+' · 更新 '+(data.skills_updated||0)+' · 合計 '+(data.total_skills||0)+(data.weaknesses?.length?' · 弱点: '+data.weaknesses.join(', '):'');
+    await loadGrowthLab();
+  }catch(e){
+    result.textContent='成長サイクルを完了できませんでした: '+e.message;
+  }finally{button.disabled=false;button.textContent='今すぐ成長サイクル';}
+}
 async function boot(){
   try{
     const status=await api('/api/v1/status');state.csrf=status.csrf||'';
@@ -615,10 +671,11 @@ async function boot(){
 $('#composer').addEventListener('submit',e=>{e.preventDefault();send($('#prompt').value);});
 $('#prompt').addEventListener('input',autoGrow);
 $('#prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send(e.currentTarget.value);}});
-$$('[data-prompt]').forEach(b=>b.onclick=()=>send(b.dataset.prompt));
-$$('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
-$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('[data-prompt]').forEach(b=>b.onclick=()=>send(b.dataset.prompt));
+$('[data-mode]').forEach(b=>b.onclick=()=>{setMode(b.dataset.mode);$('#prompt')?.focus();});
+$('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;localStorage.setItem('ui-theme',next);};
 document.documentElement.dataset.theme=localStorage.getItem('ui-theme')||'system';
-boot();
+setMode('chat');boot();
