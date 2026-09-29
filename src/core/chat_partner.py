@@ -94,20 +94,38 @@ class ChatPartner:
         cleaned = cleaned[:22].strip(" 、,")
         return cleaned or "新しいアプリ"
 
-    def handle(self, project_dir: Path, project_name: str, slug: str, user_text: str, *, has_generated: bool) -> ChatDecision:
+    def handle(
+        self,
+        project_dir: Path,
+        project_name: str,
+        slug: str,
+        user_text: str,
+        *,
+        has_generated: bool,
+        preferred_mode: str | None = None,
+    ) -> ChatDecision:
         original_text = user_text.strip()
         state = self._load(project_dir)
+        explicit_mode = str(preferred_mode or "").strip().lower()
+        if explicit_mode not in {"chat", "app", "web", "automation"}:
+            explicit_mode = ""
         understood = self.understand(
             original_text,
             {
                 "project_slug": slug,
                 "current_project": project_name,
-                "current_mode": state.get("current_mode"),
+                "current_mode": explicit_mode or state.get("current_mode"),
                 "recent_messages": state.get("history", [])[-8:],
             },
         )
         text = understood.interpreted_text
-        state["current_mode"] = understood.mode
+        resolved_mode = explicit_mode if explicit_mode and explicit_mode != "chat" else understood.mode
+        state["current_mode"] = resolved_mode
+        if resolved_mode == "web":
+            targets = list(state.get("targets") or [])
+            if "web" not in targets:
+                targets.append("web")
+            state["targets"] = targets
         state["last_understanding"] = understood.to_dict()
         self._append(state, "user", original_text)
 
@@ -174,6 +192,30 @@ class ChatPartner:
         self._append(state, "assistant", message)
         self._save(project_dir, state)
         return ChatDecision("review", message, self._compose(state))
+
+    def is_conversation_only(self, text: str, *, has_generated: bool) -> bool:
+        understood = self.understand(text)
+        clean = understood.interpreted_text.strip()
+        if not clean:
+            return True
+        if self._is_build_confirmation(clean) or self._looks_like_correction(clean):
+            return False
+        modification_words = (
+            "追加して", "追加したい", "作って", "作りたい", "実装して", "変更して",
+            "直して", "修正して", "消して", "削除して", "公開して", "デプロイして",
+            "組み込んで", "入れて", "生成して", "作成して",
+        )
+        if any(word in clean for word in modification_words):
+            return False
+        conversation_words = (
+            "ありがとう", "ありがと", "こんにちは", "こんばんは", "おはよう",
+            "どういう", "どうなって", "どこまで", "何が", "なにが", "なぜ",
+            "教えて", "説明して", "確認", "状態", "進捗", "できるの", "できる？",
+            "どう思う", "相談", "とは", "？", "?",
+        )
+        if any(word in clean for word in conversation_words):
+            return True
+        return bool(has_generated and understood.mode == "chat")
 
     def history(self, project_dir: Path) -> list[dict]:
         return self._load(project_dir).get("history", [])
