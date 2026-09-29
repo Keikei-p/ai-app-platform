@@ -495,6 +495,7 @@ async function send(text){
       body:JSON.stringify({thread_id:state.currentThread.thread_id,message:text,mode:state.currentMode})
     });
     if(decision.thread)state.currentThread=decision.thread;
+    if(decision.mode)setMode(decision.mode);
     message('assistant',decision.message||'確認しました。');
     if(decision.action==='review'){
       await planGoal(decision.instruction||text);
