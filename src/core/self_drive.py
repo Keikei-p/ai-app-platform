@@ -337,22 +337,43 @@ class SelfDriveEngine:
 
             task = queue[0]
             started = time.monotonic()
-            outcome = self._execute(task)
-            result = {
-                "status": "completed",
-                "trigger": trigger,
-                "actions_executed": 1,
-                "task": task.to_dict(),
-                "outcome": outcome,
-                "duration_ms": int((time.monotonic() - started) * 1000),
-                "created_at": _now(),
-                "protected_actions_unchanged": True,
-                "approval_bypassed": False,
-                "source_code_mutated": False,
-                "main_merged": False,
-                "external_published": False,
-                "paid_action": False,
-            }
+            try:
+                outcome = self._execute(task)
+                result = {
+                    "status": "completed",
+                    "trigger": trigger,
+                    "actions_executed": 1,
+                    "task": task.to_dict(),
+                    "outcome": outcome,
+                    "duration_ms": int((time.monotonic() - started) * 1000),
+                    "created_at": _now(),
+                    "protected_actions_unchanged": True,
+                    "approval_bypassed": False,
+                    "source_code_mutated": False,
+                    "main_merged": False,
+                    "external_published": False,
+                    "paid_action": False,
+                }
+            except Exception as exc:
+                result = {
+                    "status": "failed",
+                    "trigger": trigger,
+                    "actions_executed": 1,
+                    "task": task.to_dict(),
+                    "outcome": {
+                        "status": "failed",
+                        "error_type": type(exc).__name__,
+                        "message": str(exc)[:1000],
+                    },
+                    "duration_ms": int((time.monotonic() - started) * 1000),
+                    "created_at": _now(),
+                    "protected_actions_unchanged": True,
+                    "approval_bypassed": False,
+                    "source_code_mutated": False,
+                    "main_merged": False,
+                    "external_published": False,
+                    "paid_action": False,
+                }
             self._append(result)
             return result
         finally:
