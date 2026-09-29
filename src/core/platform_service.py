@@ -1065,7 +1065,11 @@ class PlatformService:
             },
         )
         interpreted = understood.interpreted_text
-        mode = mode_hint if mode_hint and understood.mode == "chat" else understood.mode
+        mode = (
+            mode_hint
+            if mode_hint in {"app", "web", "automation", "ivy_lab"}
+            else understood.mode
+        )
 
         if not thread.project_slug:
             if mode == "ivy_lab":
@@ -1144,12 +1148,95 @@ class PlatformService:
             project_name = str(meta.get("name") or slug)
             has_generated = (project_dir / "app_spec.json").is_file()
 
+        if thread.project_slug and self.chat.is_conversation_only(
+            clean,
+            has_generated=has_generated,
+        ):
+            detail = self.project_detail(slug)
+            card = dict(detail.get("card") or {})
+            readiness = dict(detail.get("readiness") or {})
+            gaps_raw = detail.get("gaps") or {}
+            gaps = list(gaps_raw.get("items") or []) if isinstance(gaps_raw, dict) else []
+            guardians = dict(detail.get("guardians") or {})
+            context = {
+                "project": {
+                    "name": card.get("name") or project_name,
+                    "slug": slug,
+                    "status": card.get("status"),
+                    "quality": card.get("quality"),
+                    "targets": card.get("targets"),
+                    "preview_ready": readiness.get("preview_ready"),
+                    "release_ready": readiness.get("release_ready"),
+                },
+                "open_gaps": [
+                    str(item.get("reason") or item.get("title") or "")
+                    for item in gaps[:8]
+                    if isinstance(item, dict)
+                ],
+                "guardians": {
+                    name: dict(report or {}).get("status")
+                    for name, report in guardians.items()
+                    if isinstance(report, dict)
+                },
+                "verified_memory": list(detail.get("project_memory") or [])[:5],
+            }
+            reply = ""
+            ai_status = self.ai_engine.status()
+            if ai_status.connected:
+                try:
+                    reply = self.ai_engine.reply(
+                        prior_rows[-20:],
+                        interpreted,
+                        (
+                            "あなたはAivy。ユーザーと自然に会話するAI開発パートナーです。"
+                            "以下のproject_contextを事実として使い、分からないことは推測で実行済みにしません。"
+                            "誤字・脱字・省略・指示語は会話履歴とproject_contextから補ってください。"
+                            "質問には普通に答え、変更依頼でない限りコード変更をしたとは言わないでください。"
+                            "危険操作や本番操作は明示承認が必要です。"
+                            "\nproject_context:\n"
+                            + json.dumps(context, ensure_ascii=False)
+                        ),
+                    ).strip()
+                except Exception:
+                    reply = ""
+            if not reply:
+                if has_generated:
+                    quality = str(card.get("quality") or "未確認")
+                    status = str(card.get("status") or "進行中")
+                    reply = (
+                        f"今の{project_name}は status={status} / quality={quality} です。"
+                        "詳しい変更をしたい場合は、そのまま『○○を直して』のように話してください。"
+                    )
+                else:
+                    reply = (
+                        f"{project_name}はまだ設計・相談段階です。"
+                        "今の内容について質問してもいいし、そのまま要望を追加しても大丈夫です。"
+                    )
+            self.conversations.append(thread_id, "user", clean)
+            self.conversations.append(thread_id, "assistant", reply)
+            try:
+                self.chat.append_external_message(project_dir, "user", clean)
+                self.chat.append_external_message(project_dir, "assistant", reply)
+            except Exception:
+                pass
+            current = self.conversations.get(thread_id)
+            return {
+                "action": "chat",
+                "message": reply,
+                "instruction": None,
+                "project_slug": slug,
+                "mode": mode,
+                "understanding": understood.to_dict(),
+                "thread": asdict(current) if current else None,
+            }
+
         decision = self.chat.handle(
             project_dir,
             project_name,
             slug,
             clean,
             has_generated=has_generated,
+            preferred_mode=mode,
         )
         self.conversations.append(thread_id, "user", clean)
         self.conversations.append(thread_id, "assistant", decision.message)
