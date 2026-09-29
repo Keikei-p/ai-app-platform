@@ -1,4 +1,4 @@
-const state={csrf:'',view:'home',conversations:[],projects:[],currentThread:null,lastGoal:'',pendingInstruction:null,busy:false,currentMode:'chat'};
+const state={csrf:'',view:'home',conversations:[],projects:[],currentThread:null,lastGoal:'',pendingInstruction:null,busy:false,currentMode:'chat',activeBuildStage:null};
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
 const api=async(path,options={})=>{
@@ -9,12 +9,64 @@ const api=async(path,options={})=>{
 };
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fmt(v){if(!v)return '—';try{return new Date(v).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});}catch{return v;}}
+function storageGet(key,fallback=''){try{const v=localStorage.getItem(key);return v===null?fallback:v;}catch{return fallback;}}
+function storageSet(key,value){try{localStorage.setItem(key,value);}catch{}}
+function storageRemove(key){try{localStorage.removeItem(key);}catch{}}
+function draftKey(){return 'aivy-draft:'+(state.currentThread?.thread_id||'new');}
+function saveDraft(){
+  const prompt=$('#prompt');if(!prompt)return;
+  storageSet(draftKey(),prompt.value||'');
+  const status=$('#draftStatus');if(status)status.textContent=prompt.value?'保存済み':'下書き保存';
+}
+function restoreDraft(){
+  const prompt=$('#prompt');if(!prompt)return;
+  prompt.value=storageGet(draftKey(),'');
+  autoGrow();
+  const status=$('#draftStatus');if(status)status.textContent=prompt.value?'下書きを復元':'下書き保存';
+}
+function clearDraft(){
+  storageRemove(draftKey());
+  const prompt=$('#prompt');if(prompt){prompt.value='';autoGrow();}
+  const status=$('#draftStatus');if(status)status.textContent='下書き保存';
+}
+function toast(text,type='info'){
+  const region=$('#toastRegion');if(!region)return;
+  const node=document.createElement('div');node.className='toast '+type;node.textContent=text;
+  region.append(node);setTimeout(()=>node.remove(),3200);
+}
+function setTaskProgress(visible,label='',detail='',percent=0){
+  const root=$('#taskProgress');if(!root)return;
+  root.hidden=!visible;
+  if(!visible)return;
+  const safe=Math.max(0,Math.min(100,Number(percent)||0));
+  $('#taskProgressLabel').textContent=label||'Aivyが作業中';
+  $('#taskProgressDetail').textContent=detail||'処理しています…';
+  $('#taskProgressPercent').textContent=Math.round(safe)+'%';
+  $('#taskProgressBar').style.width=safe+'%';
+}
+function renderResume(){
+  const box=$('#resumeWork');if(!box)return;
+  const thread=state.conversations[0]||null;
+  const project=state.projects[0]||null;
+  if(!thread&&!project){box.hidden=true;return;}
+  box.hidden=false;
+  const title=thread?.title||project?.name||'前回の続き';
+  $('#resumeTitle').textContent=title;
+  $('#resumeMeta').textContent=thread?('最終更新 '+fmt(thread.updated_at)+(thread.project_slug?' · 制作物あり':'')):(project?('制作物 '+fmt(project.updated_at)):'');
+  const conversationButton=$('#resumeConversation');
+  const projectButton=$('#resumeProject');
+  conversationButton.hidden=!thread;
+  projectButton.hidden=!project;
+  conversationButton.onclick=()=>thread&&openConversation(thread.thread_id);
+  projectButton.onclick=()=>{if(!project)return;setView('projects');showProject(project.slug);};
+}
 function openSidebar(){ $('#sidebar').classList.add('open');$('#overlay').classList.add('show');}
 function closeSidebar(){ $('#sidebar').classList.remove('open');$('#overlay').classList.remove('show');}
 function setView(name){
   state.view=name;
   $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
-  $$('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+  $('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+  $('[data-mobile-view]').forEach(b=>b.classList.toggle('active',b.dataset.mobileView===name));
   const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'制作物',missions:'ミッション',lab:'IVY LAB',downloads:'ダウンロード',settings:'設定'};
   $('#topbarTitle').textContent=titles[name]||'Aivy';
   closeSidebar();
@@ -37,7 +89,7 @@ function renderRecent(){
 }
 async function loadConversations(query=''){
   const data=await api('/api/v1/conversations'+(query?'?q='+encodeURIComponent(query):''));
-  state.conversations=data.conversations||[];renderRecent();
+  state.conversations=data.conversations||[];renderRecent();renderResume();
   $('#conversationGrid').innerHTML=state.conversations.map(x=>`
     <article class="data-card" data-thread="${esc(x.thread_id)}">
       <h3>${x.pinned?'★ ':''}${esc(x.title)}</h3>
@@ -47,10 +99,10 @@ async function loadConversations(query=''){
 }
 async function openConversation(id){
   const row=state.conversations.find(x=>x.thread_id===id)||{thread_id:id,title:'会話'};
-  state.currentThread=row;$('#messages').innerHTML='';$('#welcome').hidden=true;
+  state.currentThread=row;storageSet('aivy-last-thread',id);$('#messages').innerHTML='';$('#welcome').hidden=true;
   const data=await api('/api/v1/conversations/'+encodeURIComponent(id)+'/messages');
   (data.messages||[]).forEach(x=>message(x.role,x.content));
-  setView('home');$('#topbarTitle').textContent=row.title;
+  setView('home');$('#topbarTitle').textContent=row.title;restoreDraft();
 }
 async function loadMissions(){
   const projectSelect=$('#missionProject');
@@ -125,7 +177,7 @@ async function cancelMission(id){
   }catch(e){alert('終了できませんでした: '+e.message);}
 }
 async function loadProjects(){
-  const data=await api('/api/v1/projects');state.projects=data.projects||[];
+  const data=await api('/api/v1/projects');state.projects=data.projects||[];renderResume();
   $('#projectGrid').innerHTML=state.projects.map(x=>`
    <article class="project-card" data-slug="${esc(x.slug)}">
     <div class="project-top"><div><h3>${esc(x.name)}</h3><div class="meta"><span class="chip">${esc(x.app_type)}</span>${(x.targets||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></div><strong class="${x.quality==='PASS'?'quality-pass':'quality-blocked'}">${esc(x.quality)}</strong></div>
