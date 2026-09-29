@@ -181,6 +181,7 @@ class PlatformService:
                 "context_aware_conversation": True,
                 "long_conversation_continuity": True,
                 "conversation_intent_routing": True,
+                "local_ollama_conversation_fallback": True,
                 "artifact_catalog": True,
                 "agent_planning": True,
                 "registered_agent_tools": len(self.tools.list()),
