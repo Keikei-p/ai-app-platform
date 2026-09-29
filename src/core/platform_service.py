@@ -59,6 +59,7 @@ from .performance_guardian import PerformanceGuardian
 from .task_graph import TaskGraphPlanner
 from .release_guardian import ReleaseGuardian
 from .autonomous_growth import AutonomousGrowthEngine
+from .self_practice import SelfPracticeEngine
 
 
 class PlatformService:
@@ -114,7 +115,6 @@ class PlatformService:
         self.production_monitor = ProductionMonitor()
         self.learning_flywheel = AivyLearningFlywheel()
         self.autonomous_growth = AutonomousGrowthEngine(self.learning_flywheel)
-        self.autonomous_growth.start_background()
         self.missions = MissionStore()
         self.parallel_sandboxes = ParallelSandboxWorkerPool(
             engine=self.ai_engine,
@@ -128,6 +128,14 @@ class PlatformService:
         self.dependency_guardian = DependencyGuardian()
         self.candidate_arena = CandidateArena(self.evolution.evaluation)
         self.model_benchmark = ModelBenchmarkStore()
+        self.self_practice = SelfPracticeEngine(
+            learning=self.learning_flywheel,
+            benchmark=self.model_benchmark,
+            arena=self.candidate_arena,
+            promote_skill=self.autonomous_growth.promote_practice_skill,
+        )
+        self.autonomous_growth.set_practice_runner(self.self_practice.run_one)
+        self.autonomous_growth.start_background()
         self.accessibility_guardian = AccessibilityGuardian()
         self.performance_guardian = PerformanceGuardian()
         self.task_graph = TaskGraphPlanner()
@@ -210,6 +218,9 @@ class PlatformService:
                 "typo_tolerant_language_understanding": True,
                 "conversation_mode_router": True,
                 "autonomous_growth_skills": True,
+                "evidence_backed_self_practice": True,
+                "synthetic_practice_sandbox": True,
+                "bounded_background_practice": True,
             },
         }
 
@@ -665,10 +676,25 @@ class PlatformService:
         return self.learning_flywheel.stats()
 
     def autonomous_growth_status(self) -> dict[str, Any]:
-        return self.autonomous_growth.status()
+        growth = self.autonomous_growth.status()
+        practice = self.self_practice.status()
+        growth["practice"] = {
+            "weakness_count": len(practice.get("weaknesses") or []),
+            "queue_count": len(practice.get("practice_queue") or []),
+            "last_practice": practice.get("last_practice"),
+            "recent_promoted": practice.get("recent_promoted"),
+            "synthetic_only": True,
+        }
+        return growth
 
     def run_autonomous_growth_cycle(self) -> dict[str, Any]:
         return self.autonomous_growth.run_cycle()
+
+    def self_practice_status(self) -> dict[str, Any]:
+        return self.self_practice.status()
+
+    def run_self_practice(self) -> dict[str, Any]:
+        return self.self_practice.run_one()
 
     def set_autonomous_growth(self, enabled: bool) -> dict[str, Any]:
         return self.autonomous_growth.set_enabled(enabled)
