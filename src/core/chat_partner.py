@@ -193,6 +193,9 @@ class ChatPartner:
         self._save(project_dir, state)
         return ChatDecision("review", message, self._compose(state))
 
+    def is_build_confirmation(self, text: str) -> bool:
+        return self._is_build_confirmation(self.understand(text).interpreted_text)
+
     def is_conversation_only(self, text: str, *, has_generated: bool) -> bool:
         understood = self.understand(text)
         clean = understood.interpreted_text.strip()
