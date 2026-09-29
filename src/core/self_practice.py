@@ -95,14 +95,14 @@ class WeaknessDetector:
                 "training_data_scarcity", "medium", "app",
                 f"Verified examples are still sparse ({verified}).",
                 float(verified), 8.0,
-                tuple(str(x.example_id) for x in examples[:5]),
+                tuple(str(x.example_id) for x in examples[:5]) or (f"learning-stats:verified={verified}",),
             ))
         if verified and average < 95:
             rows.append(self._weakness(
                 "verified_quality", "high" if average < 90 else "medium", "app",
                 f"Average verified quality is {average:.1f}/100.",
                 average, 95.0,
-                tuple(str(x.example_id) for x in examples[:8]),
+                tuple(str(x.example_id) for x in examples[:8]) or (f"learning-stats:average={average:.2f}",),
             ))
         if verified:
             repair_rate = repaired / verified
@@ -114,7 +114,7 @@ class WeaknessDetector:
                     tuple(
                         str(x.example_id) for x in examples
                         if int(getattr(x, "repair_count", 0)) > 0
-                    )[:8],
+                    )[:8] or (f"learning-stats:repairs={repaired}/{verified}",),
                 ))
 
         mode_counts = {"app": 0, "web": 0, "automation": 0}
@@ -129,7 +129,7 @@ class WeaknessDetector:
                     tuple(
                         str(x.example_id) for x in examples
                         if self._mode_for(x.instruction) == mode
-                    )[:5],
+                    )[:5] or (f"learning-mode:{mode}:verified={count}",),
                 ))
 
         benchmark = self.benchmark.summary()
