@@ -469,13 +469,16 @@ class SelfPracticeEngine:
         promote_skill: Callable[..., dict[str, Any]] | None = None,
         history_path: Path | None = None,
         workspace_dir: Path | None = None,
+        evidence_dir: Path | None = None,
     ):
         self.detector = WeaknessDetector(learning, benchmark, workspace_dir)
         self.planner = SelfPracticePlanner()
         self.sandbox = PracticeSandbox(arena)
         self.promote_skill = promote_skill
         self.history_path = history_path or (DATA_DIR / "aivy_self_practice.jsonl")
+        self.evidence_dir = evidence_dir or (DATA_DIR / "aivy_practice_reports")
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
+        self.evidence_dir.mkdir(parents=True, exist_ok=True)
         self._lock = Lock()
 
     def status(self) -> dict[str, Any]:
@@ -590,11 +593,9 @@ class SelfPracticeEngine:
             handle.write(json.dumps(result, ensure_ascii=False) + "\n")
 
     def _save_evidence(self, task_id: str, payload: dict[str, Any]) -> str:
-        root = DATA_DIR / "aivy_practice_reports"
-        root.mkdir(parents=True, exist_ok=True)
-        path = root / f"{task_id}.json"
+        path = self.evidence_dir / f"{task_id}.json"
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(path)
-        return f"aivy_practice_reports/{path.name}"
+        return f"{self.evidence_dir.name}/{path.name}"
 
