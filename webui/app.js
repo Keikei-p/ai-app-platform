@@ -590,7 +590,7 @@ async function send(text){
   }
   if(!state.currentThread)await newChat();
   state.lastGoal=text;
-  message('user',text);storageRemove(draftKey());$('#prompt').value='';autoGrow();setBusy(true);
+  message('user',text);storageRemove(draftKey());$('#prompt').value='';autoGrow();setBusy(true);showThinking();
   const draftStatus=$('#draftStatus');if(draftStatus)draftStatus.textContent='下書き保存';
   try{
     const decision=await api('/api/v1/chat/turn',{
@@ -599,7 +599,7 @@ async function send(text){
     });
     if(decision.thread)state.currentThread=decision.thread;
     if(decision.mode)setMode(decision.mode);
-    message('assistant',decision.message||'確認しました。');
+    removeThinking();message('assistant',decision.message||'確認しました。');
     if(decision.action==='review'){
       await planGoal(decision.instruction||text);
       showBuildApproval(decision.instruction||text);
@@ -608,15 +608,16 @@ async function send(text){
       setBusy(false);
       await executeBuild(decision.project_slug,decision.instruction);
       return;
-    }else if(decision.project_slug){
+    }else if(decision.project_slug&&decision.action!=='chat'){
       await planGoal(decision.instruction||text);
     }
     await loadConversations();
   }catch(e){
+    removeThinking();
     message('assistant','Aivyが会話を処理できませんでした: '+e.message);
     toast('会話処理でエラーが発生しました。','error');
   }finally{
-    setBusy(false);
+    removeThinking();setBusy(false);
   }
 }
 function autoGrow(){const p=$('#prompt');p.style.height='auto';p.style.height=Math.min(p.scrollHeight,160)+'px';}
