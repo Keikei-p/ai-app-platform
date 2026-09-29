@@ -341,9 +341,16 @@ class ChatPartner:
         feature_text = "、".join(self.FEATURE_LABELS.get(x, x) for x in features) if features else "追加機能なし"
         style = state.get("design_note") or state.get("design_style") or "未指定"
         notes = state.get("revision_notes") or []
+        mode_labels = {
+            "app": "APP",
+            "web": "WEB",
+            "automation": "AUTOMATION",
+            "chat": "CHAT",
+        }
         lines = [
             "いきなり作らず、まず設計内容を確認します。",
             "",
+            f"モード：{mode_labels.get(str(state.get('current_mode') or ''), 'AUTO')}",
             f"目的：{state.get('goal', '')}",
             f"利用者・使い方：{state.get('usage_context', '')}",
             f"対応：{targets}",
@@ -360,8 +367,27 @@ class ChatPartner:
         return "\n".join(lines)
 
     def _compose(self, state: dict, correction: str | None = None) -> str:
+        mode = str(state.get("current_mode") or "app")
+        mode_instruction = {
+            "web": (
+                "WEB MODE: Webサイトとして制作する。SEO、セマンティックHTML、"
+                "アクセシビリティ、Core Web Vitalsを意識した表示性能、"
+                "レスポンシブ、主要CTA、OGP/メタ情報、エラーのない主要導線を検証する。"
+            ),
+            "automation": (
+                "AUTOMATION MODE: 自動化として制作する。再実行安全性、失敗時の再試行、"
+                "重複実行防止、監査ログ、停止手段、認証情報の分離、"
+                "スケジュール実行の失敗を検出できるようにする。"
+            ),
+            "app": (
+                "APP MODE: アプリとして制作する。主要ユーザーフロー、データ整合性、"
+                "認証・権限、空状態・エラー状態、モバイル操作性、"
+                "対象プラットフォームのビルド可否を検証する。"
+            ),
+        }.get(mode, "AUTO MODE: 目的に最も合う成果物として設計する。")
         parts = [
             str(state.get("goal") or "アプリを作成"),
+            mode_instruction,
             "利用者・主要フロー: " + str(state.get("usage_context") or ""),
             "出力先: " + ", ".join(state.get("targets") or []),
             "デザイン: " + str(state.get("design_style") or "custom"),
