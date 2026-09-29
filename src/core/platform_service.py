@@ -1318,10 +1318,7 @@ class PlatformService:
             project_name = str(meta.get("name") or slug)
             has_generated = (project_dir / "app_spec.json").is_file()
 
-        if thread.project_slug and self.chat.is_conversation_only(
-            clean,
-            has_generated=has_generated,
-        ):
+        if thread.project_slug and intent.kind in {"chat", "project_question"}:
             detail = self.project_detail(slug)
             card = dict(detail.get("card") or {})
             readiness = dict(detail.get("readiness") or {})
@@ -1354,34 +1351,29 @@ class PlatformService:
             ai_status = self.ai_engine.status()
             if ai_status.connected:
                 try:
+                    drive_status = self.self_drive.status()
                     reply = self.ai_engine.reply(
-                        prior_rows[-20:],
+                        prior_rows,
                         interpreted,
-                        (
-                            "あなたはAivy。ユーザーと自然に会話するAI開発パートナーです。"
-                            "以下のproject_contextを事実として使い、分からないことは推測で実行済みにしません。"
-                            "誤字・脱字・省略・指示語は会話履歴とproject_contextから補ってください。"
-                            "質問には普通に答え、変更依頼でない限りコード変更をしたとは言わないでください。"
-                            "危険操作や本番操作は明示承認が必要です。"
-                            "\nproject_context:\n"
-                            + json.dumps(context, ensure_ascii=False)
+                        self.conversation_brain.system_instruction(
+                            mode=mode,
+                            continuity=continuity,
+                            project_context=context,
+                            self_drive_context={
+                                "enabled": drive_status.get("enabled"),
+                                "queue_count": drive_status.get("queue_count"),
+                                "approval_waiting": drive_status.get("approval_waiting"),
+                            },
                         ),
                     ).strip()
                 except Exception:
                     reply = ""
             if not reply:
-                if has_generated:
-                    quality = str(card.get("quality") or "未確認")
-                    status = str(card.get("status") or "進行中")
-                    reply = (
-                        f"今の{project_name}は status={status} / quality={quality} です。"
-                        "詳しい変更をしたい場合は、そのまま『○○を直して』のように話してください。"
-                    )
-                else:
-                    reply = (
-                        f"{project_name}はまだ設計・相談段階です。"
-                        "今の内容について質問してもいいし、そのまま要望を追加しても大丈夫です。"
-                    )
+                reply = self.conversation_brain.fallback_reply(
+                    interpreted,
+                    has_project=True,
+                    project_name=project_name,
+                )
             self.conversations.append(thread_id, "user", clean)
             self.conversations.append(thread_id, "assistant", reply)
             try:
@@ -1396,6 +1388,7 @@ class PlatformService:
                 "instruction": None,
                 "project_slug": slug,
                 "mode": mode,
+                "intent": intent.to_dict(),
                 "understanding": understood.to_dict(),
                 "thread": asdict(current) if current else None,
             }
