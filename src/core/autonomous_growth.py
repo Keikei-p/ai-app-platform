@@ -12,6 +12,10 @@ from .config import DATA_DIR
 from .learning_flywheel import AivyLearningFlywheel
 
 
+_BACKGROUND_LOCK = threading.Lock()
+_BACKGROUND_PATHS: set[str] = set()
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -89,7 +93,43 @@ class AutonomousGrowthEngine:
         cfg["enabled"] = bool(enabled)
         cfg["updated_at"] = _now()
         self._write_json(self.settings_path, cfg)
+        if enabled:
+            self.start_background()
         return cfg
+
+    def start_background(self) -> bool:
+        """Start one safe daemon growth loop per data path.
+
+        The loop only runs the verified-learning Skill compaction implemented by
+        run_cycle(). It performs no network calls and has no authority to edit
+        Aivy source, publish, merge main, reveal secrets or spend money.
+        """
+        key = str(self.settings_path.resolve())
+        with _BACKGROUND_LOCK:
+            if key in _BACKGROUND_PATHS:
+                return False
+            _BACKGROUND_PATHS.add(key)
+
+        thread = threading.Thread(
+            target=self._background_loop,
+            name="aivy-autonomous-growth",
+            daemon=True,
+        )
+        thread.start()
+        return True
+
+    def _background_loop(self) -> None:
+        waiter = threading.Event()
+        while True:
+            cfg = self.settings()
+            interval = max(300, min(int(cfg.get("interval_seconds") or 900), 86400))
+            waiter.wait(interval)
+            if self.settings().get("enabled"):
+                try:
+                    self.run_cycle()
+                except Exception:
+                    # Autonomous learning must never crash the host application.
+                    pass
 
     def status(self) -> dict[str, Any]:
         cfg = self.settings()
@@ -105,6 +145,7 @@ class AutonomousGrowthEngine:
             "average_score": float(learning.get("average_score") or 0.0),
             "last_run_at": raw.get("last_run_at"),
             "last_result": raw.get("last_result"),
+            "background_active": str(self.settings_path.resolve()) in _BACKGROUND_PATHS,
             "allow_source_self_edit": False,
             "allow_main_merge": False,
             "allow_external_publish": False,
