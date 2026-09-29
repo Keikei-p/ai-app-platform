@@ -149,6 +149,35 @@ class SelfDriveTests(unittest.TestCase):
             self.assertEqual(calls.health, ["broken"])
             self.assertEqual(calls.growth, 1)
 
+    def test_failed_safe_action_is_recorded_and_does_not_raise(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            calls = Calls()
+
+            def broken_health(slug):
+                calls.health.append(slug)
+                raise RuntimeError("synthetic health failure")
+
+            engine = SelfDriveEngine(
+                list_projects=lambda: [{
+                    "slug": "broken",
+                    "quality": "BLOCKED",
+                    "status": "attention_required",
+                }],
+                health_check=broken_health,
+                list_missions=lambda: [],
+                safe_mission_cycle=lambda mission_id: {},
+                growth_cycle=lambda: {"status": "completed"},
+                practice_cycle=lambda: {"status": "completed"},
+                settings_path=root / "drive.json",
+                history_path=root / "drive_history.jsonl",
+            )
+            result = engine.run_cycle(trigger="test")
+            self.assertEqual(result["status"], "failed")
+            self.assertEqual(result["outcome"]["error_type"], "RuntimeError")
+            self.assertEqual(calls.health, ["broken"])
+            self.assertTrue(engine.recent(1))
+
     def test_status_exposes_hard_protection_boundaries(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
