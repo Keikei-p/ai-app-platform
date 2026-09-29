@@ -632,7 +632,7 @@ async function loadGrowthLab(){
   try{
     const data=await api('/api/v1/growth/status');
     headline.textContent=data.enabled?'自律成長 ON':'自律成長 OFF';
-    summary.textContent='Verified '+(data.verified_examples||0)+'件 · Skill '+(data.skills||0)+'件 · 平均 '+(data.average_score||0)+'/100'+(data.last_run_at?' · 最終 '+fmt(data.last_run_at):'');
+    summary.textContent='Verified '+(data.verified_examples||0)+'件 · Skill '+(data.skills||0)+'件 · 平均 '+(data.average_score||0)+'/100'+(data.background_active?' · 放置成長ループ稼働中':'')+(data.last_run_at?' · 最終 '+fmt(data.last_run_at):'');
     toggle.textContent=data.enabled?'自律成長をOFF':'自律成長をON';
     toggle.dataset.enabled=data.enabled?'true':'false';
   }catch(e){
