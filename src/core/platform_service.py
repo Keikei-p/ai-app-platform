@@ -1324,10 +1324,7 @@ class PlatformService:
         if (
             thread.project_slug
             and intent.kind in {"chat", "project_question"}
-            and self.chat.is_conversation_only(
-                clean,
-                has_generated=has_generated,
-            )
+            and not self.chat.is_build_confirmation(clean)
         ):
             detail = self.project_detail(slug)
             card = dict(detail.get("card") or {})
