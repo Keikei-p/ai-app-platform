@@ -54,6 +54,11 @@ class ConversationBrain:
         "自走", "オートパイロット", "自己成長", "自律成長", "自主トレ",
         "進化させ", "成長させ",
     )
+    SOFT_REQUEST_MARKERS = (
+        "してほしい", "して欲しい", "やってほしい", "やって欲しい",
+        "作ってほしい", "作って欲しい", "作ってくれる", "直してほしい",
+        "直して欲しい", "お願い", "頼む", "頼んだ",
+    )
 
     def classify(
         self,
@@ -79,6 +84,18 @@ class ConversationBrain:
         )
         has_create = any(word.lower() in lowered for word in self.CREATE_MARKERS)
         has_change = any(word.lower() in lowered for word in self.CHANGE_MARKERS)
+        soft_request = any(word.lower() in lowered for word in self.SOFT_REQUEST_MARKERS)
+
+        if has_project and soft_request and (has_change or not is_question):
+            return ConversationIntent("project_change", 0.95, "natural Japanese soft change request")
+
+        if has_create and soft_request:
+            return ConversationIntent(
+                "project_request",
+                0.96,
+                "natural Japanese soft creation request",
+                not has_project,
+            )
 
         if is_question and not self._explicit_imperative(clean):
             return ConversationIntent(
