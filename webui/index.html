@@ -60,12 +60,26 @@
             <div class="eyebrow">AIVY · AI APP DEVELOPMENT PARTNER</div>
             <h1>何を作りたいですか？</h1>
             <p>アイデアをそのまま話してください。誤字や言い間違いも文脈から補い、Aivyが会話・アプリ・サイト・自動化・自己成長を振り分けます。</p>
-            <div class="mode-switch" aria-label="Aivyモード">
-              <button type="button" data-mode="chat" class="active">CHAT</button>
-              <button type="button" data-mode="app">APP</button>
-              <button type="button" data-mode="web">WEB</button>
-              <button type="button" data-mode="automation">AUTOMATION</button>
-              <button type="button" data-mode="ivy_lab">IVY LAB</button>
+            <div class="quick-start-grid" aria-label="すぐ始める">
+              <button type="button" class="quick-start-card" data-starter-mode="app" data-starter-text="作りたいアプリの内容を入力してください">
+                <span class="quick-icon">▦</span><strong>アプリを作る</strong><small>Web / Windows / Android</small>
+              </button>
+              <button type="button" class="quick-start-card" data-starter-mode="web" data-starter-text="作りたいWebサイトの目的やイメージを入力してください">
+                <span class="quick-icon">◇</span><strong>サイトを作る</strong><small>LP / ポートフォリオ / 企業サイト</small>
+              </button>
+              <button type="button" class="quick-start-card" data-starter-mode="automation" data-starter-text="自動化したい作業を入力してください">
+                <span class="quick-icon">↻</span><strong>自動化する</strong><small>定期実行 / 投稿 / 業務フロー</small>
+              </button>
+              <button type="button" class="quick-start-card" data-starter-mode="chat" data-starter-text="">
+                <span class="quick-icon">✦</span><strong>まず相談する</strong><small>曖昧なアイデアでもOK</small>
+              </button>
+            </div>
+            <div class="resume-work" id="resumeWork" hidden>
+              <div><span class="eyebrow">CONTINUE</span><strong id="resumeTitle">前回の続き</strong><small id="resumeMeta"></small></div>
+              <div class="resume-actions">
+                <button type="button" id="resumeConversation">会話を続ける</button>
+                <button type="button" id="resumeProject">制作物を見る</button>
+              </div>
             </div>
             <div class="suggestions">
               <button data-prompt="SNSの投稿を自動化するアプリを作りたい">SNS自動投稿</button>
@@ -77,14 +91,27 @@
           <div class="messages" id="messages" aria-live="polite"></div>
 
           <div class="composer-wrap">
+            <div class="task-progress" id="taskProgress" hidden>
+              <div class="task-progress-head"><strong id="taskProgressLabel">Aivyが作業中</strong><span id="taskProgressPercent">0%</span></div>
+              <div class="task-progress-track"><i id="taskProgressBar"></i></div>
+              <p id="taskProgressDetail">準備しています…</p>
+            </div>
             <form class="composer" id="composer">
+              <div class="composer-mode-switch" aria-label="作業モード">
+                <button type="button" data-mode="chat">相談</button>
+                <button type="button" data-mode="app">アプリ</button>
+                <button type="button" data-mode="web">サイト</button>
+                <button type="button" data-mode="automation">自動化</button>
+                <button type="button" data-mode="ivy_lab">成長</button>
+              </div>
               <textarea id="prompt" rows="1" placeholder="作りたいもの、直したいことを入力…" aria-label="AIへ依頼"></textarea>
               <div class="composer-footer">
-                <span class="hint">Enterで送信 · Shift+Enterで改行</span>
-                <button class="send-button" id="sendButton" type="submit" aria-label="送信">↑</button>
+                <span class="hint" id="composerHint">Enterで送信 · Shift+Enterで改行</span>
+                <span class="draft-status" id="draftStatus">下書き保存</span>
+                <button class="send-button" id="sendButton" type="submit" aria-label="送信"><span>送信</span><b>↑</b></button>
               </div>
             </form>
-            <p class="safety-note">生成・公開など重要な操作は、既存の承認・品質・セキュリティゲートを通ります。</p>
+            <p class="safety-note">処理中でも次の依頼を入力できます。送信は現在の作業完了後にできます。</p>
           </div>
         </div>
       </section>
@@ -212,6 +239,14 @@
       <div id="agentPlan" class="agent-plan"><div class="empty">依頼を送ると、AIが作業計画をここに表示します。</div></div>
     </aside>
   </div>
+  <nav class="mobile-tabbar" aria-label="スマホナビ">
+    <button type="button" data-mobile-view="home"><span>⌂</span><small>チャット</small></button>
+    <button type="button" data-mobile-view="projects"><span>▦</span><small>制作物</small></button>
+    <button type="button" id="mobileNewChat" class="mobile-new"><span>＋</span><small>新規</small></button>
+    <button type="button" data-mobile-view="lab"><span>✦</span><small>成長</small></button>
+    <button type="button" data-mobile-view="settings"><span>⚙</span><small>設定</small></button>
+  </nav>
+  <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
   <script src="/ui/app.js"></script>
 </body>
 </html>
