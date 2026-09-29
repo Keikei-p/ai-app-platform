@@ -1125,6 +1125,13 @@ class PlatformService:
 
         if not thread.project_slug:
             if mode == "ivy_lab":
+                self_drive_request = any(
+                    word in interpreted
+                    for word in (
+                        "自走", "オートパイロット", "放置で進め",
+                        "勝手に進め", "自分で進め",
+                    )
+                )
                 practice_request = any(
                     word in interpreted
                     for word in ("自主トレ", "自主練", "練習して", "弱点を鍛え", "弱点を直")
@@ -1133,32 +1140,42 @@ class PlatformService:
                     word in interpreted
                     for word in ("成長させ", "成長して", "学習して", "賢くな", "自己成長")
                 )
+
+                self_drive = self.self_drive.status()
+                drive_cycle = None
+                if self_drive_request:
+                    self_drive = self.self_drive.set_enabled(True)
+                    drive_cycle = self.self_drive.run_cycle(trigger="chat")
+
                 growth = (
                     self.autonomous_growth.run_cycle()
-                    if growth_request
+                    if growth_request and not self_drive_request
                     else self.autonomous_growth.status()
                 )
                 practice = None
-                if practice_request or growth_request:
+                if (practice_request or growth_request) and not self_drive_request:
                     practice = self.self_practice.run_one()
 
                 reply = ""
                 ai_status = self.ai_engine.status()
-                if ai_status.connected and not (growth_request or practice_request):
+                if ai_status.connected and not (
+                    growth_request or practice_request or self_drive_request
+                ):
                     try:
                         reply = self.ai_engine.reply(
                             prior_rows[-20:],
                             interpreted,
                             (
                                 "あなたはAivy自身についてユーザーと話すIVY LAB会話AIです。"
-                                "Aivyの成長はEvidence付き成功例のSkill化と、"
-                                "Synthetic Sandboxでの弱点自主トレを中心に説明してください。"
-                                "自主トレはTests / Design / Security / Accessibility / Performance / Regressionを比較し、"
-                                "90点以上かつEvidence付きの改善だけをSkillへ昇格します。"
-                                "Aivy本体ソース、main、秘密情報、課金、本番DB、本番公開、"
+                                "Aivyには自走モードがあり、10分ごとに安全な優先タスクを最大1件だけ選びます。"
+                                "自走対象はMissionの安全前処理、制作物の再点検、Verified Learning整理、"
+                                "Synthetic Sandbox自主トレです。"
+                                "Build承認、Aivy本体ソース、main、秘密情報、課金、本番DB、本番公開、"
                                 "Safety / Security / Permissions / Approvalは勝手に変更しません。"
                                 "実際に行っていない自己改造やテストを行ったとは言わないでください。"
-                                "\ngrowth_status:\n"
+                                "\nself_drive_status:\n"
+                                + json.dumps(self_drive, ensure_ascii=False)
+                                + "\ngrowth_status:\n"
                                 + json.dumps(growth, ensure_ascii=False)
                                 + "\npractice_status:\n"
                                 + json.dumps(self.self_practice.status(), ensure_ascii=False)
@@ -1167,7 +1184,26 @@ class PlatformService:
                     except Exception:
                         reply = ""
                 if not reply:
-                    if practice_request or growth_request:
+                    if self_drive_request:
+                        task = (drive_cycle or {}).get("task") or {}
+                        outcome = (drive_cycle or {}).get("outcome") or {}
+                        if (drive_cycle or {}).get("status") == "idle":
+                            action_summary = "今すぐ安全に進める必要がある作業はなかったので待機に入りました。"
+                        elif task:
+                            action_summary = (
+                                f"今回の自走: {task.get('title') or task.get('kind')}。"
+                                f" 結果: {outcome.get('status') or (drive_cycle or {}).get('status')}。"
+                            )
+                        else:
+                            action_summary = f"自走サイクル: {(drive_cycle or {}).get('status', '確認済み')}。"
+                        reply = (
+                            "自走モードをONにしました。"
+                            " アイビー起動中は10分ごとに優先順位を見直し、"
+                            "安全に進められる作業を最大1件ずつ進めます。"
+                            + action_summary
+                            + " Build承認・本番公開・課金・main変更・本体自己改造は自動では行いません。"
+                        )
+                    elif practice_request or growth_request:
                         promotion = (practice or {}).get("promotion") or {}
                         weakness = (practice or {}).get("weakness") or {}
                         reply = (
@@ -1189,12 +1225,13 @@ class PlatformService:
                     else:
                         practice_status = self.self_practice.status()
                         reply = (
-                            "IVY LABとして受け取りました。Aivyは検証済み成功ビルドをSkill化し、"
-                            "Evidenceから弱点を検出してSynthetic Sandboxで自主トレします。現在は "
+                            "IVY LABとして受け取りました。現在の自走モードは "
+                            f"{'ON' if self_drive.get('enabled') else 'OFF'}。"
+                            f" 安全な待機タスク {self_drive.get('queue_count', 0)}件 / "
                             f"{growth.get('skills', 0)} Skill / "
                             f"{growth.get('verified_examples', 0)} Verified Example / "
                             f"{len(practice_status.get('weaknesses') or [])} Weakness。"
-                            " 本体ソース、main、本番DB、本番公開、課金、秘密情報は自律成長から除外しています。"
+                            " 承認が必要な操作は人の判断まで停止します。"
                         )
                 self.conversations.append(thread_id, "user", clean)
                 self.conversations.append(thread_id, "assistant", reply)
@@ -1207,6 +1244,8 @@ class PlatformService:
                     "understanding": understood.to_dict(),
                     "growth": growth,
                     "practice": practice,
+                    "self_drive": self_drive,
+                    "drive_cycle": drive_cycle,
                     "thread": asdict(self.conversations.get(thread_id)),
                 }
 
