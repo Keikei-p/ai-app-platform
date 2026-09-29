@@ -136,13 +136,19 @@
             </div>
             <div class="growth-actions">
               <button id="toggleGrowth" class="agent-action secondary" type="button">自律成長を切替</button>
-              <button id="runGrowth" class="agent-action" type="button">今すぐ成長サイクル</button>
+              <button id="runGrowth" class="agent-action secondary" type="button">今すぐ成長サイクル</button>
+              <button id="runPractice" class="agent-action" type="button">今すぐ自主トレ</button>
             </div>
           </div>
           <div class="growth-grid">
-            <article class="data-card"><h3>安全範囲</h3><p>成功ビルドのSkill化・再利用のみ自動。Aivy本体ソース、main、秘密情報、課金、本番公開は自動変更しません。</p></article>
-            <article class="data-card"><h3>成長の使われ方</h3><p>次のAPP / WEB / AUTOMATION生成時に、関連するVerified Skillを自動でプロンプトへ加えます。</p></article>
-            <article class="data-card"><h3>学習根拠</h3><p>Tests / Design / Security / Previewを通過したEvidence付き成功例だけをSkill候補にします。</p></article>
+            <article class="data-card"><h3>安全範囲</h3><p>自主トレはSynthetic Fixtureのみ。Aivy本体ソース、main、秘密情報、課金、本番DB、本番公開、Safety / Security / Permissions / Approvalは変更しません。</p></article>
+            <article class="data-card"><h3>成長の使われ方</h3><p>弱点をEvidenceから検出し、隔離練習 → Candidate比較 → 合格SkillだけをAPP / WEB / AUTOMATION生成へ再利用します。</p></article>
+            <article class="data-card"><h3>昇格条件</h3><p>自主トレ候補は90点以上、Tests / Design / Security / Preview合格、baseline悪化なし、Evidence必須でのみSkill昇格します。</p></article>
+          </div>
+          <div class="practice-dashboard">
+            <article class="data-card"><h3>Weaknesses</h3><div id="practiceWeaknesses" class="practice-list"><span class="meta">解析中…</span></div></article>
+            <article class="data-card"><h3>Practice Queue</h3><div id="practiceQueue" class="practice-list"><span class="meta">作成中…</span></div></article>
+            <article class="data-card"><h3>Last Practice</h3><div id="lastPractice" class="practice-list"><span class="meta">まだ自主トレ履歴はありません。</span></div></article>
           </div>
           <div id="growthResult" class="data-card growth-result">まだ手動成長サイクルは実行していません。</div>
         </div>
