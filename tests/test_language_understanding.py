@@ -38,6 +38,11 @@ class LanguageUnderstandingTests(unittest.TestCase):
         )
         self.assertLess(without_context.confidence, with_context.confidence)
 
+    def test_self_drive_phrase_routes_to_ivy_lab(self):
+        row = self.engine.interpret("よし自走してほしい")
+        self.assertEqual(row.mode, "ivy_lab")
+        self.assertGreaterEqual(row.confidence, 0.8)
+
     def test_risky_corrected_instruction_requires_confirmation(self):
         row = self.engine.interpret("ファイやベースの本番DBを削除して")
         self.assertTrue(row.dangerous)
