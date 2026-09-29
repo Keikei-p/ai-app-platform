@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import json
 import re
 from .development_memory import DevelopmentMemory
+from .language_understanding import LanguageUnderstandingEngine, UnderstandingResult
 
 
 @dataclass(frozen=True)
@@ -23,7 +24,7 @@ class ChatPartner:
     """
 
     TARGET_WORDS = {
-        "web": ("web", "ウェブ", "ブラウザ", "pwa"),
+        "web": ("web", "ウェブ", "ブラウザ", "pwa", "サイト", "ホームページ", "wordpress", "lp"),
         "android": ("android", "アンドロイド", "apk", "aab"),
         "ios": ("iphone", "ipad", "ios", "アイフォン", "アップル"),
         "windows": ("windows", "pc", "パソコン", "exe"),
@@ -43,7 +44,7 @@ class ChatPartner:
     }
     PROJECT_INTENT_WORDS = (
         "アプリ", "システム", "ツール", "webサイト", "ウェブサイト",
-        "サイトを作", "作って", "作りたい", "開発したい", "開発して",
+        "サイトを作", "ホームページ", "ポートフォリオ", "lp", "作って", "作りたい", "開発したい", "開発して",
         "自動化したい", "自動化して",
     )
     FEATURE_LABELS = {
@@ -60,19 +61,27 @@ class ChatPartner:
 
     def __init__(self, memory: DevelopmentMemory | None = None):
         self.memory = memory or DevelopmentMemory()
+        self.language = LanguageUnderstandingEngine()
+
+    def understand(self, text: str, context: dict | None = None) -> UnderstandingResult:
+        return self.language.interpret(text, context or {})
 
     def is_project_request(self, text: str) -> bool:
-        lowered = text.lower()
-        return any(word.lower() in lowered for word in self.PROJECT_INTENT_WORDS)
+        understood = self.understand(text)
+        lowered = understood.interpreted_text.lower()
+        return understood.mode in {"app", "web", "automation"} or any(
+            word.lower() in lowered for word in self.PROJECT_INTENT_WORDS
+        )
 
     def opening_response(self, text: str) -> str | None:
         """Handle lightweight conversation before a real project exists."""
-        normalized = re.sub(r"\s+", "", text).lower()
+        understood = self.understand(text)
+        normalized = re.sub(r"\s+", "", understood.interpreted_text).lower()
         greetings = ("こんにちは", "こんばんは", "おはよう", "やあ", "hello", "hi", "はじめまして")
         if any(word in normalized for word in greetings):
             return "こんにちは。まず相談だけでも大丈夫です。作りたいものが固まってから、内容を確認して制作に進みます。"
         if any(word in normalized for word in ("何ができる", "なにができる", "使い方", "どう使う")):
-            return "アプリの相談、要件整理、設計、作成、テスト、修正まで進められます。内容が曖昧な間は勝手に作らず、まず一緒に整理します。"
+            return "普通の会話に加えて、アプリ生成、Webサイト制作、自動化、要件整理、設計、作成、テスト、修正まで進められます。誤字や言い間違いも文脈からできるだけ補います。"
         if any(word in normalized for word in ("相談したい", "相談から", "まだ曖昧", "決まってない", "決まっていない")):
             return "もちろん。作りたいものが決まっていなくても大丈夫です。誰のどんな困りごとを楽にしたいか、そこから一緒に整理できます。"
         if not self.is_project_request(text):
@@ -80,15 +89,33 @@ class ChatPartner:
         return None
 
     def suggest_project_name(self, text: str) -> str:
-        cleaned = re.sub(r"[\r\n\t]+", " ", text).strip()
+        cleaned = re.sub(r"[\r\n\t]+", " ", self.understand(text).interpreted_text).strip()
         cleaned = re.sub(r"[。！？!?].*", "", cleaned)
         cleaned = cleaned[:22].strip(" 、,")
         return cleaned or "新しいアプリ"
 
     def handle(self, project_dir: Path, project_name: str, slug: str, user_text: str, *, has_generated: bool) -> ChatDecision:
-        text = user_text.strip()
+        original_text = user_text.strip()
         state = self._load(project_dir)
-        self._append(state, "user", text)
+        understood = self.understand(
+            original_text,
+            {
+                "project_slug": slug,
+                "current_project": project_name,
+                "current_mode": state.get("current_mode"),
+                "recent_messages": state.get("history", [])[-8:],
+            },
+        )
+        text = understood.interpreted_text
+        state["current_mode"] = understood.mode
+        state["last_understanding"] = understood.to_dict()
+        self._append(state, "user", original_text)
+
+        if understood.needs_confirmation:
+            msg = "意味は推測できますが、削除・本番・権限・課金などに関わる可能性があるため、この操作だけは対象を明確にして確認してから進めます。"
+            self._append(state, "assistant", msg)
+            self._save(project_dir, state)
+            return ChatDecision("ask", msg)
 
         if self._is_learning_question(text) and has_generated:
             decision = ChatDecision("explain", "生成したアプリを教材にして説明します。")
