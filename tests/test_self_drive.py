@@ -178,6 +178,17 @@ class SelfDriveTests(unittest.TestCase):
             self.assertEqual(calls.health, ["broken"])
             self.assertTrue(engine.recent(1))
 
+    def test_after_cycle_observer_runs_without_changing_execution(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            engine, calls = self.make_engine(root)
+            observed = []
+            engine.set_after_cycle(lambda result: observed.append(result["status"]))
+            result = engine.run_cycle(trigger="test")
+            self.assertEqual(result["actions_executed"], 1)
+            self.assertEqual(observed, ["completed"])
+            self.assertEqual(calls.growth, 1)
+
     def test_status_exposes_hard_protection_boundaries(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
