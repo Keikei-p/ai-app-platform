@@ -352,6 +352,7 @@ async function loadDownloads(){
 function setMode(mode){
   const allowed=['chat','app','web','automation','ivy_lab'];
   state.currentMode=allowed.includes(mode)?mode:'chat';
+  storageSet('aivy-mode',state.currentMode);
   $$('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.currentMode));
   const labels={chat:'CHAT',app:'APP',web:'WEB',automation:'AUTOMATION',ivy_lab:'IVY LAB'};
   const status=$('#modeStatus');if(status)status.innerHTML='<i></i>'+labels[state.currentMode];
@@ -368,8 +369,12 @@ function setMode(mode){
   }
 }
 async function newChat(){
+  saveDraft();
   const row=await api('/api/v1/conversations',{method:'POST',body:JSON.stringify({title:'新しいチャット'})});
-  state.currentThread=row;$('#messages').innerHTML='';$('#welcome').hidden=false;$('#topbarTitle').textContent='新しいチャット';setMode('chat');setView('home');await loadConversations();
+  state.currentThread=row;storageSet('aivy-last-thread',row.thread_id||'');
+  $('#messages').innerHTML='';$('#welcome').hidden=false;$('#topbarTitle').textContent='新しいチャット';
+  setMode('chat');setView('home');restoreDraft();await loadConversations();
+  $('#prompt')?.focus();
 }
 async function planGoal(text){
   const projectSlug=state.currentThread?.project_slug||null;
@@ -412,8 +417,10 @@ async function runSafeAgent(goal,projectSlug){
 }
 function setBusy(value){
   state.busy=value;
-  $('#sendButton').disabled=value;
-  $('#prompt').disabled=value;
+  const send=$('#sendButton');if(send)send.disabled=value;
+  const composer=$('#composer');if(composer)composer.classList.toggle('busy',value);
+  const hint=$('#composerHint');
+  if(hint)hint.textContent=value?'Aivyが作業中 · 次の依頼は入力して保存できます':'Enterで送信 · Shift+Enterで改行';
 }
 function showBuildApproval(instruction){
   state.pendingInstruction=instruction||state.lastGoal;
@@ -537,10 +544,16 @@ async function approveBuild(){
   }
 }
 async function send(text){
-  text=text.trim();if(!text||state.busy)return;
+  text=text.trim();if(!text)return;
+  if(state.busy){
+    saveDraft();
+    toast('Aivyは現在作業中です。入力内容は下書き保存しました。','info');
+    return;
+  }
   if(!state.currentThread)await newChat();
   state.lastGoal=text;
-  message('user',text);$('#prompt').value='';autoGrow();setBusy(true);
+  message('user',text);storageRemove(draftKey());$('#prompt').value='';autoGrow();setBusy(true);
+  const draftStatus=$('#draftStatus');if(draftStatus)draftStatus.textContent='下書き保存';
   try{
     const decision=await api('/api/v1/chat/turn',{
       method:'POST',
@@ -552,6 +565,7 @@ async function send(text){
     if(decision.action==='review'){
       await planGoal(decision.instruction||text);
       showBuildApproval(decision.instruction||text);
+      toast('設計内容を確認できます。問題なければ「この内容で作る」を押してください。','success');
     }else if(decision.action==='build'&&decision.project_slug&&decision.instruction){
       setBusy(false);
       await executeBuild(decision.project_slug,decision.instruction);
@@ -562,6 +576,7 @@ async function send(text){
     await loadConversations();
   }catch(e){
     message('assistant','Aivyが会話を処理できませんでした: '+e.message);
+    toast('会話処理でエラーが発生しました。','error');
   }finally{
     setBusy(false);
   }
