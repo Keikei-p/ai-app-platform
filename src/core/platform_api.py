@@ -155,6 +155,9 @@ class PlatformAPI:
                     if path == "/api/v1/learning/status":
                         self._json(200, api.service.learning_status())
                         return
+                    if path == "/api/v1/growth/status":
+                        self._json(200, api.service.autonomous_growth_status())
+                        return
                     if path == "/api/v1/learning/examples":
                         query = parse_qs(parsed.query)
                         limit = max(1, min(int((query.get("limit") or ["50"])[0]), 200))
@@ -288,12 +291,24 @@ class PlatformAPI:
                         row = api.service.create_conversation(str(data.get("title") or "新しいチャット"))
                         self._json(201, row)
                         return
+                    if path == "/api/v1/growth/run":
+                        self._json(200, api.service.run_autonomous_growth_cycle())
+                        return
+                    if path == "/api/v1/growth/settings":
+                        if "enabled" not in data or not isinstance(data.get("enabled"), bool):
+                            raise ValueError("enabled boolean is required")
+                        self._json(200, api.service.set_autonomous_growth(bool(data["enabled"])))
+                        return
                     if path == "/api/v1/chat/turn":
                         thread_id = str(data.get("thread_id") or "").strip()
                         message = str(data.get("message") or "").strip()
                         if not thread_id or not message:
                             raise ValueError("thread_id and message are required")
-                        row = api.service.chat_turn(thread_id, message)
+                        row = api.service.chat_turn(
+                            thread_id,
+                            message,
+                            preferred_mode=str(data.get("mode") or "") or None,
+                        )
                         self._json(200, row)
                         return
                     if path == "/api/v1/projects":
