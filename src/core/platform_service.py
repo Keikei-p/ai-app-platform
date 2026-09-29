@@ -58,6 +58,7 @@ from .accessibility_guardian import AccessibilityGuardian
 from .performance_guardian import PerformanceGuardian
 from .task_graph import TaskGraphPlanner
 from .release_guardian import ReleaseGuardian
+from .autonomous_growth import AutonomousGrowthEngine
 
 
 class PlatformService:
@@ -112,6 +113,7 @@ class PlatformService:
         self.stop_escalation = StopEscalationJudge()
         self.production_monitor = ProductionMonitor()
         self.learning_flywheel = AivyLearningFlywheel()
+        self.autonomous_growth = AutonomousGrowthEngine(self.learning_flywheel)
         self.missions = MissionStore()
         self.parallel_sandboxes = ParallelSandboxWorkerPool(
             engine=self.ai_engine,
@@ -204,6 +206,9 @@ class PlatformService:
                 "performance_guardian": True,
                 "task_dependency_graph": True,
                 "release_guardian": True,
+                "typo_tolerant_language_understanding": True,
+                "conversation_mode_router": True,
+                "autonomous_growth_skills": True,
             },
         }
 
@@ -658,6 +663,15 @@ class PlatformService:
     def learning_status(self) -> dict[str, Any]:
         return self.learning_flywheel.stats()
 
+    def autonomous_growth_status(self) -> dict[str, Any]:
+        return self.autonomous_growth.status()
+
+    def run_autonomous_growth_cycle(self) -> dict[str, Any]:
+        return self.autonomous_growth.run_cycle()
+
+    def set_autonomous_growth(self, enabled: bool) -> dict[str, Any]:
+        return self.autonomous_growth.set_enabled(enabled)
+
     def learning_examples(self, limit: int = 50) -> list[dict[str, Any]]:
         return [x.to_dict() for x in self.learning_flywheel.recent(max(1, min(limit, 200)))]
 
@@ -1024,7 +1038,12 @@ class PlatformService:
     def conversation_messages(self, thread_id: str) -> list[dict[str, str]]:
         return self.conversations.messages(thread_id)
 
-    def chat_turn(self, thread_id: str, text: str) -> dict[str, Any]:
+    def chat_turn(
+        self,
+        thread_id: str,
+        text: str,
+        preferred_mode: str | None = None,
+    ) -> dict[str, Any]:
         clean = text.strip()
         if not clean:
             raise ValueError("message is required")
@@ -1032,29 +1051,80 @@ class PlatformService:
         if thread is None:
             raise KeyError(thread_id)
 
-        if thread.project_slug:
-            slug = thread.project_slug
-            project_dir = safe_child(WORKSPACE_DIR, slug)
-            if not project_dir.is_dir():
-                raise FileNotFoundError(slug)
-            meta = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
-            project_name = str(meta.get("name") or slug)
-            has_generated = (project_dir / "app_spec.json").is_file()
-        else:
-            opening = self.chat.opening_response(clean)
-            if opening is not None:
+        prior_rows = self.conversations.messages(thread_id)
+        mode_hint = str(preferred_mode or "").strip().lower()
+        if mode_hint not in {"app", "web", "automation", "ivy_lab", "chat"}:
+            mode_hint = ""
+
+        understood = self.chat.understand(
+            clean,
+            {
+                "project_slug": thread.project_slug,
+                "current_mode": mode_hint or None,
+                "recent_messages": prior_rows[-8:],
+            },
+        )
+        interpreted = understood.interpreted_text
+        mode = mode_hint if mode_hint and understood.mode == "chat" else understood.mode
+
+        if not thread.project_slug:
+            if mode == "ivy_lab":
+                growth = self.autonomous_growth.status()
+                message = (
+                    "IVY LABとして受け取りました。Aivyは検証済みの成功ビルドだけを"
+                    "Skill化して次の制作へ再利用します。現在は "
+                    f"{growth.get('skills', 0)} Skill / "
+                    f"{growth.get('verified_examples', 0)} Verified Example。"
+                    "本体ソース、main、本番公開、課金、秘密情報は自律成長から除外しています。"
+                )
                 self.conversations.append(thread_id, "user", clean)
-                self.conversations.append(thread_id, "assistant", opening)
+                self.conversations.append(thread_id, "assistant", message)
                 return {
-                    "action": "chat",
-                    "message": opening,
-                    "instruction": None,
+                    "action": "ivy_lab",
+                    "message": message,
+                    "instruction": interpreted,
                     "project_slug": None,
+                    "mode": mode,
+                    "understanding": understood.to_dict(),
+                    "growth": growth,
                     "thread": asdict(self.conversations.get(thread_id)),
                 }
 
-            project_name = self.chat.suggest_project_name(clean)
-            prior_rows = self.conversations.messages(thread_id)
+            if mode == "chat" and not self.chat.is_project_request(interpreted):
+                reply = ""
+                ai_status = self.ai_engine.status()
+                if ai_status.connected:
+                    try:
+                        reply = self.ai_engine.reply(
+                            prior_rows[-20:],
+                            interpreted,
+                            (
+                                "あなたはAivy。自然な日本語で会話するAI開発パートナーです。"
+                                "誤字、脱字、表記揺れ、省略、音声入力の崩れを前後文脈から補って理解してください。"
+                                "ただし意味が分岐する時や、削除・本番公開・権限・課金など危険操作は勝手に決めつけません。"
+                                "実行していないテスト、変更、公開を実行済みと表現しないでください。"
+                                "会話は親しみやすく、必要以上に堅くしません。"
+                            ),
+                        ).strip()
+                    except Exception:
+                        reply = ""
+                if not reply:
+                    reply = self.chat.opening_response(interpreted) or (
+                        "もちろん。普通の相談でも大丈夫です。作りたいものや困っていることを、そのまま話してください。"
+                    )
+                self.conversations.append(thread_id, "user", clean)
+                self.conversations.append(thread_id, "assistant", reply)
+                return {
+                    "action": "chat",
+                    "message": reply,
+                    "instruction": None,
+                    "project_slug": None,
+                    "mode": mode,
+                    "understanding": understood.to_dict(),
+                    "thread": asdict(self.conversations.get(thread_id)),
+                }
+
+            project_name = self.chat.suggest_project_name(interpreted)
             created = self.create_project(project_name, thread_id)
             slug = str(created["slug"])
             project_dir = safe_child(WORKSPACE_DIR, slug)
@@ -1065,6 +1135,14 @@ class PlatformService:
                     str(row.get("content") or ""),
                 )
             has_generated = False
+        else:
+            slug = thread.project_slug
+            project_dir = safe_child(WORKSPACE_DIR, slug)
+            if not project_dir.is_dir():
+                raise FileNotFoundError(slug)
+            meta = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
+            project_name = str(meta.get("name") or slug)
+            has_generated = (project_dir / "app_spec.json").is_file()
 
         decision = self.chat.handle(
             project_dir,
@@ -1081,6 +1159,8 @@ class PlatformService:
             "message": decision.message,
             "instruction": decision.instruction,
             "project_slug": slug,
+            "mode": mode,
+            "understanding": understood.to_dict(),
             "thread": asdict(current) if current else None,
         }
 
@@ -1638,6 +1718,15 @@ class PlatformService:
                     verified=True,
                     evidence_ref=certificate_path.relative_to(project_dir).as_posix(),
                 )
+
+            growth_cycle = (
+                self.autonomous_growth.run_cycle()
+                if isinstance(learning_capture, dict) and learning_capture.get("captured")
+                else self.autonomous_growth.status()
+            )
+            growth_pipeline = dict(result.pipeline_report or {})
+            growth_pipeline["autonomous_growth"] = growth_cycle
+            result.pipeline_report = growth_pipeline
 
             learning_example = learning_capture.get("example") if isinstance(learning_capture, dict) else None
             if (
