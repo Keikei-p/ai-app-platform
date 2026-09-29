@@ -1074,19 +1074,55 @@ class PlatformService:
 
         if not thread.project_slug:
             if mode == "ivy_lab":
-                growth = self.autonomous_growth.status()
-                message = (
-                    "IVY LABとして受け取りました。Aivyは検証済みの成功ビルドだけを"
-                    "Skill化して次の制作へ再利用します。現在は "
-                    f"{growth.get('skills', 0)} Skill / "
-                    f"{growth.get('verified_examples', 0)} Verified Example。"
-                    "本体ソース、main、本番公開、課金、秘密情報は自律成長から除外しています。"
+                growth_request = any(
+                    word in interpreted
+                    for word in ("成長させ", "成長して", "学習して", "賢くな", "自主トレ", "自己成長")
                 )
+                growth = (
+                    self.autonomous_growth.run_cycle()
+                    if growth_request
+                    else self.autonomous_growth.status()
+                )
+                reply = ""
+                ai_status = self.ai_engine.status()
+                if ai_status.connected and not growth_request:
+                    try:
+                        reply = self.ai_engine.reply(
+                            prior_rows[-20:],
+                            interpreted,
+                            (
+                                "あなたはAivy自身についてユーザーと話すIVY LAB会話AIです。"
+                                "Aivyの成長はEvidence付き成功例のSkill化を中心に説明してください。"
+                                "自律成長はAivy本体ソース、main、秘密情報、課金、本番公開を勝手に変更しません。"
+                                "実際に行っていない自己改造やテストを行ったとは言わないでください。"
+                                "\ngrowth_status:\n"
+                                + json.dumps(growth, ensure_ascii=False)
+                            ),
+                        ).strip()
+                    except Exception:
+                        reply = ""
+                if not reply:
+                    if growth_request:
+                        reply = (
+                            "安全な成長サイクルを実行しました。"
+                            f" Skill追加 {growth.get('skills_added', 0)}件、"
+                            f"更新 {growth.get('skills_updated', 0)}件、"
+                            f"合計 {growth.get('total_skills', growth.get('skills', 0))}件です。"
+                            " 本体ソース、main、本番公開、課金、秘密情報には触れていません。"
+                        )
+                    else:
+                        reply = (
+                            "IVY LABとして受け取りました。Aivyは検証済みの成功ビルドだけを"
+                            "Skill化して次の制作へ再利用します。現在は "
+                            f"{growth.get('skills', 0)} Skill / "
+                            f"{growth.get('verified_examples', 0)} Verified Example。"
+                            "本体ソース、main、本番公開、課金、秘密情報は自律成長から除外しています。"
+                        )
                 self.conversations.append(thread_id, "user", clean)
-                self.conversations.append(thread_id, "assistant", message)
+                self.conversations.append(thread_id, "assistant", reply)
                 return {
                     "action": "ivy_lab",
-                    "message": message,
+                    "message": reply,
                     "instruction": interpreted,
                     "project_slug": None,
                     "mode": mode,
