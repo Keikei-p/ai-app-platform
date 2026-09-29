@@ -1124,6 +1124,13 @@ class PlatformService:
             if mode_hint in {"app", "web", "automation", "ivy_lab"}
             else understood.mode
         )
+        intent = self.conversation_brain.classify(
+            interpreted,
+            has_project=bool(thread.project_slug),
+            mode=mode,
+            history=prior_rows,
+        )
+        continuity = self.conversation_brain.continuity_digest(prior_rows)
 
         if not thread.project_slug:
             if mode == "ivy_lab":
