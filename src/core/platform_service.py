@@ -1134,6 +1134,8 @@ class PlatformService:
             mode=mode,
             history=prior_rows,
         )
+        if intent.kind == "ivy_lab":
+            mode = "ivy_lab"
         continuity = self.conversation_brain.continuity_digest(prior_rows)
 
         if not thread.project_slug:
