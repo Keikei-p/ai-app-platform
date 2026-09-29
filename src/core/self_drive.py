@@ -83,6 +83,7 @@ class SelfDriveEngine:
         self._cycle_lock = Lock()
         self._thread_lock = Lock()
         self._background_started = False
+        self._after_cycle: Callable[[dict[str, Any]], Any] | None = None
 
     def settings(self) -> dict[str, Any]:
         default = {
@@ -130,6 +131,12 @@ class SelfDriveEngine:
         ):
             cfg[key] = False
         return cfg
+
+    def set_after_cycle(
+        self,
+        callback: Callable[[dict[str, Any]], Any] | None,
+    ) -> None:
+        self._after_cycle = callback
 
     def set_enabled(self, enabled: bool) -> dict[str, Any]:
         cfg = self.settings()
@@ -321,6 +328,11 @@ class SelfDriveEngine:
                     "created_at": _now(),
                 }
                 self._append(result)
+                if self._after_cycle is not None:
+                    try:
+                        self._after_cycle(result)
+                    except Exception:
+                        pass
                 return result
 
             queue = self.plan()
@@ -333,6 +345,11 @@ class SelfDriveEngine:
                     "created_at": _now(),
                 }
                 self._append(result)
+                if self._after_cycle is not None:
+                    try:
+                        self._after_cycle(result)
+                    except Exception:
+                        pass
                 return result
 
             task = queue[0]
@@ -375,6 +392,12 @@ class SelfDriveEngine:
                     "paid_action": False,
                 }
             self._append(result)
+            if self._after_cycle is not None:
+                try:
+                    self._after_cycle(result)
+                except Exception:
+                    # Observability refresh must never break self-drive execution.
+                    pass
             return result
         finally:
             self._cycle_lock.release()
