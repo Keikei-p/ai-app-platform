@@ -18,6 +18,9 @@ class GrowthUIContractTests(unittest.TestCase):
         self.assertIn("/api/v1/growth/settings", app)
         self.assertIn("mode:state.currentMode", app)
         self.assertIn("放置成長ループ稼働中", app)
+        api = (ROOT / "src" / "core" / "platform_api.py").read_text(encoding="utf-8")
+        self.assertIn("/api/v1/growth/status", api)
+        self.assertIn("/api/v1/growth/run", api)
 
     def test_growth_ui_explains_protected_scope(self):
         html = (ROOT / "webui" / "index.html").read_text(encoding="utf-8")
