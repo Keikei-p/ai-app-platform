@@ -38,6 +38,10 @@ class LanguageUnderstandingTests(unittest.TestCase):
         )
         self.assertLess(without_context.confidence, with_context.confidence)
 
+    def test_plain_aivy_name_mention_stays_in_normal_chat(self):
+        row = self.engine.interpret("アイビーって何ができるの？")
+        self.assertEqual(row.mode, "chat")
+
     def test_self_drive_phrase_routes_to_ivy_lab(self):
         row = self.engine.interpret("よし自走してほしい")
         self.assertEqual(row.mode, "ivy_lab")
