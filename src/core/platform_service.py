@@ -63,6 +63,7 @@ from .autonomous_growth import AutonomousGrowthEngine
 from .self_practice import SelfPracticeEngine
 from .self_drive import SelfDriveEngine
 from .autonomous_backlog import AutonomousBacklog
+from .daily_evolution import DailyEvolutionEngine
 
 
 class PlatformService:
@@ -138,7 +139,6 @@ class PlatformService:
             arena=self.candidate_arena,
             promote_skill=self.autonomous_growth.promote_practice_skill,
         )
-        self.autonomous_growth.set_practice_runner(self.self_practice.run_one)
         self.autonomous_growth.start_background()
         self.accessibility_guardian = AccessibilityGuardian()
         self.performance_guardian = PerformanceGuardian()
@@ -170,6 +170,14 @@ class PlatformService:
             lambda _result: self.autonomous_backlog.mark_refresh_after_action()
         )
         self.autonomous_backlog.refresh()
+        self.daily_evolution = DailyEvolutionEngine(
+            growth_cycle=self.run_autonomous_growth_cycle,
+            growth_status=self.autonomous_growth.status,
+            practice_cycle=self.run_self_practice,
+            practice_status=self.self_practice.status,
+            backlog_refresh=self.autonomous_backlog.refresh,
+        )
+        self.daily_evolution.start_background()
         self.self_drive.start_background()
 
     def status(self) -> dict[str, Any]:
@@ -254,6 +262,9 @@ class PlatformService:
                 "self_drive_approval_boundary": True,
                 "persistent_daily_backlog": True,
                 "autonomous_daily_priorities": True,
+                "daily_evolution_engine": True,
+                "daily_evolution_catchup": True,
+                "daily_evolution_single_practice": True,
             },
         }
 
@@ -754,6 +765,15 @@ class PlatformService:
 
     def autonomous_backlog_status(self) -> dict[str, Any]:
         return self.autonomous_backlog.refresh()
+
+    def daily_evolution_status(self) -> dict[str, Any]:
+        return self.daily_evolution.status()
+
+    def run_daily_evolution(self) -> dict[str, Any]:
+        return self.daily_evolution.run_if_due(trigger="manual", force=True)
+
+    def set_daily_evolution(self, enabled: bool) -> dict[str, Any]:
+        return self.daily_evolution.set_enabled(enabled)
 
     def learning_examples(self, limit: int = 50) -> list[dict[str, Any]]:
         return [x.to_dict() for x in self.learning_flywheel.recent(max(1, min(limit, 200)))]
