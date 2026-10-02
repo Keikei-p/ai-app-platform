@@ -52,6 +52,11 @@ class LanguageUnderstandingTests(unittest.TestCase):
         self.assertEqual(row.mode, "ivy_lab")
         self.assertGreaterEqual(row.confidence, 0.8)
 
+    def test_daily_evolution_phrase_routes_to_ivy_lab(self):
+        row = self.engine.interpret("アイビーを毎日自動で進化させて")
+        self.assertEqual(row.mode, "ivy_lab")
+        self.assertGreaterEqual(row.confidence, 0.8)
+
     def test_risky_corrected_instruction_requires_confirmation(self):
         row = self.engine.interpret("ファイやベースの本番DBを削除して")
         self.assertTrue(row.dangerous)
