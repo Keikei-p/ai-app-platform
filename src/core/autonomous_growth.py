@@ -137,16 +137,8 @@ class AutonomousGrowthEngine:
                 except Exception:
                     # Autonomous learning must never crash the host application.
                     pass
-                if self._practice_runner is not None:
-                    try:
-                        practice = self._practice_runner()
-                        raw = self._read_settings_raw()
-                        raw.update(self.settings())
-                        raw["last_background_practice"] = practice
-                        self._write_json(self.settings_path, raw)
-                    except Exception:
-                        # Practice is bounded and must never crash Aivy.
-                        pass
+                # Deep self-practice is intentionally not run here.
+                # The once-per-day DailyEvolutionEngine owns practice cadence.
 
     def status(self) -> dict[str, Any]:
         cfg = self.settings()
@@ -164,7 +156,8 @@ class AutonomousGrowthEngine:
             "last_result": raw.get("last_result"),
             "last_background_practice": raw.get("last_background_practice"),
             "background_active": str(self.settings_path.resolve()) in _BACKGROUND_PATHS,
-            "practice_runner_connected": self._practice_runner is not None,
+            "practice_runner_connected": False,
+            "practice_cadence": "daily_evolution_only",
             "allow_source_self_edit": False,
             "allow_main_merge": False,
             "allow_external_publish": False,
