@@ -737,12 +737,45 @@ async function loadGrowthLab(){
   const driveHeadline=$('#selfDriveHeadline');const driveSummary=$('#selfDriveSummary');const driveToggle=$('#toggleSelfDrive');
   if(!headline||!summary||!toggle||!driveHeadline||!driveSummary||!driveToggle)return;
   try{
-    const [data,practice,drive,backlog]=await Promise.all([
+    const [data,practice,drive,backlog,daily]=await Promise.all([
       api('/api/v1/growth/status'),
       api('/api/v1/practice/status'),
       api('/api/v1/self-drive/status'),
-      api('/api/v1/backlog/today')
+      api('/api/v1/backlog/today'),
+      api('/api/v1/daily-evolution/status')
     ]);
+
+    const dailyLast=daily.last_result||{};
+    const delta=dailyLast.evolution_delta||{};
+    const dailyPractice=dailyLast.practice||{};
+    const dailyPromotion=dailyPractice.promotion||{};
+    $('#dailyEvolutionHeadline').textContent=daily.enabled
+      ? (daily.due_today?'毎日進化 · 今日まだ未実行':'毎日進化 · 今日の進化完了')
+      : '毎日進化 OFF';
+    $('#dailyEvolutionSummary').textContent=
+      (daily.background_active?'自動チェック稼働中 · ':'')+
+      '起動時に未実行なら自動進化 · 以後30分ごとに日付確認'+
+      (daily.last_run_at?' · 最終 '+fmt(daily.last_run_at):'');
+    $('#dailyEvolutionDue').textContent=daily.enabled?(daily.due_today?'未実行':'完了'):'OFF';
+    $('#dailyEvolutionSkills').textContent=daily.skills||0;
+    $('#dailyEvolutionWeaknesses').textContent=daily.weaknesses||0;
+    $('#dailyEvolutionPractice').textContent=dailyPromotion.promoted?'Skill昇格':(dailyLast.ran?'確認済み':'—');
+    const dailyButton=$('#toggleDailyEvolution');
+    dailyButton.textContent=daily.enabled?'毎日進化をOFF':'毎日進化をON';
+    dailyButton.dataset.enabled=daily.enabled?'true':'false';
+    const dailyLastTarget=$('#dailyEvolutionLast');
+    if(dailyLastTarget){
+      if(!daily.last_run_at){
+        dailyLastTarget.innerHTML='<span class="meta">まだ日次進化履歴はありません。</span>';
+      }else{
+        dailyLastTarget.innerHTML=
+          '<strong>'+esc(dailyLast.status||'completed')+'</strong>'+
+          ' · Skill '+esc(delta.skills_before??daily.skills??0)+' → '+esc(delta.skills_after??daily.skills??0)+
+          ' · 弱点 '+esc(delta.weaknesses_before??daily.weaknesses??0)+' → '+esc(delta.weaknesses_after??daily.weaknesses??0)+
+          (delta.practice_promoted?' · 自主トレSkill昇格':' · 自主トレ確認済み')+
+          ' · '+esc(fmt(daily.last_run_at));
+      }
+    }
 
     const counts=backlog.counts||{};
     const focus=backlog.focus||[];
@@ -831,6 +864,34 @@ async function loadGrowthLab(){
     headline.textContent='成長状態を取得できませんでした';
     summary.textContent=e.message;
   }
+}
+async function toggleDailyEvolution(){
+  const button=$('#toggleDailyEvolution');if(!button)return;
+  const next=button.dataset.enabled!=='true';
+  button.disabled=true;
+  try{
+    await api('/api/v1/daily-evolution/settings',{method:'POST',body:JSON.stringify({enabled:next})});
+    toast(next?'毎日自動進化をONにしました。':'毎日自動進化をOFFにしました。',next?'success':'info');
+    await loadGrowthLab();
+  }catch(e){
+    toast('毎日進化の設定を変更できませんでした: '+e.message,'error');
+  }finally{button.disabled=false;}
+}
+async function runDailyEvolution(){
+  const button=$('#runDailyEvolution');if(!button)return;
+  button.disabled=true;button.textContent='進化中…';
+  try{
+    const data=await api('/api/v1/daily-evolution/run',{method:'POST',body:'{}'});
+    const delta=data.evolution_delta||{};
+    toast(
+      'Aivy進化: Skill '+(delta.skills_before??0)+' → '+(delta.skills_after??0)+
+      (delta.practice_promoted?' · 自主トレSkill昇格':''), 
+      data.status==='completed'?'success':'info'
+    );
+    await loadGrowthLab();
+  }catch(e){
+    toast('日次進化を完了できませんでした: '+e.message,'error');
+  }finally{button.disabled=false;button.textContent='今すぐ進化する';}
 }
 async function refreshBacklog(){
   const button=$('#refreshBacklog');if(!button)return;
@@ -937,7 +998,7 @@ document.querySelectorAll('[data-starter-mode]').forEach(b=>b.onclick=()=>{
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 document.querySelectorAll('[data-mobile-view]').forEach(b=>b.onclick=()=>setView(b.dataset.mobileView));
 $('#mobileNewChat').onclick=newChat;
-$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;storageSet('ui-theme',next);};
 document.addEventListener('keydown',e=>{
