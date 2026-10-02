@@ -1192,6 +1192,14 @@ class PlatformService:
                         "勝手に進め", "自分で進め",
                     )
                 )
+                daily_evolution_request = any(
+                    word in interpreted
+                    for word in ("毎日進化", "毎日成長", "毎日自動", "自動進化")
+                )
+                daily_evolution_status_request = any(
+                    word in interpreted
+                    for word in ("今日進化した", "進化した？", "進化した?")
+                )
                 practice_request = any(
                     word in interpreted
                     for word in ("自主トレ", "自主練", "練習して", "弱点を鍛え", "弱点を直")
@@ -1203,11 +1211,18 @@ class PlatformService:
 
                 self_drive = self.self_drive.status()
                 backlog = self.autonomous_backlog.refresh()
+                daily_evolution = self.daily_evolution.status()
+                daily_evolution_cycle = None
                 drive_cycle = None
                 if self_drive_request:
                     self_drive = self.self_drive.set_enabled(True)
                     drive_cycle = self.self_drive.run_cycle(trigger="chat")
                     backlog = self.autonomous_backlog.refresh()
+
+                if daily_evolution_request:
+                    daily_evolution = self.daily_evolution.set_enabled(True)
+                    daily_evolution_cycle = self.daily_evolution.run_if_due(trigger="chat")
+                    daily_evolution = self.daily_evolution.status()
 
                 growth = (
                     self.autonomous_growth.run_cycle()
@@ -1220,7 +1235,11 @@ class PlatformService:
 
                 reply = ""
                 if not (
-                    growth_request or practice_request or self_drive_request
+                    growth_request
+                    or practice_request
+                    or self_drive_request
+                    or daily_evolution_request
+                    or daily_evolution_status_request
                 ):
                     try:
                         reply = self.ai_engine.reply_resilient(
@@ -1236,6 +1255,8 @@ class PlatformService:
                                 "実際に行っていない自己改造やテストを行ったとは言わないでください。"
                                 "\nself_drive_status:\n"
                                 + json.dumps(self_drive, ensure_ascii=False)
+                                + "\ndaily_evolution_status:\n"
+                                + json.dumps(daily_evolution, ensure_ascii=False)
                                 + "\ndaily_backlog:\n"
                                 + json.dumps(backlog, ensure_ascii=False)
                                 + "\ngrowth_status:\n"
@@ -1247,7 +1268,38 @@ class PlatformService:
                     except Exception:
                         reply = ""
                 if not reply:
-                    if self_drive_request:
+                    if daily_evolution_request:
+                        cycle = daily_evolution_cycle or {}
+                        if cycle.get("status") == "already_completed_today":
+                            evolution_summary = "今日はすでに進化済みです。"
+                        elif cycle.get("status") == "completed":
+                            delta = cycle.get("evolution_delta") or {}
+                            evolution_summary = (
+                                "今日の進化を実行しました。"
+                                f" Skill {delta.get('skills_before', 0)} → {delta.get('skills_after', 0)}。"
+                                + (" 自主トレSkillも昇格しました。" if delta.get("practice_promoted") else "")
+                            )
+                        else:
+                            evolution_summary = f"日次進化状態: {cycle.get('status', '確認済み')}。"
+                        reply = (
+                            "毎日自動進化をONにしました。"
+                            " その日の最初の起動時に未実行なら自動進化し、"
+                            "起動中は30分ごとに日付変更を確認します。"
+                            + evolution_summary
+                            + " 本体ソース・main・本番公開・課金・秘密情報は自動変更しません。"
+                        )
+                    elif daily_evolution_status_request:
+                        reply = (
+                            "今日の毎日進化は "
+                            f"{'未実行' if daily_evolution.get('due_today') else '完了'}。"
+                            f" 現在 {daily_evolution.get('skills', 0)} Skill / "
+                            f"{daily_evolution.get('weaknesses', 0)} Weakness。"
+                            + (
+                                f" 最終実行: {daily_evolution.get('last_run_at')}。"
+                                if daily_evolution.get("last_run_at") else ""
+                            )
+                        )
+                    elif self_drive_request:
                         task = (drive_cycle or {}).get("task") or {}
                         outcome = (drive_cycle or {}).get("outcome") or {}
                         if (drive_cycle or {}).get("status") == "idle":
@@ -1312,6 +1364,8 @@ class PlatformService:
                     "growth": growth,
                     "practice": practice,
                     "self_drive": self_drive,
+                    "daily_evolution": daily_evolution,
+                    "daily_evolution_cycle": daily_evolution_cycle,
                     "backlog": backlog,
                     "drive_cycle": drive_cycle,
                     "thread": asdict(self.conversations.get(thread_id)),
