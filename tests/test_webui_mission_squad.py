@@ -15,9 +15,9 @@ class WebUIMissionSquadTests(unittest.TestCase):
 
     def test_mission_buttons_bind_to_all_cards(self):
         app = (ROOT / "webui" / "app.js").read_text(encoding="utf-8")
-        self.assertIn("$$('.mission-run').forEach", app)
-        self.assertIn("$$('.mission-pause').forEach", app)
-        self.assertIn("$$('.mission-cancel').forEach", app)
+        self.assertIn("document.querySelectorAll('.mission-run').forEach", app)
+        self.assertIn("document.querySelectorAll('.mission-pause').forEach", app)
+        self.assertIn("document.querySelectorAll('.mission-cancel').forEach", app)
         self.assertNotIn("$(' .mission-run').forEach", app)
 
     def test_mission_cards_show_persisted_squad(self):
