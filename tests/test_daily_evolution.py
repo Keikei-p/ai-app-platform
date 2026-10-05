@@ -12,6 +12,7 @@ class Calls:
         self.growth = 0
         self.practice = 0
         self.backlog = 0
+        self.strategy = 0
         self.skills = 2
         self.weaknesses = 3
 
@@ -53,6 +54,20 @@ class DailyEvolutionTests(unittest.TestCase):
                 "practice_queue": [{"id": 1}] if calls.weaknesses else [],
             }
 
+        def strategy_cycle():
+            calls.strategy += 1
+            return {
+                "status": "mission_created",
+                "mission_created": True,
+                "mission": {"mission_id": "m1"},
+            }
+
+        def strategy_status():
+            return {
+                "active_goals": 1,
+                "waiting_on_mission": 0,
+            }
+
         def backlog_refresh():
             calls.backlog += 1
             return {
@@ -67,6 +82,8 @@ class DailyEvolutionTests(unittest.TestCase):
             practice_cycle=practice_cycle,
             practice_status=practice_status,
             backlog_refresh=backlog_refresh,
+            strategy_cycle=strategy_cycle,
+            strategy_status=strategy_status,
             settings_path=root / "daily.json",
             history_path=root / "daily_history.jsonl",
         )
@@ -86,6 +103,9 @@ class DailyEvolutionTests(unittest.TestCase):
             self.assertEqual(calls.growth, 1)
             self.assertEqual(calls.practice, 1)
             self.assertEqual(calls.backlog, 1)
+            self.assertEqual(calls.strategy, 1)
+            self.assertTrue(first["strategy"]["mission_created"])
+            self.assertEqual(engine.status()["active_strategic_goals"], 1)
             self.assertFalse(engine.status()["due_today"])
 
     def test_partial_failure_remains_due_and_retries(self):
@@ -115,6 +135,27 @@ class DailyEvolutionTests(unittest.TestCase):
             self.assertEqual(normal["status"], "already_completed_today")
             self.assertEqual(calls.growth, 2)
             self.assertEqual(calls.practice, 2)
+
+    def test_strategy_failure_keeps_daily_cycle_due(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            calls = Calls()
+
+            engine = DailyEvolutionEngine(
+                growth_cycle=lambda: {"status": "completed"},
+                growth_status=lambda: {"skills": 1, "verified_examples": 1},
+                practice_cycle=lambda: {"status": "completed", "promotion": {"promoted": False}},
+                practice_status=lambda: {"weaknesses": [], "practice_queue": []},
+                backlog_refresh=lambda: {"date": "today", "counts": {}, "focus": []},
+                strategy_cycle=lambda: (_ for _ in ()).throw(RuntimeError("synthetic strategy failure")),
+                strategy_status=lambda: {"active_goals": 1, "waiting_on_mission": 0},
+                settings_path=root / "daily.json",
+                history_path=root / "daily_history.jsonl",
+            )
+            row = engine.run_if_due(trigger="test")
+            self.assertEqual(row["status"], "partial")
+            self.assertTrue(any(x["stage"] == "strategy" for x in row["errors"]))
+            self.assertTrue(engine.status()["due_today"])
 
     def test_protected_scope_and_daily_budget_are_hard_bounded(self):
         with TemporaryDirectory() as tmp:
