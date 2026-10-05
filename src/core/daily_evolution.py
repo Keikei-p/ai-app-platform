@@ -53,6 +53,8 @@ class DailyEvolutionEngine:
         practice_cycle: Callable[[], dict[str, Any]],
         practice_status: Callable[[], dict[str, Any]],
         backlog_refresh: Callable[[], dict[str, Any]],
+        strategy_cycle: Callable[[], dict[str, Any]] | None = None,
+        strategy_status: Callable[[], dict[str, Any]] | None = None,
         settings_path: Path | None = None,
         history_path: Path | None = None,
     ):
@@ -61,6 +63,8 @@ class DailyEvolutionEngine:
         self.practice_cycle = practice_cycle
         self.practice_status = practice_status
         self.backlog_refresh = backlog_refresh
+        self.strategy_cycle = strategy_cycle
+        self.strategy_status = strategy_status
         self.settings_path = settings_path or (DATA_DIR / "aivy_daily_evolution.json")
         self.history_path = history_path or (DATA_DIR / "aivy_daily_evolution_history.jsonl")
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -146,6 +150,7 @@ class DailyEvolutionEngine:
         last_completed_day = str(raw.get("last_completed_day") or "")
         growth = self.growth_status()
         practice = self.practice_status()
+        strategy = self.strategy_status() if self.strategy_status is not None else {}
         return {
             "enabled": bool(cfg["enabled"]),
             "background_active": self._background_started,
@@ -160,6 +165,8 @@ class DailyEvolutionEngine:
             "verified_examples": int(growth.get("verified_examples") or 0),
             "weaknesses": len(practice.get("weaknesses") or []),
             "practice_queue": len(practice.get("practice_queue") or []),
+            "active_strategic_goals": int(strategy.get("active_goals") or 0),
+            "strategic_waiting_on_mission": int(strategy.get("waiting_on_mission") or 0),
             "protected_scope": list(PROTECTED_SCOPE),
             "source_self_edit_allowed": False,
             "main_merge_allowed": False,
@@ -213,6 +220,7 @@ class DailyEvolutionEngine:
 
             growth_result: dict[str, Any]
             practice_result: dict[str, Any]
+            strategy_result: dict[str, Any]
             backlog_result: dict[str, Any]
             errors: list[dict[str, str]] = []
 
@@ -245,6 +253,23 @@ class DailyEvolutionEngine:
                     "message": str(exc)[:1000],
                 })
 
+            if self.strategy_cycle is not None:
+                try:
+                    strategy_result = self.strategy_cycle()
+                except Exception as exc:
+                    strategy_result = {
+                        "status": "failed",
+                        "error_type": type(exc).__name__,
+                        "message": str(exc)[:1000],
+                    }
+                    errors.append({
+                        "stage": "strategy",
+                        "error_type": type(exc).__name__,
+                        "message": str(exc)[:1000],
+                    })
+            else:
+                strategy_result = {"status": "not_configured", "mission_created": False}
+
             try:
                 backlog_result = self.backlog_refresh()
             except Exception as exc:
@@ -271,6 +296,7 @@ class DailyEvolutionEngine:
                 "duration_ms": int((time.monotonic() - started) * 1000),
                 "growth": growth_result,
                 "practice": practice_result,
+                "strategy": strategy_result,
                 "backlog": {
                     "date": backlog_result.get("date"),
                     "counts": backlog_result.get("counts"),
