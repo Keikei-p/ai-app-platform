@@ -64,6 +64,7 @@ from .self_practice import SelfPracticeEngine
 from .self_drive import SelfDriveEngine
 from .autonomous_backlog import AutonomousBacklog
 from .daily_evolution import DailyEvolutionEngine
+from .strategic_goals import StrategicGoalStore, StrategicAutonomyEngine
 
 
 class PlatformService:
@@ -170,12 +171,22 @@ class PlatformService:
             lambda _result: self.autonomous_backlog.mark_refresh_after_action()
         )
         self.autonomous_backlog.refresh()
+        self.strategic_goals = StrategicGoalStore()
+        self.strategic_autonomy = StrategicAutonomyEngine(
+            store=self.strategic_goals,
+            list_projects=self.list_project_cards,
+            project_detail=self.project_detail,
+            list_missions=self.list_missions,
+            create_mission=self.create_mission,
+        )
         self.daily_evolution = DailyEvolutionEngine(
             growth_cycle=self.run_autonomous_growth_cycle,
             growth_status=self.autonomous_growth.status,
             practice_cycle=self.run_self_practice,
             practice_status=self.self_practice.status,
             backlog_refresh=self.autonomous_backlog.refresh,
+            strategy_cycle=lambda: self.strategic_autonomy.run_cycle(trigger="daily_evolution"),
+            strategy_status=self.strategic_autonomy.status,
         )
         self.daily_evolution.start_background()
         self.self_drive.start_background()
@@ -265,6 +276,9 @@ class PlatformService:
                 "daily_evolution_engine": True,
                 "daily_evolution_catchup": True,
                 "daily_evolution_single_practice": True,
+                "strategic_long_term_goals": True,
+                "automatic_bounded_mission_generation": True,
+                "strategic_mission_approval_boundary": True,
             },
         }
 
@@ -765,6 +779,36 @@ class PlatformService:
 
     def autonomous_backlog_status(self) -> dict[str, Any]:
         return self.autonomous_backlog.refresh()
+
+    def strategic_goal_status(self) -> dict[str, Any]:
+        return self.strategic_autonomy.status()
+
+    def create_strategic_goal(
+        self,
+        *,
+        project_slug: str,
+        objective: str,
+        max_auto_missions: int = 12,
+    ) -> dict[str, Any]:
+        return self.strategic_autonomy.create_goal(
+            project_slug=project_slug,
+            objective=objective,
+            max_auto_missions=max_auto_missions,
+        )
+
+    def pause_strategic_goal(self, goal_id: str) -> dict[str, Any]:
+        return self.strategic_goals.pause(goal_id).to_dict()
+
+    def resume_strategic_goal(self, goal_id: str) -> dict[str, Any]:
+        return self.strategic_goals.resume(goal_id).to_dict()
+
+    def cancel_strategic_goal(self, goal_id: str) -> dict[str, Any]:
+        return self.strategic_goals.cancel(goal_id).to_dict()
+
+    def run_strategic_goal_cycle(self) -> dict[str, Any]:
+        result = self.strategic_autonomy.run_cycle(trigger="manual")
+        self.autonomous_backlog.refresh()
+        return result
 
     def daily_evolution_status(self) -> dict[str, Any]:
         return self.daily_evolution.status()
