@@ -140,11 +140,25 @@
           <div class="page-heading">
             <div><span class="eyebrow">MISSION CONTROL</span><h2>長時間ミッション</h2><p>目標・進捗・承認待ち・再開地点を保存しながらAivyに仕事を任せます。</p></div>
           </div>
+          <div class="strategic-goal-card data-card">
+            <div class="strategic-goal-head">
+              <div><span class="eyebrow">LONG-TERM AUTONOMY</span><h3>長期目標</h3><p>1回だけ目標を渡すと、Aivyが毎日1件までMissionへ分解して進めます。</p></div>
+              <button id="runStrategicGoal" class="agent-action secondary" type="button">次のMissionを考える</button>
+            </div>
+            <div class="strategic-goal-create">
+              <select id="strategicProject" class="search" aria-label="長期目標の対象アプリ"></select>
+              <textarea id="strategicObjective" rows="3" placeholder="例：このアプリを初心者でも迷わず使える完成版へ育てる" aria-label="長期目標"></textarea>
+              <button id="createStrategicGoal" class="agent-action" type="button">長期目標を登録</button>
+            </div>
+            <p class="meta">Mission作成までは自動。Build・本番公開・課金・main変更など保護操作は人の承認で停止します。</p>
+            <div id="strategicGoalGrid" class="strategic-goal-grid"></div>
+          </div>
+
           <div class="mission-create data-card">
             <select id="missionProject" class="search" aria-label="対象アプリ"></select>
             <textarea id="missionGoal" rows="3" placeholder="Aivyに長時間任せたい目標…" aria-label="ミッション目標"></textarea>
             <button id="createMission" class="agent-action" type="button">ミッションを作成</button>
-            <p class="meta">コード生成の直前で人の承認を要求します。停止・再起動後もミッション状態は保存されます。</p>
+            <p class="meta">単発Mission。コード生成の直前で人の承認を要求します。停止・再起動後も状態は保存されます。</p>
           </div>
           <div class="mission-grid" id="missionGrid"></div>
         </div>
