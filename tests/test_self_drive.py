@@ -189,6 +189,16 @@ class SelfDriveTests(unittest.TestCase):
             self.assertEqual(observed, ["completed"])
             self.assertEqual(calls.growth, 1)
 
+    def test_deep_practice_is_not_scheduled_by_self_drive(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            engine, calls = self.make_engine(root)
+            queue = engine.plan()
+            self.assertFalse(any(x.kind == "practice" for x in queue))
+            self.assertEqual(engine.status()["practice_cadence"], "daily_evolution_only")
+            engine.run_cycle(trigger="test")
+            self.assertEqual(calls.practice, 0)
+
     def test_status_exposes_hard_protection_boundaries(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
