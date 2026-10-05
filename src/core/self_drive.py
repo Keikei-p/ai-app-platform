@@ -93,7 +93,6 @@ class SelfDriveEngine:
             "project_health_cooldown_seconds": 21600,
             "mission_cooldown_seconds": 1800,
             "growth_cooldown_seconds": 1800,
-            "practice_cooldown_seconds": 1800,
             "allow_source_self_edit": False,
             "allow_main_merge": False,
             "allow_production_deploy": False,
@@ -187,6 +186,7 @@ class SelfDriveEngine:
             "background_active": self._background_started,
             "interval_seconds": int(cfg["interval_seconds"]),
             "max_actions_per_cycle": 1,
+            "practice_cadence": "daily_evolution_only",
             "queue": [x.to_dict() for x in queue[:8]],
             "queue_count": len(queue),
             "approval_waiting": len(approvals),
@@ -288,22 +288,6 @@ class SelfDriveEngine:
                 reason="成功Evidenceを再利用Skillへ圧縮します。",
                 target=None,
                 safe_action="growth",
-                requires_human_approval=False,
-            ))
-
-        if not self._within_cooldown(
-            recent,
-            "practice",
-            int(cfg["practice_cooldown_seconds"]),
-        ):
-            tasks.append(SelfDriveTask(
-                task_id="practice",
-                kind="practice",
-                priority=40,
-                title="弱点の自主トレ",
-                reason="Evidenceから最優先弱点を1件だけSynthetic Sandboxで練習します。",
-                target=None,
-                safe_action="practice",
                 requires_human_approval=False,
             ))
 
