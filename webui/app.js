@@ -127,15 +127,47 @@ async function openConversation(id){
 }
 async function loadMissions(){
   const projectSelect=$('#missionProject');
+  const strategicSelect=$('#strategicProject');
   try{
     if(!state.projects.length){
       const p=await api('/api/v1/projects');state.projects=p.projects||[];
     }
-    if(projectSelect){
-      projectSelect.innerHTML=state.projects.map(row=>`<option value="${esc(row.slug)}">${esc(row.name||row.slug)}</option>`).join('')||'<option value="">作成済みアプリがありません</option>';
-    }
-    const data=await api('/api/v1/missions');
+    const options=state.projects.map(row=>`<option value="${esc(row.slug)}">${esc(row.name||row.slug)}</option>`).join('')||'<option value="">作成済みアプリがありません</option>';
+    if(projectSelect)projectSelect.innerHTML=options;
+    if(strategicSelect)strategicSelect.innerHTML=options;
+
+    const [data,strategic]=await Promise.all([
+      api('/api/v1/missions'),
+      api('/api/v1/strategic-goals')
+    ]);
     const rows=data.missions||[];
+    const goals=strategic.goals||[];
+
+    $('#strategicGoalGrid').innerHTML=goals.map(g=>{
+      const terminal=['completed','cancelled'].includes(g.status);
+      const active=g.status==='active';
+      const waiting=Boolean(g.current_mission_id);
+      return `<article class="strategic-goal-row">
+        <div class="strategic-goal-row-head">
+          <div><span class="chip">${esc(g.status)}</span><h4>${esc(g.objective)}</h4></div>
+          <span class="chip">${esc(g.project_slug)}</span>
+        </div>
+        <p>${esc(g.last_decision||'')}</p>
+        <div class="strategic-goal-meta">
+          <span class="chip">Mission ${g.missions_created||0}/${g.max_auto_missions||12}</span>
+          <span class="chip">${waiting?'Mission待機中':'次Mission作成可能'}</span>
+          <span class="chip">${fmt(g.updated_at)}</span>
+        </div>
+        <div class="strategic-goal-actions">
+          ${!terminal&&active?`<button data-goal-action="pause" data-id="${esc(g.goal_id)}">一時停止</button>`:''}
+          ${!terminal&&!active?`<button data-goal-action="resume" data-id="${esc(g.goal_id)}">再開</button>`:''}
+          ${!terminal?`<button data-goal-action="cancel" data-id="${esc(g.goal_id)}">終了</button>`:''}
+        </div>
+      </article>`;
+    }).join('')||'<div class="empty">長期目標はまだありません。</div>';
+
+    document.querySelectorAll('[data-goal-action]').forEach(b=>b.onclick=()=>updateStrategicGoal(b.dataset.id,b.dataset.goalAction));
+
     $('#missionGrid').innerHTML=rows.map(m=>{
       const terminal=['completed','failed','cancelled'].includes(m.status);
       const canRun=!terminal&&m.status!=='running';
@@ -153,15 +185,59 @@ async function loadMissions(){
       </article>`;
     }).join('')||'<div class="empty">まだミッションはありません。</div>';
 
-    $$('.mission-run').forEach(b=>b.onclick=()=>runMission(b.dataset.id,b.dataset.approved==='true'));
-    $$('.mission-pause').forEach(b=>b.onclick=()=>pauseMission(b.dataset.id));
-    $$('.mission-cancel').forEach(b=>b.onclick=()=>cancelMission(b.dataset.id));
+    document.querySelectorAll('.mission-run').forEach(b=>b.onclick=()=>runMission(b.dataset.id,b.dataset.approved==='true'));
+    document.querySelectorAll('.mission-pause').forEach(b=>b.onclick=()=>pauseMission(b.dataset.id));
+    document.querySelectorAll('.mission-cancel').forEach(b=>b.onclick=()=>cancelMission(b.dataset.id));
 
     if(rows.some(m=>m.status==='running')&&state.view==='missions'){
       setTimeout(()=>{if(state.view==='missions')loadMissions();},1800);
     }
   }catch(e){
     $('#missionGrid').innerHTML='<div class="empty">Mission Controlを読み込めませんでした: '+esc(e.message)+'</div>';
+    if($('#strategicGoalGrid'))$('#strategicGoalGrid').innerHTML='<div class="empty">長期目標を読み込めませんでした。</div>';
+  }
+}
+async function createStrategicGoal(){
+  const slug=$('#strategicProject')?.value||'';
+  const objective=$('#strategicObjective')?.value.trim()||'';
+  if(!slug||!objective){
+    toast('対象アプリと長期目標を入力してください。','info');
+    return;
+  }
+  const button=$('#createStrategicGoal');button.disabled=true;button.textContent='登録中…';
+  try{
+    await api('/api/v1/strategic-goals',{
+      method:'POST',
+      body:JSON.stringify({project_slug:slug,objective,max_auto_missions:12})
+    });
+    $('#strategicObjective').value='';
+    toast('長期目標を登録しました。Daily Evolutionが次Missionを考えます。','success');
+    await loadMissions();
+  }catch(e){
+    toast('長期目標を登録できませんでした: '+e.message,'error');
+  }finally{button.disabled=false;button.textContent='長期目標を登録';}
+}
+async function runStrategicGoal(){
+  const button=$('#runStrategicGoal');if(!button)return;
+  button.disabled=true;button.textContent='考え中…';
+  try{
+    const data=await api('/api/v1/strategic-goals/run',{method:'POST',body:'{}'});
+    const mission=data.mission||{};
+    toast(data.mission_created
+      ? '次のMissionを作成しました。Build前で承認停止します。'
+      : '長期目標を確認しました: '+(data.status||'確認済み'),
+      data.mission_created?'success':'info');
+    await loadMissions();
+  }catch(e){
+    toast('次のMissionを作れませんでした: '+e.message,'error');
+  }finally{button.disabled=false;button.textContent='次のMissionを考える';}
+}
+async function updateStrategicGoal(id,action){
+  try{
+    await api('/api/v1/strategic-goals/'+encodeURIComponent(id)+'/'+encodeURIComponent(action),{method:'POST',body:'{}'});
+    await loadMissions();
+  }catch(e){
+    toast('長期目標を更新できませんでした: '+e.message,'error');
   }
 }
 async function createMission(){
@@ -197,6 +273,7 @@ async function cancelMission(id){
     await loadMissions();
   }catch(e){alert('終了できませんでした: '+e.message);}
 }
+
 async function loadProjects(){
   const data=await api('/api/v1/projects');state.projects=data.projects||[];renderResume();
   $('#projectGrid').innerHTML=state.projects.map(x=>`
@@ -998,7 +1075,7 @@ document.querySelectorAll('[data-starter-mode]').forEach(b=>b.onclick=()=>{
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 document.querySelectorAll('[data-mobile-view]').forEach(b=>b.onclick=()=>setView(b.dataset.mobileView));
 $('#mobileNewChat').onclick=newChat;
-$('#newChat').onclick=newChat;$('#createMission').onclick=createMission;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;storageSet('ui-theme',next);};
 document.addEventListener('keydown',e=>{
