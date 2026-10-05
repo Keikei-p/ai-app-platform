@@ -170,6 +170,9 @@ class PlatformAPI:
                     if path == "/api/v1/daily-evolution/status":
                         self._json(200, api.service.daily_evolution_status())
                         return
+                    if path == "/api/v1/strategic-goals":
+                        self._json(200, api.service.strategic_goal_status())
+                        return
                     if path == "/api/v1/learning/examples":
                         query = parse_qs(parsed.query)
                         limit = max(1, min(int((query.get("limit") or ["50"])[0]), 200))
@@ -328,6 +331,20 @@ class PlatformAPI:
                             raise ValueError("enabled boolean is required")
                         self._json(200, api.service.set_daily_evolution(bool(data["enabled"])))
                         return
+                    if path == "/api/v1/strategic-goals":
+                        project_slug = str(data.get("project_slug") or "").strip()
+                        objective = str(data.get("objective") or "").strip()
+                        if not project_slug or not objective:
+                            raise ValueError("project_slug and objective are required")
+                        self._json(201, api.service.create_strategic_goal(
+                            project_slug=project_slug,
+                            objective=objective,
+                            max_auto_missions=int(data.get("max_auto_missions") or 12),
+                        ))
+                        return
+                    if path == "/api/v1/strategic-goals/run":
+                        self._json(200, api.service.run_strategic_goal_cycle())
+                        return
                     if path == "/api/v1/growth/settings":
                         if "enabled" not in data or not isinstance(data.get("enabled"), bool):
                             raise ValueError("enabled boolean is required")
@@ -419,6 +436,16 @@ class PlatformAPI:
                         self._json(201, row)
                         return
                     parts = [x for x in path.split("/") if x]
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "strategic-goals"]:
+                        if parts[4] == "pause":
+                            self._json(200, api.service.pause_strategic_goal(parts[3]))
+                            return
+                        if parts[4] == "resume":
+                            self._json(200, api.service.resume_strategic_goal(parts[3]))
+                            return
+                        if parts[4] == "cancel":
+                            self._json(200, api.service.cancel_strategic_goal(parts[3]))
+                            return
                     if len(parts) == 5 and parts[:3] == ["api", "v1", "missions"]:
                         if parts[4] == "run":
                             self._json(202, api.service.run_mission_cycle(
