@@ -54,6 +54,14 @@ class ProductizationUIContractTests(unittest.TestCase):
         ):
             self.assertIn(token,api)
 
+    def test_buyer_e2e_is_explicit_not_startup_work(self):
+        service=(ROOT/"src"/"core"/"platform_service.py").read_text(encoding="utf-8")
+        init_start=service.index("    def __init__(self):")
+        next_method=service.index("\n    def ",init_start+10)
+        init_body=service[init_start:next_method]
+        self.assertIn("BuyerJourneyE2EVerifier()",init_body)
+        self.assertNotIn("buyer_journey_e2e.run()",init_body)
+
     def test_developer_repo_is_not_hardcoded_in_bootstrap_launchers(self):
         for name in ("OPEN_AIVY_WEB.bat","INSTALL_OR_UPDATE.bat"):
             text=(ROOT/name).read_text(encoding="utf-8")
