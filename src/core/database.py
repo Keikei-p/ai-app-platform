@@ -139,7 +139,10 @@ def create_job(project_slug: str | None, instruction: str) -> int:
 
 def finish_job(job_id: int, status: str, result: str) -> None:
     with connect() as conn:
-        conn.execute("UPDATE jobs SET updated_at=?,status=?,result=? WHERE id=?", (utc_now(), status, result, job_id))
+        conn.execute(
+            "UPDATE jobs SET updated_at=?,status=?,result=? WHERE id=?",
+            (utc_now(), status, redact_sensitive(result), job_id),
+        )
 
 def save_remote_command(command_id: str, action: str, project_slug: str | None, status: str, details: str) -> bool:
     try:
@@ -156,7 +159,7 @@ def save_maintenance_report(project_slug: str, severity: str, code: str, message
     with connect() as conn:
         conn.execute(
             "INSERT INTO maintenance_reports(created_at,project_slug,severity,code,message) VALUES(?,?,?,?,?)",
-            (utc_now(), project_slug, severity, code, message),
+            (utc_now(), project_slug, severity, code, redact_sensitive(message)),
         )
 
 def delete_project_record(slug: str) -> None:
