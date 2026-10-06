@@ -46,6 +46,22 @@ class CrossModeE2ETests(unittest.TestCase):
             self.assertEqual(status["source"], "local_runtime_evidence")
             self.assertFalse(status["stale"])
 
+    def test_repository_ci_attestation_matches_current_sources(self):
+        with TemporaryDirectory() as tmp:
+            verifier = CrossModeE2EVerifier(
+                root_dir=ROOT_DIR,
+                evidence_path=Path(tmp) / "missing_local.json",
+                attestation_path=ROOT_DIR / "evidence" / "cross_mode_e2e_ci.json",
+            )
+            status = verifier.status()
+            self.assertTrue(status["verified"])
+            self.assertEqual(status["source"], "repository_ci_attestation")
+            self.assertFalse(status["stale"])
+            self.assertEqual(
+                {row["mode"] for row in status["cases"]},
+                {"app", "web", "automation"},
+            )
+
     def test_evidence_becomes_stale_when_source_blob_contract_changes(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
