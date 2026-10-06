@@ -65,6 +65,7 @@ from .self_drive import SelfDriveEngine
 from .autonomous_backlog import AutonomousBacklog
 from .daily_evolution import DailyEvolutionEngine
 from .strategic_goals import StrategicGoalStore, StrategicAutonomyEngine
+from .completion_readiness import CompletionReadinessEngine
 
 
 class PlatformService:
@@ -188,6 +189,14 @@ class PlatformService:
             strategy_cycle=lambda: self.strategic_autonomy.run_cycle(trigger="daily_evolution"),
             strategy_status=self.strategic_autonomy.status,
         )
+        self.completion_readiness = CompletionReadinessEngine(
+            capability_snapshot=lambda: self.status().get("capabilities", {}),
+            self_drive_status=self.self_drive.status,
+            daily_evolution_status=self.daily_evolution.status,
+            strategic_status=self.strategic_autonomy.status,
+            learning_status=self.learning_status,
+            health_status=self.aivy_health_dashboard,
+        )
         self.daily_evolution.start_background()
         self.self_drive.start_background()
 
@@ -279,6 +288,11 @@ class PlatformService:
                 "strategic_long_term_goals": True,
                 "automatic_bounded_mission_generation": True,
                 "strategic_mission_approval_boundary": True,
+                "completion_readiness_engine": True,
+                "cross_mode_real_app_e2e_verified": False,
+                "multi_mission_end_to_end_verified": False,
+                "long_run_soak_verified": False,
+                "cloud_runtime_ready": False,
             },
         }
 
@@ -809,6 +823,9 @@ class PlatformService:
         result = self.strategic_autonomy.run_cycle(trigger="manual")
         self.autonomous_backlog.refresh()
         return result
+
+    def completion_readiness_status(self) -> dict[str, Any]:
+        return self.completion_readiness.assess()
 
     def daily_evolution_status(self) -> dict[str, Any]:
         return self.daily_evolution.status()
