@@ -60,6 +60,30 @@ class ProductTransferTests(unittest.TestCase):
             self.assertNotIn("very-secret-token",text)
             self.assertIn("Buyer Builder",text)
 
+    def test_transfer_export_resets_seller_identity_but_keeps_generic_brand(self):
+        with TemporaryDirectory() as tmp:
+            root=Path(tmp);product=root/"product";product.mkdir()
+            _,_,ownership,_,portable,_=self.make_parts(root)
+            ownership.update({
+                "product_name":"Aivy",
+                "brand_name":"OEM Builder",
+                "owner_name":"Seller Name",
+                "organization_name":"Seller Company",
+                "support_email":"seller@example.com",
+                "support_url":"https://seller.example.com",
+                "accent_color":"#123456",
+            })
+            normal=portable.export_dict()
+            transfer=portable.export_dict(for_transfer=True)
+            self.assertEqual(normal["ownership"]["owner_name"],"Seller Name")
+            self.assertEqual(transfer["ownership"]["brand_name"],"OEM Builder")
+            self.assertEqual(transfer["ownership"]["accent_color"],"#123456")
+            self.assertEqual(transfer["ownership"]["owner_name"],"")
+            self.assertEqual(transfer["ownership"]["organization_name"],"")
+            self.assertEqual(transfer["ownership"]["support_email"],"")
+            self.assertEqual(transfer["ownership"]["support_url"],"")
+            self.assertTrue(transfer["transfer_sanitized"])
+
     def test_real_env_file_blocks_transfer_but_env_example_does_not(self):
         with TemporaryDirectory() as tmp:
             root=Path(tmp);product=root/"product";product.mkdir()
@@ -103,6 +127,11 @@ class ProductTransferTests(unittest.TestCase):
             (product/"src"/"app.py").write_text("print('ok')\n",encoding="utf-8")
             (product/"data").mkdir();(product/"data"/"secret.db").write_text("runtime",encoding="utf-8")
             credentials,connectors,ownership,setup,portable,auditor=self.make_parts(root)
+            ownership.update({
+                "brand_name":"Buyer Ready Brand",
+                "owner_name":"Original Seller",
+                "support_email":"seller@example.com",
+            })
             builder=TransferPackageBuilder(
                 auditor=auditor,
                 portable_config=portable,
@@ -114,10 +143,15 @@ class ProductTransferTests(unittest.TestCase):
             self.assertTrue((product/"data"/"secret.db").is_file())
             with zipfile.ZipFile(result["path"]) as z:
                 names=set(z.namelist())
+                exported=json.loads(z.read("ivy-config.json").decode("utf-8"))
             self.assertIn("src/app.py",names)
             self.assertIn("ivy-config.json",names)
             self.assertIn("TRANSFER_READY.json",names)
             self.assertNotIn("data/secret.db",names)
+            self.assertEqual(exported["ownership"]["owner_name"],"")
+            self.assertEqual(exported["ownership"]["support_email"],"")
+            self.assertEqual(exported["ownership"]["brand_name"],"Buyer Ready Brand")
+            self.assertTrue(exported["transfer_sanitized"])
 
 
 if __name__=="__main__":
