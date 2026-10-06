@@ -254,8 +254,8 @@ class TransferAuditor:
     EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
     WINDOWS_USER_RE = re.compile(r"(?i)[A-Z]:\\Users\\[^\\\s]+")
     GITHUB_OWNER_RE = re.compile(r"https?://github\.com/([^/\s]+)/")
-    FIREBASE_ID_RE = re.compile(r"(?i)(?:firebase|project)[_-]?id\s*[=:]\s*[\\"']?([a-z0-9-]{6,})")
-    CF_ACCOUNT_RE = re.compile(r"(?i)account[_-]?id\s*[=:]\s*[\\"']?([a-f0-9]{20,})")
+    FIREBASE_ID_RE = re.compile(r"(?i)(?:firebase|project)[_-]?id\s*[=:]\s*[\x22\x27]?([a-z0-9-]{6,})")
+    CF_ACCOUNT_RE = re.compile(r"(?i)account[_-]?id\s*[=:]\s*[\x22\x27]?([a-f0-9]{20,})")
 
     def __init__(
         self,
