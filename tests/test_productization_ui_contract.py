@@ -19,6 +19,8 @@ class ProductizationUIContractTests(unittest.TestCase):
             'id="currentDependencies"',
             'id="connectorDialog"',
             'id="createTransferPackage"',
+            'id="runBuyerE2E"',
+            'id="buyerE2EResult"',
             'id="ownerBrandName"',
             'id="exportConfig"',
         ):
@@ -29,6 +31,8 @@ class ProductizationUIContractTests(unittest.TestCase):
             "async function testConnector(",
             "async function runTransferAudit()",
             "async function createTransferPackage()",
+            "async function runBuyerE2E()",
+            "/api/v1/productization/e2e",
             "async function exportPortableConfig()",
         ):
             self.assertIn(token,app)
@@ -45,6 +49,8 @@ class ProductizationUIContractTests(unittest.TestCase):
             '"/api/v1/config/import"',
             '"/api/v1/transfer/audit"',
             '"/api/v1/transfer/package"',
+            '"/api/v1/productization/e2e"',
+            '"/api/v1/productization/e2e/run"',
         ):
             self.assertIn(token,api)
 
