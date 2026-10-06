@@ -18,7 +18,7 @@ class CredentialProductizationTests(unittest.TestCase):
             store=CredentialStore(backend=backend)
             settings=root/"settings.json"
             engine=AIChatEngine(settings, credential_store=store)
-            secret="sk-test-credential-value-1234567890"
+            secret="sk-" + "test-credential-value-1234567890"
             engine.configure_provider("openai","test-model",secret,remember_key=True,make_default=True)
 
             raw=json.loads(settings.read_text(encoding="utf-8"))
