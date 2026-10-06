@@ -213,6 +213,14 @@ class CredentialStore:
             masked=self.mask(value),
         )
 
+    def environment_credential_ids(self) -> list[str]:
+        """Return credential IDs supplied by the process environment, never values."""
+        return sorted(
+            credential_id
+            for credential_id, env_name in self.ENV_MAP.items()
+            if os.environ.get(env_name, "").strip()
+        )
+
     def _effective_backend(self, credential_id: str) -> str:
         env_name = self.ENV_MAP.get(credential_id.strip().lower())
         if env_name and os.environ.get(env_name, "").strip():
