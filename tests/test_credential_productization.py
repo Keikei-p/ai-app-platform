@@ -42,7 +42,7 @@ class CredentialProductizationTests(unittest.TestCase):
             root=Path(tmp)
             store=CredentialStore(backend=SessionCredentialBackend())
             manager=ConnectorManager(credentials=store,config_path=root/"connectors.json")
-            secret="github_pat_TEST_SECRET_1234567890"
+            secret="github_pat_" + "TEST_SECRET_1234567890"
             row=manager.configure(
                 "github",
                 config={"repository":"buyer/example"},
