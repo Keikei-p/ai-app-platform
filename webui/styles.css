@@ -348,3 +348,9 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .dialog-actions{justify-content:flex-end;margin-top:14px}
 @media(max-width:1000px){.connector-grid{grid-template-columns:1fr 1fr}.productization-grid{grid-template-columns:1fr}.service-usage-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:680px){.setup-wizard-head,.service-card-head{display:block}.setup-steps,.connector-grid,.compact-form{grid-template-columns:1fr}.service-usage-grid{grid-template-columns:1fr 1fr}.setup-actions .agent-action,.stack-actions .agent-action,.ownership-card .agent-action{width:100%}.connector-dialog-shell{padding:14px}}
+
+
+.buyer-e2e-box{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:12px 0;padding:11px;border:1px solid var(--border);border-radius:12px;background:var(--surface-soft)}
+.buyer-e2e-box strong{font-size:.76rem}.buyer-e2e-box p{margin:4px 0 0;color:var(--muted);font-size:.67rem;line-height:1.45}
+.buyer-e2e-box .agent-action{width:auto;min-width:145px;flex:0 0 auto}
+@media(max-width:680px){.buyer-e2e-box{display:block}.buyer-e2e-box .agent-action{width:100%;margin-top:10px}}
