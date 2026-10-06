@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from http.server import ThreadingHTTPServer
+from threading import Thread
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
+from unittest.mock import patch
+import json
 import unittest
 
 from src.core.cloud_runtime import CloudRuntimeReadinessVerifier
 from src.core.config import resolve_state_dir
-from src.core.platform_api import remote_bind_policy
+from src.core.platform_api import PlatformAPI, remote_bind_policy
 
 
 class CloudRuntimeTests(unittest.TestCase):
@@ -40,6 +46,40 @@ class CloudRuntimeTests(unittest.TestCase):
         )
         self.assertTrue(allowed["allowed"])
         self.assertTrue(allowed["requires_bearer"])
+
+    def test_remote_mode_keeps_health_public_but_protects_api_reads(self):
+        api = PlatformAPI(remote_mode=True)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), api.handler_class())
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        port = int(server.server_address[1])
+        try:
+            with patch.dict(
+                "os.environ",
+                {"AI_APP_LOCAL_API_TOKEN": "cloud-secret"},
+                clear=False,
+            ):
+                health = json.loads(urlopen(
+                    f"http://127.0.0.1:{port}/api/v1/healthz",
+                    timeout=3,
+                ).read().decode("utf-8"))
+                self.assertEqual(health["status"], "ok")
+                self.assertTrue(health["remote_mode"])
+
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(f"http://127.0.0.1:{port}/api/v1/status", timeout=3)
+                self.assertEqual(denied.exception.code, 401)
+
+                req = Request(
+                    f"http://127.0.0.1:{port}/api/v1/status",
+                    headers={"Authorization": "Bearer cloud-secret"},
+                )
+                allowed = json.loads(urlopen(req, timeout=3).read().decode("utf-8"))
+                self.assertEqual(allowed["service"], "ai-app-platform")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
 
     def test_cloud_runtime_verifier_generates_strict_evidence(self):
         with TemporaryDirectory() as tmp:
@@ -82,7 +122,7 @@ class CloudRuntimeTests(unittest.TestCase):
                 "source_blobs": verifier.source_blobs(),
                 "created_at": "2026-10-06T00:00:00+00:00",
             }
-            evidence.write_text(__import__("json").dumps(payload), encoding="utf-8")
+            evidence.write_text(json.dumps(payload), encoding="utf-8")
             self.assertTrue(verifier.status()["verified"])
 
             (src / "platform_api.py").write_text("# changed\n", encoding="utf-8")
