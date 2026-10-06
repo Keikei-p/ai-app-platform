@@ -36,6 +36,20 @@ class MultiMissionE2ETests(unittest.TestCase):
             self.assertEqual(status["source"], "local_runtime_evidence")
             self.assertFalse(status["stale"])
 
+    def test_repository_ci_attestation_matches_current_sources(self):
+        with TemporaryDirectory() as tmp:
+            verifier = MultiMissionE2EVerifier(
+                root_dir=ROOT_DIR,
+                evidence_path=Path(tmp) / "missing_local.json",
+                attestation_path=ROOT_DIR / "evidence" / "multi_mission_e2e_ci.json",
+            )
+            status = verifier.status()
+            self.assertTrue(status["verified"])
+            self.assertEqual(status["source"], "repository_ci_attestation")
+            self.assertFalse(status["stale"])
+            self.assertTrue(status["checks"]["first_waited_for_approval"])
+            self.assertTrue(status["checks"]["second_waited_for_approval"])
+
     def test_multi_mission_evidence_is_invalidated_by_source_change(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
