@@ -291,3 +291,11 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .completion-evidence .e2e-mode{border:1px solid var(--border);border-radius:999px;padding:4px 8px;font-size:.62rem;font-weight:850}
 .completion-evidence .e2e-mode.pass{background:#dcfae6;color:#067647}
 .completion-evidence .e2e-mode.fail{background:#fee4e2;color:#b42318}
+
+
+.soak-evidence{border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:11px 12px;margin-bottom:10px}
+.soak-evidence-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.soak-evidence-head strong{font-size:.75rem}.soak-evidence-head span{font-size:.64rem;font-weight:850;color:var(--muted)}
+.soak-track{height:7px;border-radius:999px;background:var(--surface-soft);overflow:hidden;margin:9px 0 7px}
+.soak-track i{display:block;height:100%;width:0;border-radius:inherit;background:var(--accent);transition:width .35s ease}
+.soak-evidence p{margin:0;color:var(--muted);font-size:.67rem;line-height:1.45}
