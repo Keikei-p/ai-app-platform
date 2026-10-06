@@ -598,7 +598,30 @@ class PlatformService:
         return self.setup_state.get()
 
     def update_setup(self, values: dict[str, Any]) -> dict[str, Any]:
-        return self.setup_state.update(values)
+        requested = dict(values or {})
+        if requested.get("completed") is True:
+            selected = [
+                str(requested.get("ai_choice") or "").strip(),
+                str(requested.get("github_choice") or "").strip(),
+                str(requested.get("cloud_choice") or "").strip(),
+            ]
+            selected = [connector_id for connector_id in selected if connector_id]
+            not_ready: list[str] = []
+            for connector_id in selected:
+                try:
+                    row = self.connectors.get_public(connector_id)
+                except (KeyError, StopIteration):
+                    not_ready.append(connector_id)
+                    continue
+                if str(row.get("status") or "") != "connected":
+                    not_ready.append(str(row.get("name") or connector_id))
+            if not_ready:
+                names = " / ".join(not_ready)
+                raise ValueError(
+                    "初期セットアップを完了する前に、選択したサービスの接続テストを完了してください: "
+                    + names
+                )
+        return self.setup_state.update(requested)
 
     def export_portable_config(self) -> dict[str, Any]:
         return self.portable_config.export_dict()
