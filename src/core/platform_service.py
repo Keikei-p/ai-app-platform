@@ -69,6 +69,7 @@ from .completion_readiness import CompletionReadinessEngine
 from .cross_mode_e2e import CrossModeE2EVerifier
 from .multi_mission_e2e import MultiMissionE2EVerifier
 from .long_run_soak import LongRunSoakMonitor
+from .cloud_runtime import CloudRuntimeReadinessVerifier
 
 
 class PlatformService:
@@ -200,6 +201,8 @@ class PlatformService:
             strategic_status=self.strategic_autonomy.status,
             health_status=self.aivy_health_dashboard,
         )
+        self.cloud_runtime = CloudRuntimeReadinessVerifier()
+        self.cloud_runtime.run()
         self.completion_readiness = CompletionReadinessEngine(
             capability_snapshot=lambda: self.status().get("capabilities", {}),
             self_drive_status=self.self_drive.status,
@@ -304,7 +307,7 @@ class PlatformService:
                 "cross_mode_real_app_e2e_verified": bool(self.cross_mode_e2e.status().get("verified")),
                 "multi_mission_end_to_end_verified": bool(self.multi_mission_e2e.status().get("verified")),
                 "long_run_soak_verified": bool(self.long_run_soak.status().get("verified")),
-                "cloud_runtime_ready": False,
+                "cloud_runtime_ready": bool(self.cloud_runtime.status().get("verified")),
             },
         }
 
@@ -864,6 +867,12 @@ class PlatformService:
 
     def completion_readiness_status(self) -> dict[str, Any]:
         return self.completion_readiness.assess()
+
+    def cloud_runtime_status(self) -> dict[str, Any]:
+        return self.cloud_runtime.status()
+
+    def run_cloud_runtime_readiness(self) -> dict[str, Any]:
+        return self.cloud_runtime.run()
 
     def daily_evolution_status(self) -> dict[str, Any]:
         return self.daily_evolution.status()
