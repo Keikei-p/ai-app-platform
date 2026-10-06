@@ -27,6 +27,7 @@
         <button data-view="projects" class="nav-item">▦ <span>制作物</span></button>
         <button data-view="missions" class="nav-item">◎ <span>ミッション</span></button>
         <button data-view="lab" class="nav-item">✦ <span>IVY LAB</span></button>
+        <button data-view="integrations" class="nav-item">⌁ <span>連携・サービス</span></button>
         <button data-view="downloads" class="nav-item">↓ <span>ダウンロード</span></button>
       </nav>
 
@@ -284,6 +285,86 @@
         </div>
       </section>
 
+      <section class="view" id="view-integrations">
+        <div class="page">
+          <div class="page-heading">
+            <div><span class="eyebrow">SERVICES</span><h2>連携・サービス</h2><p>Ivy本体と外部アカウントを分離して管理します。Credentialそのものはここに表示しません。</p></div>
+            <button id="refreshConnectors" class="agent-action secondary" type="button">状態を更新</button>
+          </div>
+
+          <div id="setupWizard" class="setup-wizard data-card" hidden>
+            <div class="setup-wizard-head">
+              <div><span class="eyebrow">WELCOME TO IVY</span><h3>Ivy 初期セットアップ</h3><p>必要なサービスだけ選べます。すべて後から変更できます。</p></div>
+              <span class="status-pill">初回</span>
+            </div>
+            <div class="setup-steps">
+              <label><span>1 · AI</span><select id="setupAI"><option value="">後で設定</option><option value="openai">OpenAI</option><option value="gemini">Gemini</option><option value="ollama">Ollama</option></select></label>
+              <label><span>2 · Git管理</span><select id="setupGit"><option value="">後で設定</option><option value="github">GitHub</option><option value="local_git">ローカルGit</option></select></label>
+              <label><span>3 · クラウド</span><select id="setupCloud"><option value="">使用しない / 後で</option><option value="cloudflare">Cloudflare</option><option value="vercel">Vercel</option><option value="netlify">Netlify</option></select></label>
+            </div>
+            <div class="setup-actions">
+              <button id="setupOpenSelected" class="agent-action secondary" type="button">選択サービスを設定</button>
+              <button id="setupTestSelected" class="agent-action secondary" type="button">接続確認</button>
+              <button id="finishSetup" class="agent-action" type="button">セットアップ完了 → Ivy開始</button>
+            </div>
+            <p id="setupMessage" class="meta">外部有料サービスを接続しなくても、ローカル機能を中心にIvyを起動できます。</p>
+          </div>
+
+          <div class="service-usage data-card">
+            <div><span class="eyebrow">CURRENT ROUTING</span><h3>現在使っているサービス</h3><p>機能ごとに、どのProviderが選ばれているか確認できます。</p></div>
+            <div id="currentServiceUsage" class="service-usage-grid"></div>
+          </div>
+
+          <div id="connectorCategories" class="connector-categories"></div>
+
+          <div class="productization-grid">
+            <section class="data-card ownership-card">
+              <span class="eyebrow">OWNER / OEM</span><h3>所有者・ブランド</h3><p>ロジックを書き換えず、販売先・OEM先の情報へ差し替えます。</p>
+              <div class="compact-form">
+                <label>製品名<input id="ownerProductName" placeholder="Aivy"></label>
+                <label>ブランド名<input id="ownerBrandName" placeholder="Aivy"></label>
+                <label>所有者<input id="ownerName" placeholder="ユーザー設定"></label>
+                <label>組織名<input id="ownerOrganization" placeholder="会社名"></label>
+                <label>ライセンス<input id="ownerLicense" placeholder="例: OEM License"></label>
+                <label>メインカラー<input id="ownerAccent" placeholder="#6b5cff"></label>
+                <label>サポートURL<input id="ownerSupportUrl" placeholder="https://..."></label>
+                <label>サポートメール<input id="ownerSupportEmail" placeholder="support@example.com"></label>
+              </div>
+              <button id="saveOwnership" class="agent-action" type="button">所有者設定を保存</button>
+            </section>
+
+            <section class="data-card portability-card">
+              <span class="eyebrow">MOVE TO ANOTHER PC</span><h3>設定Export / Import</h3><p>Credentialを含まない設定だけを移動します。移行先では外部サービスを再認証します。</p>
+              <div class="stack-actions">
+                <button id="exportConfig" class="agent-action secondary" type="button">ivy-config.json をExport</button>
+                <label class="file-action">ivy-config.json をImport<input id="importConfigFile" type="file" accept=".json,application/json"></label>
+              </div>
+              <p id="configTransferMessage" class="meta">APIキー・Token・秘密鍵はExport対象外です。</p>
+            </section>
+
+            <section class="data-card transfer-card">
+              <span class="eyebrow">TRANSFER READY</span><h3>譲渡準備</h3><p>現在のIvyを変更せず、個人Credentialを含まない譲渡用Packageを別に作成します。</p>
+              <div class="stack-actions">
+                <button id="runTransferAudit" class="agent-action secondary" type="button">Credential / 個人依存を検査</button>
+                <button id="createTransferPackage" class="agent-action" type="button">譲渡用Ivyを作成</button>
+              </div>
+              <div id="transferAuditResult" class="transfer-audit-result"><span class="meta">まだ検査していません。</span></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <dialog id="connectorDialog" class="connector-dialog">
+        <form method="dialog" class="connector-dialog-shell" id="connectorForm">
+          <div class="connector-dialog-head"><div><span class="eyebrow" id="connectorDialogCategory">SERVICE</span><h3 id="connectorDialogTitle">Connector設定</h3></div><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+          <p id="connectorDialogDescription" class="meta"></p>
+          <div id="connectorDialogFields" class="compact-form"></div>
+          <label class="check-row"><input id="connectorRemember" type="checkbox" checked> このPCの安全なCredential Storeへ保存</label>
+          <label class="check-row" id="connectorDefaultRow"><input id="connectorMakeDefault" type="checkbox"> AIの既定Providerにする</label>
+          <div class="dialog-actions"><button value="cancel" class="agent-action secondary">キャンセル</button><button id="saveConnector" value="default" class="agent-action" type="button">保存</button></div>
+        </form>
+      </dialog>
+
       <section class="view" id="view-settings">
         <div class="page narrow">
           <div class="page-heading"><div><span class="eyebrow">SETTINGS</span><h2>設定</h2><p>v0.9ではUIとCoreを分離し、同じCoreを複数の画面から利用できるようにします。</p></div></div>
@@ -338,7 +419,7 @@
     <button type="button" data-mobile-view="projects"><span>▦</span><small>制作物</small></button>
     <button type="button" id="mobileNewChat" class="mobile-new"><span>＋</span><small>新規</small></button>
     <button type="button" data-mobile-view="lab"><span>✦</span><small>成長</small></button>
-    <button type="button" data-mobile-view="settings"><span>⚙</span><small>設定</small></button>
+    <button type="button" data-mobile-view="integrations"><span>⌁</span><small>連携</small></button>
   </nav>
   <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
   <script src="/ui/app.js"></script>
