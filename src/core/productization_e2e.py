@@ -338,15 +338,21 @@ class BuyerJourneyE2EVerifier:
 
             package_config: dict[str, Any] = {}
             names: set[str] = set()
-            package_bytes = b""
+            package_payloads: list[bytes] = []
             if transfer.get("created"):
                 package_path = Path(str(transfer["path"]))
-                package_bytes = package_path.read_bytes()
                 with zipfile.ZipFile(package_path) as archive:
                     names = set(archive.namelist())
                     package_config = json.loads(
                         archive.read("ivy-config.json").decode("utf-8")
                     )
+                    for name in names:
+                        if name.endswith("/"):
+                            continue
+                        try:
+                            package_payloads.append(archive.read(name))
+                        except Exception:
+                            pass
 
             checks["transfer_package_excludes_runtime_data"] = bool(
                 "data/runtime.db" not in names
@@ -361,8 +367,9 @@ class BuyerJourneyE2EVerifier:
                 and package_config.get("ownership", {}).get("support_email") == ""
             )
             checks["transfer_package_has_no_credentials"] = all(
-                marker.encode("utf-8") not in package_bytes
+                marker.encode("utf-8") not in payload
                 for marker in secret_markers
+                for payload in package_payloads
             )
             checks["live_source_state_not_mutated"] = bool(
                 migrated_store.get("github.token") == migrated_github_secret
