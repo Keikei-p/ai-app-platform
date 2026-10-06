@@ -72,9 +72,9 @@ def _dpapi_unprotect(value: str) -> str:
 class AIChatEngine:
     """Small provider-agnostic chat client.
 
-    The API key is never written as plaintext. On Windows it is stored with
-    DPAPI (bound to the current Windows user). Environment variables still
-    override stored credentials for development and CI.
+    Credentials are kept outside normal settings through CredentialStore.
+    Legacy Windows DPAPI-in-settings values are migrated into the dedicated
+    store when possible. Environment variables can override stored credentials.
     """
 
     DEFAULT_MODELS = {
@@ -92,6 +92,35 @@ class AIChatEngine:
         self.credentials = credential_store or CredentialStore()
         self._session_key = ""
         self._session_keys: dict[str, str] = {}
+        self._migrate_legacy_credentials()
+
+    def _migrate_legacy_credentials(self) -> None:
+        if os.name != "nt":
+            return
+        data = self._read()
+        profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+        changed = False
+        for provider in ("openai", "gemini"):
+            profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
+            cipher = str(profile.get("key_cipher") or "")
+            if not cipher and str(data.get("ai_provider") or "") == provider:
+                cipher = str(data.get("ai_key_cipher") or "")
+            if not cipher:
+                continue
+            try:
+                value = _dpapi_unprotect(cipher)
+            except Exception:
+                continue
+            if not value:
+                continue
+            self.credentials.set(f"{provider}.api_key", value, remember=True)
+            profile.pop("key_cipher", None)
+            profiles[provider] = profile
+            changed = True
+        if changed:
+            data["ai_profiles"] = profiles
+            data.pop("ai_key_cipher", None)
+            self._write(data)
 
     def _read(self) -> dict:
         if not self.settings_path.exists():
@@ -497,10 +526,17 @@ class AIChatEngine:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 raw = response.read()
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:800]
-            raise RuntimeError(f"AI API error {exc.code}: {detail}") from exc
+            if exc.code in {401, 403}:
+                raise PermissionError(
+                    "AIサービスで認証できませんでした。Credentialと権限を確認してください。"
+                ) from exc
+            if exc.code == 429:
+                raise RuntimeError(
+                    "AIサービスの利用制限またはレート制限の可能性があります。提供元の利用状況を確認してください。"
+                ) from exc
+            raise RuntimeError(f"AIサービスからHTTP {exc.code}が返されました。") from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"AI API connection failed: {exc.reason}") from exc
+            raise ConnectionError("AIサービスへのネットワーク接続を確認してください。") from exc
         data = json.loads(raw.decode("utf-8"))
         if not isinstance(data, dict):
             raise RuntimeError("AI API returned an invalid response")
