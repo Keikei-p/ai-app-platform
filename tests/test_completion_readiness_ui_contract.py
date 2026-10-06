@@ -15,9 +15,10 @@ class CompletionReadinessUIContractTests(unittest.TestCase):
         self.assertIn("CompletionReadinessEngine", service)
         self.assertIn("def completion_readiness_status", service)
 
-    def test_unverified_completion_evidence_defaults_false(self):
+    def test_completion_evidence_uses_real_cross_mode_verifier_and_keeps_other_gaps_false(self):
         service = (ROOT / "src" / "core" / "platform_service.py").read_text(encoding="utf-8")
-        self.assertIn('"cross_mode_real_app_e2e_verified": False', service)
+        self.assertIn("CrossModeE2EVerifier", service)
+        self.assertIn('"cross_mode_real_app_e2e_verified": bool(self.cross_mode_e2e.status().get("verified"))', service)
         self.assertIn('"multi_mission_end_to_end_verified": False', service)
         self.assertIn('"long_run_soak_verified": False', service)
         self.assertIn('"cloud_runtime_ready": False', service)
@@ -32,11 +33,15 @@ class CompletionReadinessUIContractTests(unittest.TestCase):
             'id="completionBar"',
             'id="completionGap"',
             'id="completionCriteria"',
+            'id="runCrossModeE2E"',
             'id="refreshCompletion"',
+            'id="completionEvidence"',
         ):
             self.assertIn(token, html)
         self.assertIn("/api/v1/completion/readiness", app)
+        self.assertIn("/api/v1/completion/cross-mode-e2e", app)
         self.assertIn("highest_priority_gap", app)
+        self.assertIn("async function runCrossModeE2E()", app)
         self.assertIn("async function refreshCompletion()", app)
         self.assertIn(".completion-readiness-card", css)
 
