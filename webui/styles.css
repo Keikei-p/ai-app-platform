@@ -175,7 +175,7 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 @media(max-width:900px){
   .quick-start-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .main{padding-bottom:68px}
-  .mobile-tabbar{position:fixed;left:10px;right:10px;bottom:max(8px,env(safe-area-inset-bottom));height:58px;z-index:55;display:grid;grid-template-columns:repeat(5,1fr);align-items:center;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(18px);border-radius:18px;box-shadow:0 12px 35px rgba(0,0,0,.13);padding:5px}
+  .mobile-tabbar{position:fixed;left:10px;right:10px;bottom:max(8px,env(safe-area-inset-bottom));height:58px;z-index:55;display:grid;grid-template-columns:repeat(6,1fr);align-items:center;border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(18px);border-radius:18px;box-shadow:0 12px 35px rgba(0,0,0,.13);padding:5px}
   .mobile-tabbar button{height:46px;border:0;background:transparent;color:var(--muted);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer}
   .mobile-tabbar button.active{background:var(--accent-soft);color:var(--accent)}
   .mobile-tabbar span{font-size:1rem;line-height:1}.mobile-tabbar small{font-size:.58rem;font-weight:750}
