@@ -95,6 +95,45 @@ class LongRunSoakTests(unittest.TestCase):
             self.assertEqual(row["elapsed_seconds"], 0)
             self.assertIn("monitoring gap", row.get("restart_reason", ""))
 
+    def test_restart_within_gap_preserves_real_soak_window(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            first_monitor = self.make_monitor(root, clock)
+            first_monitor.start(reset=True)
+            first = first_monitor.checkpoint(trigger="before_restart")
+            self.assertEqual(first["sample_count"], 1)
+
+            clock.advance(900)
+            restarted_monitor = self.make_monitor(root, clock)
+            active = restarted_monitor.ensure_active()
+            self.assertEqual(active["session_id"], first["session_id"])
+
+            second = restarted_monitor.checkpoint(trigger="after_restart")
+            self.assertFalse(second["verified"])
+            self.assertEqual(second["session_id"], first["session_id"])
+            self.assertEqual(second["sample_count"], 2)
+            self.assertEqual(second["elapsed_seconds"], 900)
+            self.assertEqual(second["failure_count"], 0)
+
+    def test_restart_after_excessive_gap_resets_soak_window(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            first_monitor = self.make_monitor(root, clock)
+            first_monitor.start(reset=True)
+            first = first_monitor.checkpoint(trigger="before_restart")
+
+            clock.advance(1800)
+            restarted_monitor = self.make_monitor(root, clock)
+            second = restarted_monitor.checkpoint(trigger="after_restart")
+
+            self.assertFalse(second["verified"])
+            self.assertNotEqual(second["session_id"], first["session_id"])
+            self.assertEqual(second["sample_count"], 1)
+            self.assertEqual(second["elapsed_seconds"], 0)
+            self.assertIn("monitoring gap", second.get("restart_reason", ""))
+
     def test_runtime_failure_prevents_verification(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
