@@ -11,6 +11,7 @@ import urllib.error
 import urllib.request
 
 from .config import SETTINGS_PATH
+from .credential_store import CredentialStore
 
 
 @dataclass(frozen=True)
@@ -81,8 +82,13 @@ class AIChatEngine:
         "gemini": "gemini-3.5-flash",
     }
 
-    def __init__(self, settings_path: Path | None = None):
+    def __init__(
+        self,
+        settings_path: Path | None = None,
+        credential_store: CredentialStore | None = None,
+    ):
         self.settings_path = settings_path or SETTINGS_PATH
+        self.credentials = credential_store or CredentialStore()
         self._session_key = ""
         self._session_keys: dict[str, str] = {}
 
@@ -173,13 +179,9 @@ class AIChatEngine:
                 clean_key = api_key.strip()
                 self._session_key = clean_key
                 self._session_keys[provider] = clean_key
-                if remember_key and os.name == "nt":
-                    cipher = _dpapi_protect(clean_key)
-                    profile["key_cipher"] = cipher
-                    data["ai_key_cipher"] = cipher
-                elif not remember_key:
-                    profile.pop("key_cipher", None)
-                    data.pop("ai_key_cipher", None)
+                self.credentials.set(f"{provider}.api_key", clean_key, remember=remember_key)
+            profile.pop("key_cipher", None)
+            data.pop("ai_key_cipher", None)
             profiles[provider] = profile
             data["ai_profiles"] = profiles
         elif provider == "none":
@@ -206,33 +208,59 @@ class AIChatEngine:
         if api_key:
             clean_key = api_key.strip()
             self._session_keys[provider] = clean_key
-            if remember_key and os.name == "nt":
-                profile["key_cipher"] = _dpapi_protect(clean_key)
-            elif not remember_key:
-                profile.pop("key_cipher", None)
+            self.credentials.set(f"{provider}.api_key", clean_key, remember=remember_key)
+        profile.pop("key_cipher", None)
         profiles[provider] = profile
         data["ai_profiles"] = profiles
         if make_default or str(data.get("ai_provider") or "none") == "none":
             data["ai_provider"] = provider
             data["ai_model"] = profile["model"]
             self._session_key = self._session_keys.get(provider, "")
-            if profile.get("key_cipher"):
-                data["ai_key_cipher"] = profile["key_cipher"]
+        data.pop("ai_key_cipher", None)
         self._write(data)
 
     def clear_key(self) -> None:
         data = self._read()
+        provider = str(data.get("ai_provider") or "").strip().lower()
+        if provider in {"openai", "gemini"}:
+            self.credentials.delete(f"{provider}.api_key")
+            self._session_keys.pop(provider, None)
+            profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+            profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
+            profile.pop("key_cipher", None)
+            profiles[provider] = profile
+            data["ai_profiles"] = profiles
         data.pop("ai_key_cipher", None)
         self._session_key = ""
         self._write(data)
 
+    def disconnect_provider(self, provider: str) -> None:
+        provider = provider.strip().lower()
+        if provider not in {"openai", "gemini"}:
+            return
+        self.credentials.delete(f"{provider}.api_key")
+        self._session_keys.pop(provider, None)
+        data = self._read()
+        profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+        profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
+        profile.pop("key_cipher", None)
+        profiles[provider] = profile
+        data["ai_profiles"] = profiles
+        if str(data.get("ai_provider") or "") == provider:
+            data["ai_provider"] = "none"
+            data["ai_model"] = ""
+            data.pop("ai_key_cipher", None)
+        self._write(data)
+
     def _key(self, provider: str) -> str:
-        env_name = "OPENAI_API_KEY" if provider == "openai" else "GEMINI_API_KEY"
-        env = os.environ.get(env_name, "").strip()
-        if env:
-            return env
+        provider = provider.strip().lower()
+        stored = self.credentials.get(f"{provider}.api_key")
+        if stored:
+            return stored
         if self._session_keys.get(provider):
             return self._session_keys[provider]
+
+        # One-time compatibility migration from legacy DPAPI-in-settings storage.
         data = self._read()
         profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
         profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
@@ -243,7 +271,15 @@ class AIChatEngine:
             cipher = str(data.get("ai_key_cipher") or "")
         if cipher and os.name == "nt":
             try:
-                return _dpapi_unprotect(cipher)
+                value = _dpapi_unprotect(cipher)
+                if value:
+                    self.credentials.set(f"{provider}.api_key", value, remember=True)
+                    profile.pop("key_cipher", None)
+                    profiles[provider] = profile
+                    data["ai_profiles"] = profiles
+                    data.pop("ai_key_cipher", None)
+                    self._write(data)
+                    return value
             except Exception:
                 return ""
         return ""
