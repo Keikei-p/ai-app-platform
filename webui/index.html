@@ -179,6 +179,7 @@
               <div class="growth-actions">
                 <button id="runCrossModeE2E" class="agent-action" type="button">実E2E検証</button>
                 <button id="runMultiMissionE2E" class="agent-action secondary" type="button">Mission E2E</button>
+                <button id="checkpointSoak" class="agent-action secondary" type="button">Soak確認</button>
                 <button id="refreshCompletion" class="agent-action secondary" type="button">完成度を再評価</button>
               </div>
             </div>
@@ -188,6 +189,11 @@
             </div>
             <div id="completionGap" class="completion-gap"><span class="meta">最大ギャップを解析中…</span></div>
             <div id="completionEvidence" class="completion-evidence"><span class="meta">実E2E Evidenceを確認中…</span></div>
+            <div id="soakEvidence" class="soak-evidence">
+              <div class="soak-evidence-head"><strong>24h Soak</strong><span id="soakStatus">準備中</span></div>
+              <div class="soak-track"><i id="soakBar"></i></div>
+              <p id="soakSummary">実時間の放置耐久Evidenceを収集中です。</p>
+            </div>
             <div id="completionCriteria" class="completion-criteria"></div>
           </div>
 
