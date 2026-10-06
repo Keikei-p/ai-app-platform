@@ -118,7 +118,9 @@ class PlatformService:
             portable_config=self.portable_config,
         )
         self.buyer_journey_e2e = BuyerJourneyE2EVerifier()
-        self.buyer_journey_e2e.run()
+        # Buyer Journey E2E is a release/productization verification job, not
+        # startup work. Reuse existing Evidence and run it only on explicit
+        # request so normal Aivy startup stays lightweight.
         self.model_router = ModelRouter(self.ai_engine)
         self.knowledge = VerifiedKnowledgeStore()
         self.knowledge_factory = KnowledgeFactory(self.knowledge)
