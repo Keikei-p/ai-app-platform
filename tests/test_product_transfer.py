@@ -155,5 +155,50 @@ class ProductTransferTests(unittest.TestCase):
             self.assertEqual(exported["connectors"],{})
 
 
+    def test_transfer_import_clears_previous_owner_state_on_same_machine(self):
+        with TemporaryDirectory() as tmp:
+            root=Path(tmp);product=root/"product";product.mkdir()
+            credentials,connectors,ownership,setup,portable,_=self.make_parts(root)
+            connectors.configure(
+                "github",
+                config={"repository":"seller/private-repo"},
+                credentials={"token":"seller-secret-token"},
+                remember=True,
+            )
+            ownership.update({
+                "brand_name":"Transfer Brand",
+                "owner_name":"Seller",
+                "organization_name":"Seller Org",
+                "support_email":"seller@example.com",
+            })
+            setup.update({
+                "completed":True,
+                "ai_choice":"openai",
+                "github_choice":"github",
+                "cloud_choice":"cloudflare",
+            })
+
+            package_config=portable.export_dict(for_transfer=True)
+            result=portable.import_dict(package_config)
+
+            self.assertTrue(result["transfer_mode"])
+            self.assertTrue(result["owner_setup_reset"])
+            self.assertTrue(result["connector_state_reset"])
+            self.assertIn("github.token",result["ivy_credentials_cleared"])
+            self.assertFalse(credentials.backend.has(credentials.target("github.token")))
+            self.assertEqual(connectors._read(),{})
+            self.assertFalse(setup.get()["completed"])
+            self.assertEqual(setup.get()["github_choice"],"")
+            profile=ownership.get().to_dict()
+            self.assertEqual(profile["brand_name"],"Transfer Brand")
+            self.assertEqual(profile["owner_name"],"")
+            self.assertEqual(profile["organization_name"],"")
+            self.assertEqual(profile["support_email"],"")
+            settings=json.loads((root/"state"/"settings.json").read_text(encoding="utf-8"))
+            self.assertNotIn("ai_provider",settings)
+            self.assertNotIn("ai_model",settings)
+            self.assertNotIn("ai_routes",settings)
+
+
 if __name__=="__main__":
     unittest.main()
