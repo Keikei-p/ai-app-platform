@@ -814,7 +814,7 @@ async function loadGrowthLab(){
   const driveHeadline=$('#selfDriveHeadline');const driveSummary=$('#selfDriveSummary');const driveToggle=$('#toggleSelfDrive');
   if(!headline||!summary||!toggle||!driveHeadline||!driveSummary||!driveToggle)return;
   try{
-    const [data,practice,drive,backlog,daily,completion,crossMode,multiMission]=await Promise.all([
+    const [data,practice,drive,backlog,daily,completion,crossMode,multiMission,soak]=await Promise.all([
       api('/api/v1/growth/status'),
       api('/api/v1/practice/status'),
       api('/api/v1/self-drive/status'),
@@ -822,7 +822,8 @@ async function loadGrowthLab(){
       api('/api/v1/daily-evolution/status'),
       api('/api/v1/completion/readiness'),
       api('/api/v1/completion/cross-mode-e2e'),
-      api('/api/v1/completion/multi-mission-e2e')
+      api('/api/v1/completion/multi-mission-e2e'),
+      api('/api/v1/completion/soak')
     ]);
 
     const completionScore=Number(completion.percentage||0);
@@ -852,6 +853,16 @@ async function loadGrowthLab(){
         '<span class="e2e-mode '+(multiMission.verified?'pass':'fail')+'">MULTI MISSION '+(multiMission.verified?'PASS':'未検証')+'</span></div>'+
         '<div>Mission source: '+esc(multiMission.source||'none')+(multiMission.stale?' · STALE':'')+'</div>';
     }
+    const soakProgress=Number(soak.progress_percent||0);
+    $('#soakStatus').textContent=soak.verified?'VERIFIED':String(soak.status||'running').toUpperCase();
+    $('#soakBar').style.width=Math.max(0,Math.min(100,soakProgress))+'%';
+    const soakHours=(Number(soak.elapsed_seconds||0)/3600).toFixed(1);
+    const remainHours=(Number(soak.remaining_seconds||0)/3600).toFixed(1);
+    $('#soakSummary').textContent=
+      '実経過 '+soakHours+'h / 24h · '+soakProgress.toFixed(1)+'% · Sample '+(soak.sample_count||0)+'/'+(soak.min_samples||80)+
+      ' · Failure '+(soak.failure_count||0)+
+      (soak.verified?' · 24h Evidence成立':' · 残り約'+remainHours+'h')+
+      (soak.stale?' · SOURCE変更で無効':'');
     const completionCriteria=$('#completionCriteria');
     if(completionCriteria){
       completionCriteria.innerHTML=(completion.criteria||[]).map(x=>
@@ -980,6 +991,20 @@ async function loadGrowthLab(){
     headline.textContent='成長状態を取得できませんでした';
     summary.textContent=e.message;
   }
+}
+async function checkpointSoak(){
+  const button=$('#checkpointSoak');if(!button)return;
+  button.disabled=true;button.textContent='Soak確認中…';
+  try{
+    const data=await api('/api/v1/completion/soak/checkpoint',{method:'POST',body:'{}'});
+    toast(
+      'Soak '+Number(data.progress_percent||0).toFixed(1)+'% · Sample '+(data.sample_count||0)+' · Failure '+(data.failure_count||0),
+      data.failure_count?'error':'success'
+    );
+    await loadGrowthLab();
+  }catch(e){
+    toast('Soak確認を完了できませんでした: '+e.message,'error');
+  }finally{button.disabled=false;button.textContent='Soak確認';}
 }
 async function runMultiMissionE2E(){
   const button=$('#runMultiMissionE2E');if(!button)return;
@@ -1150,7 +1175,7 @@ document.querySelectorAll('[data-starter-mode]').forEach(b=>b.onclick=()=>{
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 document.querySelectorAll('[data-mobile-view]').forEach(b=>b.onclick=()=>setView(b.dataset.mobileView));
 $('#mobileNewChat').onclick=newChat;
-$('#newChat').onclick=newChat;$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#runCrossModeE2E').onclick=runCrossModeE2E;$('#runMultiMissionE2E').onclick=runMultiMissionE2E;$('#refreshCompletion').onclick=refreshCompletion;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#runCrossModeE2E').onclick=runCrossModeE2E;$('#runMultiMissionE2E').onclick=runMultiMissionE2E;$('#checkpointSoak').onclick=checkpointSoak;$('#refreshCompletion').onclick=refreshCompletion;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;storageSet('ui-theme',next);};
 document.addEventListener('keydown',e=>{
