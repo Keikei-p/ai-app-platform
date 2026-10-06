@@ -21,7 +21,9 @@ class CompletionReadinessUIContractTests(unittest.TestCase):
         self.assertIn("MultiMissionE2EVerifier", service)
         self.assertIn('"cross_mode_real_app_e2e_verified": bool(self.cross_mode_e2e.status().get("verified"))', service)
         self.assertIn('"multi_mission_end_to_end_verified": bool(self.multi_mission_e2e.status().get("verified"))', service)
-        self.assertIn('"long_run_soak_verified": False', service)
+        self.assertIn("LongRunSoakMonitor", service)
+        self.assertIn('"long_run_soak_verified": bool(self.long_run_soak.status().get("verified"))', service)
+        self.assertIn("self.long_run_soak.start_background()", service)
         self.assertIn('"cloud_runtime_ready": False', service)
 
     def test_ivy_lab_shows_completion_score_and_highest_gap(self):
@@ -38,14 +40,20 @@ class CompletionReadinessUIContractTests(unittest.TestCase):
             'id="runMultiMissionE2E"',
             'id="refreshCompletion"',
             'id="completionEvidence"',
+            'id="checkpointSoak"',
+            'id="soakStatus"',
+            'id="soakBar"',
+            'id="soakSummary"',
         ):
             self.assertIn(token, html)
         self.assertIn("/api/v1/completion/readiness", app)
         self.assertIn("/api/v1/completion/cross-mode-e2e", app)
         self.assertIn("/api/v1/completion/multi-mission-e2e", app)
+        self.assertIn("/api/v1/completion/soak", app)
         self.assertIn("highest_priority_gap", app)
         self.assertIn("async function runCrossModeE2E()", app)
         self.assertIn("async function runMultiMissionE2E()", app)
+        self.assertIn("async function checkpointSoak()", app)
         self.assertIn("async function refreshCompletion()", app)
         self.assertIn(".completion-readiness-card", css)
 
