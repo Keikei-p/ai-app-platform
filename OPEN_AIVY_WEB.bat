@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 title Aivy Web - One Click
-set "REPO=https://github.com/Keikei-p/ai-app-platform.git"
+set "REPO=%AIVY_UPSTREAM_REPO%"
 set "DEST=%USERPROFILE%\Aivy-Latest"
 set "CHANNEL=develop"
 
@@ -16,9 +16,21 @@ echo   %DEST%
 echo.
 
 where git >nul 2>nul
-if errorlevel 1 goto :git_missing
+if errorlevel 1 goto :repo_missing
+echo.
+echo No update source is configured.
+echo For a buyer/OEM installation, use the delivered Ivy package.
+echo For a Git-based installation, set AIVY_UPSTREAM_REPO to your own repository URL.
+pause
+exit /b 1
 
-if exist "%DEST%\.git" goto :update
+:git_missing
+
+if exist "%DEST%\.git" (
+    if not defined REPO for /f "delims=" %%I in ('git -C "%DEST%" remote get-url origin 2^>nul') do set "REPO=%%I"
+    goto :update
+)
+if not defined REPO goto :repo_missing
 if exist "%DEST%" goto :choose_new_folder
 
 echo [1/3] Installing latest Aivy...
