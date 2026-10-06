@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "kind": "cross_mode_real_app_e2e",
+  "verified": true,
+  "modes": [
+    "app",
+    "web",
+    "automation"
+  ],
+  "cases": [
+    {
+      "mode": "app",
+      "passed": true,
+      "actual_app_type": "inventory",
+      "tests_passed": true,
+      "design_passed": true,
+      "security_passed": true,
+      "preview_ready": true
+    },
+    {
+      "mode": "web",
+      "passed": true,
+      "actual_app_type": "booking",
+      "tests_passed": true,
+      "design_passed": true,
+      "security_passed": true,
+      "preview_ready": true
+    },
+    {
+      "mode": "automation",
+      "passed": true,
+      "actual_app_type": "social_automation",
+      "tests_passed": true,
+      "design_passed": true,
+      "security_passed": true,
+      "preview_ready": true,
+      "social_safe_defaults": true
+    }
+  ],
+  "source_blobs": {
+    "src/core/planner.py": "71d66c3e1d19dd0ab272a5cf4c48e0041072ed89",
+    "src/core/generator.py": "a11fa3123e62fd983e6e7ad271364fb6b0f136c0",
+    "src/core/social_generator.py": "93849484b177a3f30a958afb5dc47222be9ec834",
+    "src/core/test_runner.py": "55298ce89b66c57e13cc06f2f24cf9c11587391e",
+    "src/core/design_ai.py": "346169fbaa82fb88efb3e48ca4b110cfbba7a0ac",
+    "src/core/capability.py": "b245b63d2e503d807cafd3608d494d1259526cfd",
+    "src/core/generation_pipeline.py": "5e5c53a2b10d9b8b76b2ca68ae439d339109e459",
+    "src/core/cross_mode_e2e.py": "bedfbd85288f90ff7cac7c64852d8b5ca83177b5"
+  },
+  "external_actions": false,
+  "credentials_used": false,
+  "paid_actions": false,
+  "production_data_written": false,
+  "ci": {
+    "run_id": 37417020114,
+    "run_number": 889,
+    "conclusion": "success",
+    "tested_commit": "9559aabc05e29b8c496414148539185352809c5b",
+    "source_base_commit": "72d78a719aade89e359fbccfce1fcea445f558a7"
+  },
+  "created_at": "2026-10-06T05:10:00+00:00"
+}
