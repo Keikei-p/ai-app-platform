@@ -1378,14 +1378,29 @@ async function runTransferAudit(){
 }
 
 async function createTransferPackage(){
-  if(!confirm('現在のIvyは変更せず、別の譲渡用Packageを作成します。先に監査とバックアップを行います。実行しますか？'))return;
   try{
+    const audit=await api('/api/v1/transfer/audit');
+    renderTransferAudit(audit);
+    if(!audit.ready){
+      toast('譲渡準備のBlockerがあります。監査結果を確認してください。','error');
+      return;
+    }
+    const blockerCount=(audit.blockers||[]).length;
+    const warningCount=Number(audit.warning_count||0);
+    const ok=confirm(
+      '譲渡監査が完了しました。\n'+
+      'Blocker: '+blockerCount+' / Warning: '+warningCount+'\n\n'+
+      '次に安全な設定Backupを作成し、現在のIvyを変更せずCredential-freeの譲渡用Packageを別ファイルとして作成します。\n実行しますか？'
+    );
+    if(!ok)return;
     const data=await api('/api/v1/transfer/package',{method:'POST',body:JSON.stringify({approved:true})});
-    renderTransferAudit(data.audit||{});
+    renderTransferAudit(data.audit||audit);
     if(data.created){
-      $('#transferAuditResult').insertAdjacentHTML('beforeend','<div class="transfer-finding"><strong>Package:</strong> '+esc(data.path||'作成済み')+'<br><strong>Backup:</strong> '+esc(data.backup_path||'')+'</div>');
+      $('#transferAuditResult').insertAdjacentHTML('beforeend','<div class="transfer-finding"><strong>Package:</strong> '+esc(data.path||'作成済み')+'<br><strong>Backup:</strong> '+esc(data.backup_path||'')+'<br>ライブIvy・既存Workspace・Credentialは変更していません。</div>');
       toast('Credentialを含まない譲渡用Ivyを作成しました。','success');
-    }else{toast('譲渡準備のBlockerを先に解消してください。','error');}
+    }else{
+      toast('Package作成直前の再監査でBlockerが見つかりました。','error');
+    }
   }catch(e){toast('譲渡用Ivyを作成できませんでした: '+e.message,'error');}
 }
 
