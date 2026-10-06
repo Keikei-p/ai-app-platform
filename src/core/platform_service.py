@@ -72,6 +72,7 @@ from .long_run_soak import LongRunSoakMonitor
 from .cloud_runtime import CloudRuntimeReadinessVerifier
 from .credential_store import CredentialStore
 from .connectors import ConnectorManager
+from .redaction import redact_sensitive
 from .productization import (
     OwnershipProfileStore,
     SetupStateStore,
@@ -1388,7 +1389,7 @@ class PlatformService:
         text: str,
         preferred_mode: str | None = None,
     ) -> dict[str, Any]:
-        clean = text.strip()
+        clean = redact_sensitive(text.strip())
         if not clean:
             raise ValueError("message is required")
         thread = self.conversations.get(thread_id)
