@@ -528,7 +528,7 @@ class PlatformService:
             credentials=credentials or {},
             remember=remember,
         )
-        if connector_id in {"openai", "gemini"}:
+        if connector_id in {"openai", "gemini", "ollama"}:
             model = str((config or {}).get("model") or "").strip()
             self.ai_engine.configure_provider(
                 connector_id,
@@ -536,7 +536,12 @@ class PlatformService:
                 api_key="",
                 remember_key=remember,
                 make_default=make_default,
+                base_url=str((config or {}).get("base_url") or ""),
             )
+            order = [x for x in self.ai_engine.fallback_order() if x != connector_id]
+            if connector_id in {"openai", "gemini"} and bool((config or {}).get("auto_fallback")):
+                order.append(connector_id)
+            self.ai_engine.configure_fallback_order(order)
         return row
 
     def test_connector(self, connector_id: str) -> dict[str, Any]:
@@ -544,8 +549,11 @@ class PlatformService:
 
     def disconnect_connector(self, connector_id: str) -> dict[str, Any]:
         row = self.connectors.disconnect(connector_id)
-        if connector_id in {"openai", "gemini"}:
+        if connector_id in {"openai", "gemini", "ollama"}:
             self.ai_engine.disconnect_provider(connector_id)
+            self.ai_engine.configure_fallback_order([
+                x for x in self.ai_engine.fallback_order() if x != connector_id
+            ])
         return row
 
     def current_service_usage(self) -> dict[str, Any]:
