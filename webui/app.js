@@ -1251,8 +1251,8 @@ function openConnectorDialog(id){
     fields.push('<label>'+esc(field.label)+'<input type="password" autocomplete="new-password" data-connector-credential="'+esc(field.key)+'" placeholder="'+esc(status.masked||field.placeholder||'未設定')+'"><small>現在: '+esc(status.configured?(status.masked||'設定済み'):'未設定')+' · '+esc(status.backend||'')+'</small></label>');
   }
   $('#connectorDialogFields').innerHTML=fields.join('')||'<p class="meta">このサービスに入力設定はありません。</p>';
-  $('#connectorDefaultRow').hidden=!['openai','gemini'].includes(id);
-  $('#connectorMakeDefault').checked=false;
+  $('#connectorDefaultRow').hidden=!['openai','gemini','ollama'].includes(id);
+  $('#connectorMakeDefault').checked=(id===($('#setupAI')?.value||''));
   $('#connectorRemember').checked=true;
   dialog.showModal();
 }
