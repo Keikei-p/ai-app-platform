@@ -68,6 +68,7 @@ from .strategic_goals import StrategicGoalStore, StrategicAutonomyEngine
 from .completion_readiness import CompletionReadinessEngine
 from .cross_mode_e2e import CrossModeE2EVerifier
 from .multi_mission_e2e import MultiMissionE2EVerifier
+from .long_run_soak import LongRunSoakMonitor
 
 
 class PlatformService:
@@ -193,6 +194,12 @@ class PlatformService:
         )
         self.cross_mode_e2e = CrossModeE2EVerifier()
         self.multi_mission_e2e = MultiMissionE2EVerifier()
+        self.long_run_soak = LongRunSoakMonitor(
+            self_drive_status=self.self_drive.status,
+            daily_evolution_status=self.daily_evolution.status,
+            strategic_status=self.strategic_autonomy.status,
+            health_status=self.aivy_health_dashboard,
+        )
         self.completion_readiness = CompletionReadinessEngine(
             capability_snapshot=lambda: self.status().get("capabilities", {}),
             self_drive_status=self.self_drive.status,
@@ -203,6 +210,7 @@ class PlatformService:
         )
         self.daily_evolution.start_background()
         self.self_drive.start_background()
+        self.long_run_soak.start_background()
 
     def status(self) -> dict[str, Any]:
         return {
@@ -295,7 +303,7 @@ class PlatformService:
                 "completion_readiness_engine": True,
                 "cross_mode_real_app_e2e_verified": bool(self.cross_mode_e2e.status().get("verified")),
                 "multi_mission_end_to_end_verified": bool(self.multi_mission_e2e.status().get("verified")),
-                "long_run_soak_verified": False,
+                "long_run_soak_verified": bool(self.long_run_soak.status().get("verified")),
                 "cloud_runtime_ready": False,
             },
         }
@@ -839,6 +847,20 @@ class PlatformService:
 
     def run_multi_mission_e2e(self) -> dict[str, Any]:
         return self.multi_mission_e2e.run()
+
+    def long_run_soak_status(self) -> dict[str, Any]:
+        return self.long_run_soak.status()
+
+    def start_long_run_soak(self, *, reset: bool = False) -> dict[str, Any]:
+        result = self.long_run_soak.start(reset=reset)
+        # Record the first sample immediately after a manual start/reset.
+        return self.long_run_soak.checkpoint(trigger="manual_start")
+
+    def checkpoint_long_run_soak(self) -> dict[str, Any]:
+        return self.long_run_soak.checkpoint(trigger="manual")
+
+    def stop_long_run_soak(self) -> dict[str, Any]:
+        return self.long_run_soak.stop()
 
     def completion_readiness_status(self) -> dict[str, Any]:
         return self.completion_readiness.assess()
