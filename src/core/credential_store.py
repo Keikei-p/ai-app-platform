@@ -165,6 +165,7 @@ class CredentialStore:
         else:
             self.backend = SessionCredentialBackend()
         self.namespace = namespace.strip() or "Aivy"
+        self.session = SessionCredentialBackend()
 
     def target(self, credential_id: str) -> str:
         clean = credential_id.strip().lower()
@@ -178,25 +179,27 @@ class CredentialStore:
             value = os.environ.get(env_name, "").strip()
             if value:
                 return value
-        return self.backend.get(self.target(credential_id))
+        target = self.target(credential_id)
+        session_value = self.session.get(target)
+        if session_value:
+            return session_value
+        return self.backend.get(target)
 
     def set(self, credential_id: str, value: str, *, remember: bool = True) -> None:
         clean = str(value or "").strip()
         if not clean:
             raise ValueError("credential value is required")
+        target = self.target(credential_id)
         if remember:
-            self.backend.set(self.target(credential_id), clean)
+            self.backend.set(target, clean)
+            self.session.delete(target)
         else:
-            if isinstance(self.backend, SessionCredentialBackend):
-                self.backend.set(self.target(credential_id), clean)
-            else:
-                # Do not persist when remember=False.
-                session = SessionCredentialBackend()
-                session.set(self.target(credential_id), clean)
-                self.backend = session
+            self.session.set(target, clean)
 
     def delete(self, credential_id: str) -> None:
-        self.backend.delete(self.target(credential_id))
+        target = self.target(credential_id)
+        self.session.delete(target)
+        self.backend.delete(target)
 
     def has(self, credential_id: str) -> bool:
         return bool(self.get(credential_id))
@@ -214,6 +217,9 @@ class CredentialStore:
         env_name = self.ENV_MAP.get(credential_id.strip().lower())
         if env_name and os.environ.get(env_name, "").strip():
             return "environment"
+        target = self.target(credential_id)
+        if self.session.has(target):
+            return "session"
         return self.backend.name
 
     @staticmethod
