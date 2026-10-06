@@ -393,6 +393,32 @@ class ConnectorManager:
         self._write(state)
         return self.get_public(definition.connector_id)
 
+    def reset_for_owner_transfer(self) -> dict[str, Any]:
+        """Remove Ivy-managed account state before a different owner starts setup.
+
+        This never deletes external accounts. Environment-provided credentials are
+        outside Ivy's store, so only their credential IDs are reported for an
+        explicit operator review; their values are never returned.
+        """
+        cleared_ids: list[str] = []
+        for definition in self.registry.list():
+            for field in definition.credential_fields:
+                credential_id = f"{definition.connector_id}.{field['key']}"
+                target = self.credentials.target(credential_id)
+                if self.credentials.session.has(target) or self.credentials.backend.has(target):
+                    cleared_ids.append(credential_id)
+                self.credentials.delete(credential_id)
+
+        # Connector config can contain repository/account/project identifiers.
+        # A new owner must always begin from an empty connector configuration.
+        self._write({})
+        return {
+            "reset": True,
+            "connector_configs_cleared": True,
+            "ivy_credentials_cleared": sorted(set(cleared_ids)),
+            "environment_credentials_detected": self.credentials.environment_credential_ids(),
+        }
+
     def test_connection(self, connector_id: str) -> dict[str, Any]:
         definition = self.registry.get(connector_id)
         if not definition.available:
