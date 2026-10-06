@@ -182,6 +182,9 @@ class PlatformAPI:
                     if path == "/api/v1/completion/multi-mission-e2e":
                         self._json(200, api.service.multi_mission_e2e_status())
                         return
+                    if path == "/api/v1/completion/soak":
+                        self._json(200, api.service.long_run_soak_status())
+                        return
                     if path == "/api/v1/learning/examples":
                         query = parse_qs(parsed.query)
                         limit = max(1, min(int((query.get("limit") or ["50"])[0]), 200))
@@ -337,6 +340,17 @@ class PlatformAPI:
                         return
                     if path == "/api/v1/completion/multi-mission-e2e/run":
                         self._json(200, api.service.run_multi_mission_e2e())
+                        return
+                    if path == "/api/v1/completion/soak/start":
+                        self._json(200, api.service.start_long_run_soak(
+                            reset=bool(data.get("reset")),
+                        ))
+                        return
+                    if path == "/api/v1/completion/soak/checkpoint":
+                        self._json(200, api.service.checkpoint_long_run_soak())
+                        return
+                    if path == "/api/v1/completion/soak/stop":
+                        self._json(200, api.service.stop_long_run_soak())
                         return
                     if path == "/api/v1/daily-evolution/run":
                         self._json(200, api.service.run_daily_evolution())
