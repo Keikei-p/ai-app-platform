@@ -328,6 +328,8 @@ class TransferAuditor:
             rel = path.relative_to(root)
             if any(part in ignored for part in rel.parts):
                 continue
+            if path.name == ".env.example":
+                continue
             if path.name.startswith(".env"):
                 findings.append(self._finding(
                     "danger", "env_file_present",
@@ -545,7 +547,9 @@ class TransferPackageBuilder:
                 rel = path.relative_to(self.root_dir)
                 if not rel.parts or rel.parts[0] in self.EXCLUDED_TOP:
                     continue
-                if path.name.startswith(".env") or path.suffix.lower() in self.EXCLUDED_SUFFIXES:
+                if path.name.startswith(".env") and path.name != ".env.example":
+                    continue
+                if path.suffix.lower() in self.EXCLUDED_SUFFIXES:
                     continue
                 if path.name.startswith(("credentials", "secrets")) and path.suffix.lower() == ".json":
                     continue
