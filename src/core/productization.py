@@ -153,6 +153,13 @@ class PortableConfigManager:
             if key != "completed"
         }
         if for_transfer:
+            # Seller-selected AI routes and workspace preferences are account/use
+            # specific. Keep only generic UI defaults in a transfer package.
+            settings = (
+                {"ui": settings.get("ui")}
+                if isinstance(settings.get("ui"), dict)
+                else {}
+            )
             # Preserve only generic/OEM presentation. New-owner packages must
             # not carry seller account identity, repository names, project IDs,
             # account IDs, service URLs or other owner-specific connector config.
@@ -192,16 +199,59 @@ class PortableConfigManager:
         if raw.get("credentials_included") is not False:
             raise ValueError("Credentialを含む設定ファイルはImportできません")
 
+        try:
+            schema_version = int(raw.get("schema_version") or 0)
+        except (TypeError, ValueError):
+            schema_version = 0
+        if schema_version < 1 or schema_version > self.SCHEMA_VERSION:
+            raise ValueError("未対応のivy-config schemaです")
+
+        transfer_mode = raw.get("transfer_sanitized") is True
+        connector_rows = raw.get("connectors")
+        ownership_raw = raw.get("ownership")
+        reset_summary: dict[str, Any] = {
+            "reset": False,
+            "connector_configs_cleared": False,
+            "ivy_credentials_cleared": [],
+            "environment_credentials_detected": [],
+        }
+
+        if transfer_mode:
+            if isinstance(connector_rows, dict) and connector_rows:
+                raise ValueError("譲渡用設定にConnector設定を含めることはできません")
+            if isinstance(ownership_raw, dict):
+                personal_fields = (
+                    "owner_name", "organization_name", "support_email",
+                    "support_url", "logo_path",
+                )
+                if any(str(ownership_raw.get(key) or "").strip() for key in personal_fields):
+                    raise ValueError("譲渡用設定に旧所有者情報が残っています")
+
+            reset_summary = self.connectors.reset_for_owner_transfer()
+            self.setup.update({
+                "completed": False,
+                "ai_choice": "",
+                "github_choice": "",
+                "cloud_choice": "",
+            })
+
         settings = raw.get("settings")
         if isinstance(settings, dict):
             current = self._settings_read()
-            for key in ("ai_provider", "ai_model", "ai_routes", "ui", "workspace_preferences"):
+            allowed_settings = (
+                ("ui",)
+                if transfer_mode
+                else ("ai_provider", "ai_model", "ai_routes", "ui", "workspace_preferences")
+            )
+            for key in allowed_settings:
                 if key in settings:
                     current[key] = settings[key]
+            if transfer_mode:
+                for key in ("ai_provider", "ai_model", "ai_routes", "workspace_preferences"):
+                    current.pop(key, None)
             self._settings_write(self._strip_secret_fields(current))
 
-        connector_rows = raw.get("connectors")
-        if isinstance(connector_rows, dict):
+        if isinstance(connector_rows, dict) and not transfer_mode:
             for connector_id, row in connector_rows.items():
                 try:
                     definition = self.connectors.registry.get(str(connector_id))
@@ -215,14 +265,40 @@ class PortableConfigManager:
                         remember=False,
                     )
 
-        if isinstance(raw.get("ownership"), dict):
-            self.ownership.update(raw["ownership"])
+        if isinstance(ownership_raw, dict):
+            safe_ownership = dict(ownership_raw)
+            if transfer_mode:
+                safe_ownership.update({
+                    "owner_name": "",
+                    "organization_name": "",
+                    "support_email": "",
+                    "support_url": "",
+                    "logo_path": "",
+                    "license_label": "Unconfigured",
+                })
+            self.ownership.update(safe_ownership)
+
+        env_ids = list(reset_summary.get("environment_credentials_detected") or [])
+        if transfer_mode:
+            message = (
+                "譲渡用設定をImportしました。旧所有者のIvy内Connector/Credentialを解除し、"
+                "初期セットアップを再開しました。外部サービスは購入者自身のCredentialで再接続してください。"
+            )
+            if env_ids:
+                message += " OS環境変数由来のCredential設定があるため、購入者環境で内容を確認してください。"
+        else:
+            message = "設定をImportしました。外部サービスのCredentialは再接続してください。"
 
         return {
             "imported": True,
             "credentials_imported": False,
             "requires_reauthentication": True,
-            "message": "設定をImportしました。外部サービスのCredentialは再接続してください。",
+            "transfer_mode": transfer_mode,
+            "owner_setup_reset": transfer_mode,
+            "connector_state_reset": bool(reset_summary.get("reset")),
+            "ivy_credentials_cleared": list(reset_summary.get("ivy_credentials_cleared") or []),
+            "environment_credentials_detected": env_ids,
+            "message": message,
         }
 
     def _safe_settings(self) -> dict[str, Any]:
