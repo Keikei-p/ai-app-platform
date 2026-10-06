@@ -493,6 +493,15 @@ class ConnectorManager:
         return result
 
     @staticmethod
+    def _test_result(ok: bool, status: str, message: str) -> dict[str, Any]:
+        return {
+            "ok": bool(ok),
+            "status": status,
+            "message": redact_sensitive(message),
+            "tested_at": _now(),
+        }
+
+    @staticmethod
     def _human_error(exc: Exception) -> str:
         if isinstance(exc, PermissionError):
             return redact_sensitive(str(exc) or "認証エラーです。Credentialと権限を確認してください。")
