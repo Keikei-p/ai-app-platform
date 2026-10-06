@@ -179,6 +179,22 @@ class CompletionReadinessEngine:
                 next_action="複数Mission完走シナリオを実アプリで検証する",
             ),
             self._criterion(
+                "productization",
+                "販売・譲渡・OEM準備",
+                10,
+                checks={
+                    "credential store": caps.get("dedicated_credential_store"),
+                    "connector registry": caps.get("connector_registry"),
+                    "credential-free export": caps.get("credential_free_config_export"),
+                    "transfer audit": caps.get("transfer_audit"),
+                    "transfer package": caps.get("non_destructive_transfer_package"),
+                    "ownership profile": caps.get("ownership_profile"),
+                    "OEM foundation": caps.get("oem_branding_foundation"),
+                    "buyer journey E2E": caps.get("buyer_productization_e2e_verified"),
+                },
+                next_action="新品Ivyから移行・譲渡までのBuyer Journey E2Eを再検証する",
+            ),
+            self._criterion(
                 "operations",
                 "配布・運用・長時間安定性",
                 10,
