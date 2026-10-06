@@ -372,13 +372,15 @@ class AIChatEngine:
         primary = str(settings.get("provider") or "none").strip().lower()
         attempted: set[str] = set()
 
-        if primary != "none":
-            attempted.add(primary)
-            try:
-                status = self.status(primary)
-                if status.connected:
-                    return self.reply(history, user_text, system_instruction)
-            except Exception as exc:
+        try:
+            primary_status = self.status()
+            if primary_status.connected:
+                primary = str(primary_status.provider or primary or "none").strip().lower()
+                attempted.add(primary)
+                return self.reply(history, user_text, system_instruction)
+        except Exception as exc:
+            if primary != "none":
+                attempted.add(primary)
                 errors.append(f"{primary}:{type(exc).__name__}")
 
         data = self._read()
