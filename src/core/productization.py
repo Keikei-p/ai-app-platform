@@ -254,8 +254,8 @@ class TransferAuditor:
     EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
     WINDOWS_USER_RE = re.compile(r"(?i)[A-Z]:\\Users\\[^\\\s]+")
     GITHUB_OWNER_RE = re.compile(r"https?://github\.com/([^/\s]+)/")
-    FIREBASE_ID_RE = re.compile(r"(?i)(?:firebase|project)[_-]?id\s*[=:]\s*["']?([a-z0-9-]{6,})")
-    CF_ACCOUNT_RE = re.compile(r"(?i)account[_-]?id\s*[=:]\s*["']?([a-f0-9]{20,})")
+    FIREBASE_ID_RE = re.compile(r"(?i)(?:firebase|project)[_-]?id\s*[=:]\s*[\\"']?([a-z0-9-]{6,})")
+    CF_ACCOUNT_RE = re.compile(r"(?i)account[_-]?id\s*[=:]\s*[\\"']?([a-f0-9]{20,})")
 
     def __init__(
         self,
@@ -534,9 +534,9 @@ class TransferAuditor:
         findings: list[dict[str, Any]] = []
         if any(pattern.search(text) for pattern in SECRET_VALUE_PATTERNS):
             findings.append(self._finding(
-                "danger", "git_history_secret_pattern",
-                "Git履歴にCredentialらしい値が残っている可能性があります。",
-                blocker=True,
+                "warning", "git_history_secret_pattern",
+                "Git履歴にCredentialらしい値が残っている可能性があります。.gitは譲渡Packageへ含めません。履歴ごと譲渡する場合は別途履歴洗浄が必要です。",
+                blocker=False,
             ))
         if self.WINDOWS_USER_RE.search(text):
             findings.append(self._finding(
