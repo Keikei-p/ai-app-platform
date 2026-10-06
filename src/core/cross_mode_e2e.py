@@ -8,6 +8,8 @@ from tempfile import TemporaryDirectory
 from typing import Any
 import json
 
+from . import generator as generator_module
+from . import social_generator as social_generator_module
 from .capability import CapabilityAssessor
 from .config import DATA_DIR, ROOT_DIR
 from .design_ai import DesignAI
@@ -121,78 +123,87 @@ class CrossModeE2EVerifier:
         pipeline = GenerationPipeline()
 
         rows: list[CrossModeCaseResult] = []
-        for case in self.CASES:
-            with TemporaryDirectory(prefix="aivy-cross-mode-e2e-") as tmp:
-                project_dir = Path(tmp) / str(case["slug"])
-                project_dir.mkdir(parents=True)
-                (project_dir / "project.json").write_text(
-                    json.dumps(
-                        {"name": case["name"], "slug": case["slug"]},
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    encoding="utf-8",
-                )
-
-                plan = planner.plan(
-                    str(case["name"]),
-                    str(case["slug"]),
-                    str(case["instruction"]),
-                    "normal",
-                )
-                spec = plan.spec
-                spec.save(project_dir)
-                generated = list(generator.generate_from_spec(project_dir, spec))
-                generated += list(social.generate(project_dir, spec))
-
-                design_report = design.review(project_dir)
-                design.save(project_dir, design_report)
-                gaps = capability.assess(spec, project_dir)
-                capability.save(project_dir, gaps)
-                test_results = tests.run(project_dir)
-                risk_items = [x.__dict__ for x in risk.assess(spec)]
-                pipe = pipeline.evaluate(
-                    project_dir=project_dir,
-                    test_results=test_results,
-                    design_passed=design_report.passed,
-                    capability_gaps=gaps,
-                    risk_items=risk_items,
-                )
-
-                social_safe: bool | None = None
-                if str(case["mode"]) == "automation":
-                    social_row = next(
-                        (x for x in test_results if x.name == "social_safe_defaults"),
-                        None,
+        old_generator_log = generator_module.log_event
+        old_social_log = social_generator_module.log_event
+        generator_module.log_event = lambda *args, **kwargs: None
+        social_generator_module.log_event = lambda *args, **kwargs: None
+        try:
+            for case in self.CASES:
+                with TemporaryDirectory(prefix="aivy-cross-mode-e2e-") as tmp:
+                    project_dir = Path(tmp) / str(case["slug"])
+                    project_dir.mkdir(parents=True)
+                    (project_dir / "project.json").write_text(
+                        json.dumps(
+                            {"name": case["name"], "slug": case["slug"]},
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                        encoding="utf-8",
                     )
-                    social_safe = bool(social_row and social_row.passed)
 
-                tests_passed = bool(test_results) and all(x.passed for x in test_results)
-                type_match = spec.app_type == str(case["expected_app_type"])
-                passed = bool(
-                    type_match
-                    and tests_passed
-                    and design_report.passed
-                    and pipe.security.passed
-                    and pipe.preview_ready
-                    and (social_safe is not False)
-                )
-                rows.append(
-                    CrossModeCaseResult(
-                        mode=str(case["mode"]),
-                        instruction=str(case["instruction"]),
-                        expected_app_type=str(case["expected_app_type"]),
-                        actual_app_type=str(spec.app_type),
-                        tests_passed=tests_passed,
-                        design_passed=bool(design_report.passed),
-                        security_passed=bool(pipe.security.passed),
-                        preview_ready=bool(pipe.preview_ready),
-                        release_ready=bool(pipe.release_ready),
-                        social_safe_defaults=social_safe,
-                        generated_files=len({str(x) for x in generated if Path(x).is_file()}),
-                        passed=passed,
+                    plan = planner.plan(
+                        str(case["name"]),
+                        str(case["slug"]),
+                        str(case["instruction"]),
+                        "normal",
                     )
-                )
+                    spec = plan.spec
+                    spec.save(project_dir)
+                    generated = list(generator.generate_from_spec(project_dir, spec))
+                    generated += list(social.generate(project_dir, spec))
+
+                    design_report = design.review(project_dir)
+                    design.save(project_dir, design_report)
+                    gaps = capability.assess(spec, project_dir)
+                    capability.save(project_dir, gaps)
+                    test_results = tests.run(project_dir)
+                    risk_items = [x.__dict__ for x in risk.assess(spec)]
+                    pipe = pipeline.evaluate(
+                        project_dir=project_dir,
+                        test_results=test_results,
+                        design_passed=design_report.passed,
+                        capability_gaps=gaps,
+                        risk_items=risk_items,
+                    )
+
+                    social_safe: bool | None = None
+                    if str(case["mode"]) == "automation":
+                        social_row = next(
+                            (x for x in test_results if x.name == "social_safe_defaults"),
+                            None,
+                        )
+                        social_safe = bool(social_row and social_row.passed)
+
+                    tests_passed = bool(test_results) and all(x.passed for x in test_results)
+                    type_match = spec.app_type == str(case["expected_app_type"])
+                    passed = bool(
+                        type_match
+                        and tests_passed
+                        and design_report.passed
+                        and pipe.security.passed
+                        and pipe.preview_ready
+                        and (social_safe is not False)
+                    )
+                    rows.append(
+                        CrossModeCaseResult(
+                            mode=str(case["mode"]),
+                            instruction=str(case["instruction"]),
+                            expected_app_type=str(case["expected_app_type"]),
+                            actual_app_type=str(spec.app_type),
+                            tests_passed=tests_passed,
+                            design_passed=bool(design_report.passed),
+                            security_passed=bool(pipe.security.passed),
+                            preview_ready=bool(pipe.preview_ready),
+                            release_ready=bool(pipe.release_ready),
+                            social_safe_defaults=social_safe,
+                            generated_files=len({str(x) for x in generated if Path(x).is_file()}),
+                            passed=passed,
+                        )
+                    )
+
+        finally:
+            generator_module.log_event = old_generator_log
+            social_generator_module.log_event = old_social_log
 
         verified = len(rows) == len(self.CASES) and all(x.passed for x in rows)
         payload = {
