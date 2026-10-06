@@ -73,6 +73,7 @@ from .cloud_runtime import CloudRuntimeReadinessVerifier
 from .credential_store import CredentialStore
 from .connectors import ConnectorManager
 from .redaction import redact_sensitive
+from .productization_e2e import BuyerJourneyE2EVerifier
 from .productization import (
     OwnershipProfileStore,
     SetupStateStore,
@@ -116,6 +117,8 @@ class PlatformService:
             auditor=self.transfer_auditor,
             portable_config=self.portable_config,
         )
+        self.buyer_journey_e2e = BuyerJourneyE2EVerifier()
+        self.buyer_journey_e2e.run()
         self.model_router = ModelRouter(self.ai_engine)
         self.knowledge = VerifiedKnowledgeStore()
         self.knowledge_factory = KnowledgeFactory(self.knowledge)
@@ -343,6 +346,9 @@ class PlatformService:
                 "non_destructive_transfer_package": True,
                 "ownership_profile": True,
                 "oem_branding_foundation": True,
+                "buyer_productization_e2e_verified": bool(
+                    self.buyer_journey_e2e.status().get("verified")
+                ),
             },
         }
 
@@ -599,6 +605,12 @@ class PlatformService:
 
     def import_portable_config(self, raw: dict[str, Any]) -> dict[str, Any]:
         return self.portable_config.import_dict(raw)
+
+    def buyer_productization_e2e_status(self) -> dict[str, Any]:
+        return self.buyer_journey_e2e.status()
+
+    def run_buyer_productization_e2e(self) -> dict[str, Any]:
+        return self.buyer_journey_e2e.run()
 
     def transfer_audit(self) -> dict[str, Any]:
         return self.transfer_auditor.run()
