@@ -7,10 +7,11 @@ from typing import Any
 import json
 import re
 import shutil
+import sqlite3
 import subprocess
 import zipfile
 
-from .config import BACKUP_DIR, DATA_DIR, LOG_DIR, ROOT_DIR, SETTINGS_PATH
+from .config import BACKUP_DIR, DATA_DIR, DB_PATH, LOG_DIR, ROOT_DIR, SETTINGS_PATH
 from .connectors import ConnectorManager
 from .credential_store import CredentialStore
 from .redaction import redact_sensitive
@@ -300,6 +301,9 @@ class TransferAuditor:
         log_scan = self._scan_directory(LOG_DIR, scope="logs")
         findings.extend(log_scan)
 
+        database_scan = self._scan_sqlite_db(DB_PATH)
+        findings.extend(database_scan)
+
         history = self._scan_git_history()
         findings.extend(history["findings"])
 
@@ -411,6 +415,84 @@ class TransferAuditor:
                     f"{scope}内にCredentialらしい値があります: {path.name}",
                     blocker=True,
                 ))
+        return self._dedupe(findings)
+
+    def _scan_sqlite_db(self, path: Path) -> list[dict[str, Any]]:
+        """Inspect runtime SQLite text without ever returning stored values.
+
+        Runtime DB is excluded from transfer packages. Findings are warnings so
+        the live owner's data is never automatically deleted just to build a
+        clean transfer copy.
+        """
+        if not path.is_file():
+            return []
+        findings: list[dict[str, Any]] = []
+        try:
+            connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+        except sqlite3.Error:
+            return [self._finding(
+                "warning", "runtime_db_unchecked",
+                "ローカルSQLite履歴を読み取り専用で確認できませんでした。",
+                blocker=False,
+            )]
+        try:
+            tables = [
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                ).fetchall()
+                if row and row[0]
+            ]
+            for table in tables[:80]:
+                safe_table = table.replace('"', '""')
+                try:
+                    columns = connection.execute(f'PRAGMA table_info("{safe_table}")').fetchall()
+                except sqlite3.Error:
+                    continue
+                text_columns = [
+                    str(row[1])
+                    for row in columns
+                    if len(row) > 2 and str(row[2] or "").upper() in {"", "TEXT", "VARCHAR", "CHAR", "CLOB", "JSON"}
+                ]
+                for column in text_columns[:80]:
+                    safe_column = column.replace('"', '""')
+                    try:
+                        rows = connection.execute(
+                            f'SELECT "{safe_column}" FROM "{safe_table}" '
+                            f'WHERE "{safe_column}" IS NOT NULL LIMIT 500'
+                        ).fetchall()
+                    except sqlite3.Error:
+                        continue
+                    secret_hit = False
+                    personal_hit = False
+                    credential_name_hit = any(
+                        token in column.lower()
+                        for token in ("token", "secret", "password", "api_key", "credential", "cookie")
+                    )
+                    for row in rows:
+                        value = str(row[0] if row else "")
+                        if not value:
+                            continue
+                        if any(pattern.search(value) for pattern in SECRET_VALUE_PATTERNS):
+                            secret_hit = True
+                        if self.EMAIL_RE.search(value) or self.WINDOWS_USER_RE.search(value):
+                            personal_hit = True
+                        if secret_hit and personal_hit:
+                            break
+                    if secret_hit or credential_name_hit:
+                        findings.append(self._finding(
+                            "warning", "runtime_db_credential_data",
+                            f"ライブSQLiteにCredential関連データの可能性があります: {table}.{column}。譲渡PackageにはDBを含めません。",
+                            blocker=False,
+                        ))
+                    if personal_hit:
+                        findings.append(self._finding(
+                            "warning", "runtime_db_personal_data",
+                            f"ライブSQLiteに個人情報の可能性があります: {table}.{column}。譲渡PackageにはDBを含めません。",
+                            blocker=False,
+                        ))
+        finally:
+            connection.close()
         return self._dedupe(findings)
 
     def _scan_git_history(self) -> dict[str, Any]:
