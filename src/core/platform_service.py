@@ -70,6 +70,15 @@ from .cross_mode_e2e import CrossModeE2EVerifier
 from .multi_mission_e2e import MultiMissionE2EVerifier
 from .long_run_soak import LongRunSoakMonitor
 from .cloud_runtime import CloudRuntimeReadinessVerifier
+from .credential_store import CredentialStore
+from .connectors import ConnectorManager
+from .productization import (
+    OwnershipProfileStore,
+    SetupStateStore,
+    PortableConfigManager,
+    TransferAuditor,
+    TransferPackageBuilder,
+)
 
 
 class PlatformService:
@@ -88,7 +97,24 @@ class PlatformService:
         self.core = AICore()
         self.tools = AgentToolRegistry()
         self.specialists = SpecialistAgentRegistry(self.tools)
-        self.ai_engine = AIChatEngine()
+        self.credentials = CredentialStore()
+        self.ai_engine = AIChatEngine(credential_store=self.credentials)
+        self.connectors = ConnectorManager(credentials=self.credentials)
+        self.ownership = OwnershipProfileStore()
+        self.setup_state = SetupStateStore()
+        self.portable_config = PortableConfigManager(
+            connectors=self.connectors,
+            ownership=self.ownership,
+            setup=self.setup_state,
+        )
+        self.transfer_auditor = TransferAuditor(
+            connectors=self.connectors,
+            credentials=self.credentials,
+        )
+        self.transfer_builder = TransferPackageBuilder(
+            auditor=self.transfer_auditor,
+            portable_config=self.portable_config,
+        )
         self.model_router = ModelRouter(self.ai_engine)
         self.knowledge = VerifiedKnowledgeStore()
         self.knowledge_factory = KnowledgeFactory(self.knowledge)
@@ -219,6 +245,7 @@ class PlatformService:
         return {
             "service": "ai-app-platform",
             "identity": AIVY.to_dict(),
+            "product": self.ownership.get().to_dict(),
             "architecture": "local-first-core-service",
             "project_count": len(list_projects()),
             "capabilities": {
@@ -308,6 +335,13 @@ class PlatformService:
                 "multi_mission_end_to_end_verified": bool(self.multi_mission_e2e.status().get("verified")),
                 "long_run_soak_verified": bool(self.long_run_soak.status().get("verified")),
                 "cloud_runtime_ready": bool(self.cloud_runtime.status().get("verified")),
+                "dedicated_credential_store": True,
+                "connector_registry": True,
+                "credential_free_config_export": True,
+                "transfer_audit": True,
+                "non_destructive_transfer_package": True,
+                "ownership_profile": True,
+                "oem_branding_foundation": True,
             },
         }
 
@@ -471,6 +505,97 @@ class PlatformService:
             row["executable"] = tool.name in executable
             rows.append(row)
         return rows
+
+    def connector_status(self) -> dict[str, Any]:
+        return {
+            "connectors": self.connectors.list_public(),
+            "dependencies": self.connectors.dependency_summary(),
+            "current_usage": self.current_service_usage(),
+        }
+
+    def configure_connector(
+        self,
+        connector_id: str,
+        *,
+        config: dict[str, Any] | None = None,
+        credentials: dict[str, Any] | None = None,
+        remember: bool = True,
+        make_default: bool = False,
+    ) -> dict[str, Any]:
+        row = self.connectors.configure(
+            connector_id,
+            config=config or {},
+            credentials=credentials or {},
+            remember=remember,
+        )
+        if connector_id in {"openai", "gemini"}:
+            model = str((config or {}).get("model") or "").strip()
+            self.ai_engine.configure_provider(
+                connector_id,
+                model,
+                api_key="",
+                remember_key=remember,
+                make_default=make_default,
+            )
+        return row
+
+    def test_connector(self, connector_id: str) -> dict[str, Any]:
+        return self.connectors.test_connection(connector_id)
+
+    def disconnect_connector(self, connector_id: str) -> dict[str, Any]:
+        row = self.connectors.disconnect(connector_id)
+        if connector_id in {"openai", "gemini"}:
+            self.ai_engine.disconnect_provider(connector_id)
+        return row
+
+    def current_service_usage(self) -> dict[str, Any]:
+        settings = self.ai_engine.settings()
+        routes = self.model_routes()
+        effective = {
+            str(row.get("capability") or ""): str((row.get("effective") or {}).get("provider") or "none")
+            for row in routes.get("routes") or []
+        }
+        connector_rows = {x["connector_id"]: x for x in self.connectors.list_public()}
+        github = connector_rows.get("github") or {}
+        local_git = connector_rows.get("local_git") or {}
+        git_provider = (
+            "GitHub"
+            if github.get("status") == "connected"
+            else "ローカルGit"
+            if local_git.get("status") == "connected"
+            else "未設定"
+        )
+        return {
+            "ai": str(settings.get("provider") or "none"),
+            "coding": effective.get("coding") or str(settings.get("provider") or "none"),
+            "image": effective.get("vision") or "none",
+            "research": effective.get("research") or str(settings.get("provider") or "none"),
+            "git": git_provider,
+        }
+
+    def ownership_profile(self) -> dict[str, Any]:
+        return self.ownership.get().to_dict()
+
+    def update_ownership_profile(self, values: dict[str, Any]) -> dict[str, Any]:
+        return self.ownership.update(values).to_dict()
+
+    def setup_status(self) -> dict[str, Any]:
+        return self.setup_state.get()
+
+    def update_setup(self, values: dict[str, Any]) -> dict[str, Any]:
+        return self.setup_state.update(values)
+
+    def export_portable_config(self) -> dict[str, Any]:
+        return self.portable_config.export_dict()
+
+    def import_portable_config(self, raw: dict[str, Any]) -> dict[str, Any]:
+        return self.portable_config.import_dict(raw)
+
+    def transfer_audit(self) -> dict[str, Any]:
+        return self.transfer_auditor.run()
+
+    def create_transfer_package(self, *, approved: bool) -> dict[str, Any]:
+        return self.transfer_builder.create(approved=approved)
 
     def model_routes(self) -> dict[str, Any]:
         tasks = {
