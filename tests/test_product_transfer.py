@@ -152,6 +152,7 @@ class ProductTransferTests(unittest.TestCase):
             self.assertEqual(exported["ownership"]["support_email"],"")
             self.assertEqual(exported["ownership"]["brand_name"],"Buyer Ready Brand")
             self.assertTrue(exported["transfer_sanitized"])
+            self.assertEqual(exported["connectors"],{})
 
 
 if __name__=="__main__":
