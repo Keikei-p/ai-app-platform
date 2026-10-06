@@ -11,10 +11,10 @@
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="brand-row">
-        <div class="brand-mark">A</div>
+        <div class="brand-mark" id="brandMark">A</div>
         <div>
-          <strong>Aivy</strong>
-          <small>育つほど、つくれる。</small>
+          <strong id="brandName">Aivy</strong>
+          <small id="brandTagline">育つほど、つくれる。</small>
         </div>
         <button class="icon-button mobile-only" id="closeSidebar" aria-label="メニューを閉じる">×</button>
       </div>
@@ -313,6 +313,11 @@
           <div class="service-usage data-card">
             <div><span class="eyebrow">CURRENT ROUTING</span><h3>現在使っているサービス</h3><p>機能ごとに、どのProviderが選ばれているか確認できます。</p></div>
             <div id="currentServiceUsage" class="service-usage-grid"></div>
+          </div>
+
+          <div class="data-card dependency-card">
+            <div><span class="eyebrow">DEPENDENCIES</span><h3>Ivyが現在依存しているサービス</h3><p>接続済み・ローカル稼働中のサービスだけを自動整理します。</p></div>
+            <div id="currentDependencies" class="dependency-list"><span class="meta">確認中…</span></div>
           </div>
 
           <div id="connectorCategories" class="connector-categories"></div>
