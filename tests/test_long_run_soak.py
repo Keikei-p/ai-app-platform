@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+
+from src.core.config import ROOT_DIR
+from src.core.long_run_soak import LongRunSoakMonitor
+
+
+class FakeClock:
+    def __init__(self):
+        self.value = datetime(2026, 10, 6, 0, 0, tzinfo=timezone.utc)
+
+    def now(self):
+        return self.value
+
+    def advance(self, seconds: int):
+        self.value += timedelta(seconds=seconds)
+
+
+def healthy_callbacks():
+    return {
+        "self_drive_status": lambda: {
+            "enabled": True,
+            "background_active": True,
+            "approval_bypass_allowed": False,
+        },
+        "daily_evolution_status": lambda: {
+            "enabled": True,
+            "background_active": True,
+            "source_self_edit_allowed": False,
+        },
+        "strategic_status": lambda: {
+            "active_goals": 1,
+            "waiting_on_mission": 0,
+            "build_auto_approval": False,
+        },
+        "health_status": lambda: {"status": "healthy"},
+    }
+
+
+class LongRunSoakTests(unittest.TestCase):
+    def make_monitor(self, root: Path, clock: FakeClock, **overrides):
+        callbacks = healthy_callbacks()
+        callbacks.update(overrides)
+        return LongRunSoakMonitor(
+            **callbacks,
+            root_dir=ROOT_DIR,
+            state_path=root / "soak.json",
+            now_fn=clock.now,
+            target_seconds=3600,
+            heartbeat_seconds=900,
+            max_gap_seconds=1200,
+            min_samples=5,
+        )
+
+    def test_fake_clock_proves_logic_but_requires_all_duration_and_samples(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            monitor = self.make_monitor(root, clock)
+            monitor.start(reset=True)
+
+            first = monitor.checkpoint(trigger="test")
+            self.assertFalse(first["verified"])
+            self.assertEqual(first["sample_count"], 1)
+
+            for _ in range(4):
+                clock.advance(900)
+                row = monitor.checkpoint(trigger="test")
+
+            self.assertTrue(row["verified"])
+            self.assertEqual(row["status"], "verified")
+            self.assertEqual(row["sample_count"], 5)
+            self.assertEqual(row["failure_count"], 0)
+            self.assertTrue(row["requirements"]["elapsed_target_met"])
+            self.assertTrue(row["requirements"]["sample_target_met"])
+            self.assertTrue(row["requirements"]["no_failures"])
+
+    def test_large_monitoring_gap_restarts_window_instead_of_cheating_duration(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            monitor = self.make_monitor(root, clock)
+            monitor.start(reset=True)
+            monitor.checkpoint(trigger="test")
+            clock.advance(1800)
+
+            row = monitor.checkpoint(trigger="test")
+
+            self.assertFalse(row["verified"])
+            self.assertEqual(row["sample_count"], 1)
+            self.assertEqual(row["elapsed_seconds"], 0)
+            self.assertIn("monitoring gap", row.get("restart_reason", ""))
+
+    def test_runtime_failure_prevents_verification(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            callbacks = healthy_callbacks()
+            callbacks["health_status"] = lambda: {"status": "critical"}
+            monitor = self.make_monitor(root, clock, **callbacks)
+            monitor.start(reset=True)
+
+            for i in range(5):
+                if i:
+                    clock.advance(900)
+                row = monitor.checkpoint(trigger="test")
+
+            self.assertFalse(row["verified"])
+            self.assertGreater(row["failure_count"], 0)
+            self.assertFalse(row["requirements"]["no_failures"])
+            self.assertIn("health_critical", row["last_failure"]["reasons"])
+
+    def test_protected_boundaries_are_part_of_each_sample(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            callbacks = healthy_callbacks()
+            callbacks["strategic_status"] = lambda: {
+                "build_auto_approval": True,
+            }
+            monitor = self.make_monitor(root, clock, **callbacks)
+            monitor.start(reset=True)
+            row = monitor.checkpoint(trigger="test")
+
+            self.assertFalse(row["samples"][-1]["ok"])
+            self.assertIn(
+                "strategy_auto_approval_boundary_invalid",
+                row["samples"][-1]["reasons"],
+            )
+
+    def test_default_contract_is_real_24h_not_short_simulation(self):
+        callbacks = healthy_callbacks()
+        with TemporaryDirectory() as tmp:
+            monitor = LongRunSoakMonitor(
+                **callbacks,
+                root_dir=ROOT_DIR,
+                state_path=Path(tmp) / "soak.json",
+            )
+            self.assertEqual(monitor.target_seconds, 24 * 60 * 60)
+            self.assertEqual(monitor.heartbeat_seconds, 15 * 60)
+            self.assertEqual(monitor.max_gap_seconds, 45 * 60)
+            self.assertGreaterEqual(monitor.min_samples, 80)
+
+
+if __name__ == "__main__":
+    unittest.main()
