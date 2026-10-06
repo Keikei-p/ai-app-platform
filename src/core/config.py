@@ -17,19 +17,31 @@ def _version() -> str:
 VERSION = _version()
 
 
-def _state_dir() -> Path:
-    override = os.environ.get("AI_APP_PLATFORM_STATE_DIR")
+def resolve_state_dir(
+    env: dict[str, str] | None = None,
+    *,
+    os_name: str | None = None,
+    home: Path | None = None,
+) -> Path:
+    values = os.environ if env is None else env
+    platform_name = os.name if os_name is None else os_name
+    home_dir = Path.home() if home is None else Path(home)
+    override = values.get("AI_APP_PLATFORM_STATE_DIR")
     if override:
         return Path(override).expanduser()
-    if os.name == "nt":
-        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
+    if platform_name == "nt":
+        base = values.get("LOCALAPPDATA") or values.get("APPDATA") or str(home_dir)
         return Path(base) / "AI-App-Platform"
-    if sys_platform := os.environ.get("OSTYPE", ""):
-        _ = sys_platform  # keep environment access harmless for frozen builds
-    if Path.home().joinpath("Library", "Application Support").exists():
-        return Path.home() / "Library" / "Application Support" / "AI-App-Platform"
-    base = os.environ.get("XDG_DATA_HOME")
-    return (Path(base) if base else Path.home() / ".local" / "share") / "AI-App-Platform"
+    if sys_platform := values.get("OSTYPE", ""):
+        _ = sys_platform
+    if home_dir.joinpath("Library", "Application Support").exists():
+        return home_dir / "Library" / "Application Support" / "AI-App-Platform"
+    base = values.get("XDG_DATA_HOME")
+    return (Path(base) if base else home_dir / ".local" / "share") / "AI-App-Platform"
+
+
+def _state_dir() -> Path:
+    return resolve_state_dir()
 
 
 STATE_DIR = _state_dir()
