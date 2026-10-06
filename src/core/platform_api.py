@@ -230,6 +230,9 @@ class PlatformAPI:
                     if path == "/api/v1/completion/soak":
                         self._json(200, api.service.long_run_soak_status())
                         return
+                    if path == "/api/v1/completion/cloud-runtime":
+                        self._json(200, api.service.cloud_runtime_status())
+                        return
                     if path == "/api/v1/learning/examples":
                         query = parse_qs(parsed.query)
                         limit = max(1, min(int((query.get("limit") or ["50"])[0]), 200))
@@ -396,6 +399,9 @@ class PlatformAPI:
                         return
                     if path == "/api/v1/completion/soak/stop":
                         self._json(200, api.service.stop_long_run_soak())
+                        return
+                    if path == "/api/v1/completion/cloud-runtime/run":
+                        self._json(200, api.service.run_cloud_runtime_readiness())
                         return
                     if path == "/api/v1/daily-evolution/run":
                         self._json(200, api.service.run_daily_evolution())
