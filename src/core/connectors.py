@@ -11,6 +11,7 @@ import urllib.request
 
 from .config import DATA_DIR, ROOT_DIR
 from .credential_store import CredentialStore
+from .connector_providers import ConnectorProvider, default_provider_registry
 from .redaction import redact_sensitive
 
 
@@ -270,9 +271,11 @@ class ConnectorManager:
         registry: ConnectorRegistry | None = None,
         credentials: CredentialStore | None = None,
         config_path: Path | None = None,
+        providers: dict[str, ConnectorProvider] | None = None,
     ):
         self.registry = registry or ConnectorRegistry()
         self.credentials = credentials or CredentialStore()
+        self.providers = providers or default_provider_registry()
         self.config_path = Path(config_path or (DATA_DIR / "connectors.json"))
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -296,6 +299,48 @@ class ConnectorManager:
 
     def get_public(self, connector_id: str) -> dict[str, Any]:
         return next(x for x in self.list_public() if x["connector_id"] == connector_id)
+
+    def connect(
+        self,
+        connector_id: str,
+        *,
+        config: dict[str, Any] | None = None,
+        credentials: dict[str, Any] | None = None,
+        remember: bool = True,
+    ) -> dict[str, Any]:
+        return self.configure(
+            connector_id,
+            config=config,
+            credentials=credentials,
+            remember=remember,
+        )
+
+    def get_status(self, connector_id: str) -> dict[str, Any]:
+        return self.get_public(connector_id)
+
+    def get_capabilities(self, connector_id: str) -> list[str]:
+        definition = self.registry.get(connector_id)
+        provider = self.providers.get(definition.test_mode)
+        if provider is None:
+            return list(definition.capabilities)
+        runtime = list(provider.get_capabilities())
+        return runtime or list(definition.capabilities)
+
+    def validate_configuration(self, connector_id: str) -> dict[str, Any]:
+        definition = self.registry.get(connector_id)
+        saved = self._read().get(definition.connector_id)
+        saved = saved if isinstance(saved, dict) else {}
+        provider = self.providers.get(definition.test_mode) or self.providers.get("none")
+        if provider is None:
+            return {"valid": False, "issues": ["Provider adapter is unavailable."]}
+        issues = provider.validate_configuration(
+            dict(saved.get("config") or {}),
+            lambda key: self.credentials.get(f"{definition.connector_id}.{key}"),
+        )
+        return {
+            "valid": not issues,
+            "issues": [redact_sensitive(str(x)) for x in issues],
+        }
 
     def configure(
         self,
@@ -385,103 +430,20 @@ class ConnectorManager:
         return rows
 
     def _run_test(self, definition: ConnectorDefinition) -> dict[str, Any]:
-        connector_id = definition.connector_id
-        saved = self._read().get(connector_id) or {}
-        config = dict(saved.get("config") or {})
-
-        if definition.test_mode == "sqlite":
-            from .config import DB_PATH
-            DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-            return self._test_result(True, "connected", "SQLiteローカルデータ領域を利用できます。")
-
-        if definition.test_mode == "local_git":
-            if shutil.which("git"):
-                return self._test_result(True, "connected", "ローカルGitを利用できます。")
-            return self._test_result(False, "error", "Gitが見つかりません。Gitをインストールして再確認してください。")
-
-        if definition.test_mode == "windows":
-            import os
-            if os.name == "nt":
-                return self._test_result(True, "connected", "Windows配布環境を利用できます。")
-            return self._test_result(False, "unavailable", "この環境はWindowsではありません。")
-
-        if definition.test_mode == "ollama":
-            base_url = str(config.get("base_url") or "http://127.0.0.1:11434").rstrip("/")
-            data = self._get_json(base_url + "/api/tags", {})
-            models = [str(x.get("name") or "") for x in data.get("models") or [] if isinstance(x, dict)]
-            model = str(config.get("model") or "")
-            suffix = f" モデル {model} を確認しました。" if model and any(x.startswith(model) for x in models) else ""
-            return self._test_result(True, "connected", "Ollamaへ接続できました。" + suffix)
-
-        if definition.test_mode == "openai":
-            key = self._required_secret("openai.api_key", "OpenAI APIキー")
-            self._get_json("https://api.openai.com/v1/models", {"Authorization": f"Bearer {key}"})
-            return self._test_result(True, "connected", "OpenAIへ接続できました。")
-
-        if definition.test_mode == "gemini":
-            key = self._required_secret("gemini.api_key", "Gemini APIキー")
-            self._get_json(
-                "https://generativelanguage.googleapis.com/v1beta/models",
-                {"x-goog-api-key": key},
+        saved = self._read().get(definition.connector_id)
+        saved = saved if isinstance(saved, dict) else {}
+        provider = self.providers.get(definition.test_mode) or self.providers.get("none")
+        if provider is None:
+            return self._test_result(
+                False,
+                "unavailable",
+                "このConnectorのProvider Adapterがありません。",
             )
-            return self._test_result(True, "connected", "Google Geminiへ接続できました。")
-
-        if definition.test_mode == "github":
-            key = self._required_secret("github.token", "GitHub Token")
-            data = self._get_json(
-                "https://api.github.com/user",
-                {
-                    "Authorization": f"Bearer {key}",
-                    "Accept": "application/vnd.github+json",
-                    "User-Agent": "Aivy-Connector",
-                },
-            )
-            login = str(data.get("login") or "").strip()
-            return self._test_result(True, "connected", f"GitHubへ接続できました。{(' アカウント: ' + login) if login else ''}")
-
-        if definition.test_mode == "cloudflare":
-            key = self._required_secret("cloudflare.token", "Cloudflare API Token")
-            data = self._get_json(
-                "https://api.cloudflare.com/client/v4/user/tokens/verify",
-                {"Authorization": f"Bearer {key}"},
-            )
-            if data.get("success") is not True:
-                raise RuntimeError("Cloudflare token verification failed")
-            return self._test_result(True, "connected", "Cloudflare Tokenを確認できました。")
-
-        if definition.test_mode == "d1":
-            key = self._required_secret("d1.token", "Cloudflare API Token")
-            account = str(config.get("account_id") or "").strip()
-            database = str(config.get("database_id") or "").strip()
-            if not account or not database:
-                return self._test_result(False, "setting_incomplete", "Account IDとDatabase IDを設定してください。")
-            data = self._get_json(
-                f"https://api.cloudflare.com/client/v4/accounts/{account}/d1/database/{database}",
-                {"Authorization": f"Bearer {key}"},
-            )
-            if data.get("success") is not True:
-                raise RuntimeError("D1 verification failed")
-            return self._test_result(True, "connected", "Cloudflare D1へ接続できました。")
-
-        if definition.test_mode == "vercel":
-            key = self._required_secret("vercel.token", "Vercel Token")
-            self._get_json("https://api.vercel.com/v2/user", {"Authorization": f"Bearer {key}"})
-            return self._test_result(True, "connected", "Vercelへ接続できました。")
-
-        if definition.test_mode == "netlify":
-            key = self._required_secret("netlify.token", "Netlify Token")
-            self._get_json("https://api.netlify.com/api/v1/user", {"Authorization": f"Bearer {key}"})
-            return self._test_result(True, "connected", "Netlifyへ接続できました。")
-
-        if definition.test_mode == "supabase":
-            key = self._required_secret("supabase.key", "Supabase API Key")
-            url = str(config.get("url") or "").strip().rstrip("/")
-            if not url.startswith("https://"):
-                return self._test_result(False, "setting_incomplete", "Supabase Project URLを設定してください。")
-            self._get_json(url + "/rest/v1/", {"apikey": key, "Authorization": f"Bearer {key}"})
-            return self._test_result(True, "connected", "Supabase APIへ接続できました。")
-
-        return self._test_result(False, "unavailable", "このConnectorの接続テストはまだ利用できません。")
+        result = provider.test_connection(
+            dict(saved.get("config") or {}),
+            lambda key: self.credentials.get(f"{definition.connector_id}.{key}"),
+        )
+        return self._test_result(result.ok, result.status, result.message)
 
     def _status(self, definition: ConnectorDefinition, saved: dict[str, Any]) -> str:
         if not definition.available:
@@ -529,38 +491,6 @@ class ConnectorManager:
             else:
                 result[key] = str(value)
         return result
-
-    def _required_secret(self, credential_id: str, label: str) -> str:
-        value = self.credentials.get(credential_id)
-        if not value:
-            raise ValueError(f"{label}が未設定です。設定してから接続テストを実行してください。")
-        return value
-
-    @staticmethod
-    def _get_json(url: str, headers: dict[str, str]) -> dict[str, Any]:
-        request = urllib.request.Request(url, headers=headers, method="GET")
-        try:
-            with urllib.request.urlopen(request, timeout=12) as response:
-                raw = response.read(1024 * 1024)
-        except urllib.error.HTTPError as exc:
-            if exc.code in {401, 403}:
-                raise PermissionError("認証できませんでした。Credentialと権限を確認してください。") from exc
-            if exc.code == 429:
-                raise RuntimeError("利用制限またはレート制限の可能性があります。サービス側の状態を確認してください。") from exc
-            raise RuntimeError(f"接続先からHTTP {exc.code}が返されました。") from exc
-        except urllib.error.URLError as exc:
-            raise ConnectionError("ネットワーク接続またはサービスURLを確認してください。") from exc
-        data = json.loads(raw.decode("utf-8") or "{}")
-        return data if isinstance(data, dict) else {}
-
-    @staticmethod
-    def _test_result(ok: bool, status: str, message: str) -> dict[str, Any]:
-        return {
-            "ok": bool(ok),
-            "status": status,
-            "message": redact_sensitive(message),
-            "tested_at": _now(),
-        }
 
     @staticmethod
     def _human_error(exc: Exception) -> str:
