@@ -1150,10 +1150,11 @@ async function runPractice(){
 
 async function loadIntegrations(){
   try{
-    const [data,ownership,setup]=await Promise.all([
+    const [data,ownership,setup,buyerE2E]=await Promise.all([
       api('/api/v1/connectors'),
       api('/api/v1/ownership'),
-      api('/api/v1/setup')
+      api('/api/v1/setup'),
+      api('/api/v1/productization/e2e')
     ]);
     state.connectors=data.connectors||[];
     state.connectorMap=Object.fromEntries(state.connectors.map(x=>[x.connector_id,x]));
@@ -1208,6 +1209,8 @@ async function loadIntegrations(){
     $('#ownerAccent').value=ownership.accent_color||'';
     $('#ownerSupportUrl').value=ownership.support_url||'';
     $('#ownerSupportEmail').value=ownership.support_email||'';
+
+    renderBuyerE2E(buyerE2E);
   }catch(e){
     toast('連携・サービスを読み込めませんでした: '+e.message,'error');
   }
@@ -1365,6 +1368,39 @@ async function importPortableConfig(file){
   }catch(e){toast('設定Importに失敗しました: '+e.message,'error');}
 }
 
+function renderBuyerE2E(data){
+  const target=$('#buyerE2EResult');if(!target)return;
+  const stages=data.stages||[];
+  const status=data.verified?'PASS':(data.stale?'Evidence古い':'未検証');
+  const detail=stages.map(x=>
+    '<div class="transfer-finding '+(x.status==='pass'?'':'warning')+'">'+
+    esc(x.stage||'stage')+' · '+esc(x.status||'unknown')+
+    '</div>'
+  ).join('');
+  target.innerHTML=
+    '<strong>販売前E2E: '+esc(status)+'</strong>'+
+    '<p class="meta">Network '+(data.network_used?'使用':'未使用')+
+    ' · Real Credential '+(data.real_credentials_used?'使用':'未使用')+
+    ' · Paid API '+(data.paid_api_used?'使用':'未使用')+
+    ' · Live Data '+(data.live_user_data_mutated?'変更':'未変更')+'</p>'+
+    (detail||'<div class="transfer-finding">実行すると購入者フローを隔離環境で検証します。</div>');
+}
+
+async function runBuyerE2E(){
+  const button=$('#runBuyerE2E');if(!button)return;
+  button.disabled=true;button.textContent='販売前E2E実行中…';
+  try{
+    const data=await api('/api/v1/productization/e2e/run',{method:'POST',body:'{}'});
+    renderBuyerE2E(data);
+    toast(data.verified?'販売前Buyer Journey E2EはPASSしました。':'販売前E2Eに未通過項目があります。',data.verified?'success':'error');
+    await loadIntegrations();
+  }catch(e){
+    toast('販売前E2Eを実行できませんでした: '+e.message,'error');
+  }finally{
+    button.disabled=false;button.textContent='販売前E2Eを実行';
+  }
+}
+
 function renderTransferAudit(data){
   const target=$('#transferAuditResult');if(!target)return;
   const rows=data.findings||[];
@@ -1433,7 +1469,7 @@ document.querySelectorAll('[data-starter-mode]').forEach(b=>b.onclick=()=>{
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 document.querySelectorAll('[data-mobile-view]').forEach(b=>b.onclick=()=>setView(b.dataset.mobileView));
 $('#mobileNewChat').onclick=newChat;
-$('#newChat').onclick=newChat;$('#refreshConnectors').onclick=loadIntegrations;$('#saveConnector').onclick=saveConnectorSettings;$('#saveOwnership').onclick=saveOwnership;$('#setupOpenSelected').onclick=setupOpenSelected;$('#setupTestSelected').onclick=setupTestSelected;$('#finishSetup').onclick=finishSetup;$('#exportConfig').onclick=exportPortableConfig;$('#runTransferAudit').onclick=runTransferAudit;$('#createTransferPackage').onclick=createTransferPackage;$('#importConfigFile').onchange=e=>importPortableConfig(e.target.files?.[0]);$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#runCrossModeE2E').onclick=runCrossModeE2E;$('#runMultiMissionE2E').onclick=runMultiMissionE2E;$('#checkpointSoak').onclick=checkpointSoak;$('#refreshCompletion').onclick=refreshCompletion;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#refreshConnectors').onclick=loadIntegrations;$('#saveConnector').onclick=saveConnectorSettings;$('#saveOwnership').onclick=saveOwnership;$('#setupOpenSelected').onclick=setupOpenSelected;$('#setupTestSelected').onclick=setupTestSelected;$('#finishSetup').onclick=finishSetup;$('#exportConfig').onclick=exportPortableConfig;$('#runBuyerE2E').onclick=runBuyerE2E;$('#runTransferAudit').onclick=runTransferAudit;$('#createTransferPackage').onclick=createTransferPackage;$('#importConfigFile').onchange=e=>importPortableConfig(e.target.files?.[0]);$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#runCrossModeE2E').onclick=runCrossModeE2E;$('#runMultiMissionE2E').onclick=runMultiMissionE2E;$('#checkpointSoak').onclick=checkpointSoak;$('#refreshCompletion').onclick=refreshCompletion;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;storageSet('ui-theme',next);};
 document.addEventListener('keydown',e=>{
