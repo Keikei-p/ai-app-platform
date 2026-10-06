@@ -209,6 +209,21 @@ class PlatformAPI:
                     if path == "/api/v1/completion/cloud-runtime":
                         self._json(200, api.service.cloud_runtime_status())
                         return
+                    if path == "/api/v1/connectors":
+                        self._json(200, api.service.connector_status())
+                        return
+                    if path == "/api/v1/ownership":
+                        self._json(200, api.service.ownership_profile())
+                        return
+                    if path == "/api/v1/setup":
+                        self._json(200, api.service.setup_status())
+                        return
+                    if path == "/api/v1/transfer/audit":
+                        self._json(200, api.service.transfer_audit())
+                        return
+                    if path == "/api/v1/config/export":
+                        self._json(200, api.service.export_portable_config())
+                        return
                     if path == "/api/v1/learning/examples":
                         query = parse_qs(parsed.query)
                         limit = max(1, min(int((query.get("limit") or ["50"])[0]), 200))
@@ -379,6 +394,29 @@ class PlatformAPI:
                     if path == "/api/v1/completion/cloud-runtime/run":
                         self._json(200, api.service.run_cloud_runtime_readiness())
                         return
+                    if path == "/api/v1/ownership":
+                        values = data.get("values")
+                        if not isinstance(values, dict):
+                            raise ValueError("values object is required")
+                        self._json(200, api.service.update_ownership_profile(values))
+                        return
+                    if path == "/api/v1/setup":
+                        values = data.get("values")
+                        if not isinstance(values, dict):
+                            raise ValueError("values object is required")
+                        self._json(200, api.service.update_setup(values))
+                        return
+                    if path == "/api/v1/config/import":
+                        config = data.get("config")
+                        if not isinstance(config, dict):
+                            raise ValueError("config object is required")
+                        self._json(200, api.service.import_portable_config(config))
+                        return
+                    if path == "/api/v1/transfer/package":
+                        self._json(200, api.service.create_transfer_package(
+                            approved=data.get("approved") is True,
+                        ))
+                        return
                     if path == "/api/v1/daily-evolution/run":
                         self._json(200, api.service.run_daily_evolution())
                         return
@@ -492,6 +530,29 @@ class PlatformAPI:
                         self._json(201, row)
                         return
                     parts = [x for x in path.split("/") if x]
+                    if len(parts) == 5 and parts[:3] == ["api", "v1", "connectors"]:
+                        connector_id = parts[3]
+                        if parts[4] == "configure":
+                            config = data.get("config")
+                            credentials = data.get("credentials")
+                            if config is not None and not isinstance(config, dict):
+                                raise ValueError("config must be an object")
+                            if credentials is not None and not isinstance(credentials, dict):
+                                raise ValueError("credentials must be an object")
+                            self._json(200, api.service.configure_connector(
+                                connector_id,
+                                config=config or {},
+                                credentials=credentials or {},
+                                remember=data.get("remember") is not False,
+                                make_default=data.get("make_default") is True,
+                            ))
+                            return
+                        if parts[4] == "test":
+                            self._json(200, api.service.test_connector(connector_id))
+                            return
+                        if parts[4] == "disconnect":
+                            self._json(200, api.service.disconnect_connector(connector_id))
+                            return
                     if len(parts) == 5 and parts[:3] == ["api", "v1", "strategic-goals"]:
                         if parts[4] == "pause":
                             self._json(200, api.service.pause_strategic_goal(parts[3]))
