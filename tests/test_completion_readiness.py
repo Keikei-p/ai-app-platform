@@ -58,6 +58,14 @@ def full_caps():
         "secrets_guard": True,
         "long_run_soak_verified": True,
         "cloud_runtime_ready": True,
+        "dedicated_credential_store": True,
+        "connector_registry": True,
+        "credential_free_config_export": True,
+        "transfer_audit": True,
+        "non_destructive_transfer_package": True,
+        "ownership_profile": True,
+        "oem_branding_foundation": True,
+        "buyer_productization_e2e_verified": True,
     }
 
 
@@ -114,6 +122,17 @@ class CompletionReadinessTests(unittest.TestCase):
         self.assertIn("multi-mission E2E", missing)
         self.assertIn("24h soak evidence", missing)
         self.assertIn("cloud runtime ready", missing)
+
+    def test_missing_buyer_journey_e2e_prevents_productization_pass(self):
+        caps = full_caps()
+        caps["buyer_productization_e2e_verified"] = False
+        report = self.make_engine(caps).assess()
+        self.assertFalse(report["complete"])
+        product = next(
+            x for x in report["criteria"]
+            if x["criterion_id"] == "productization"
+        )
+        self.assertIn("buyer journey E2E", product["gaps"])
 
     def test_runtime_autonomy_must_be_enabled_for_full_score(self):
         engine = CompletionReadinessEngine(
