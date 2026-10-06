@@ -814,14 +814,15 @@ async function loadGrowthLab(){
   const driveHeadline=$('#selfDriveHeadline');const driveSummary=$('#selfDriveSummary');const driveToggle=$('#toggleSelfDrive');
   if(!headline||!summary||!toggle||!driveHeadline||!driveSummary||!driveToggle)return;
   try{
-    const [data,practice,drive,backlog,daily,completion,crossMode]=await Promise.all([
+    const [data,practice,drive,backlog,daily,completion,crossMode,multiMission]=await Promise.all([
       api('/api/v1/growth/status'),
       api('/api/v1/practice/status'),
       api('/api/v1/self-drive/status'),
       api('/api/v1/backlog/today'),
       api('/api/v1/daily-evolution/status'),
       api('/api/v1/completion/readiness'),
-      api('/api/v1/completion/cross-mode-e2e')
+      api('/api/v1/completion/cross-mode-e2e'),
+      api('/api/v1/completion/multi-mission-e2e')
     ]);
 
     const completionScore=Number(completion.percentage||0);
@@ -847,7 +848,9 @@ async function loadGrowthLab(){
         '<div class="e2e-modes">'+['app','web','automation'].map(mode=>{
           const row=modeRows.find(x=>x.mode===mode)||{};
           return '<span class="e2e-mode '+(row.passed?'pass':'fail')+'">'+mode.toUpperCase()+' '+(row.passed?'PASS':'未検証')+'</span>';
-        }).join('')+'</div>';
+        }).join('')+
+        '<span class="e2e-mode '+(multiMission.verified?'pass':'fail')+'">MULTI MISSION '+(multiMission.verified?'PASS':'未検証')+'</span></div>'+
+        '<div>Mission source: '+esc(multiMission.source||'none')+(multiMission.stale?' · STALE':'')+'</div>';
     }
     const completionCriteria=$('#completionCriteria');
     if(completionCriteria){
@@ -977,6 +980,20 @@ async function loadGrowthLab(){
     headline.textContent='成長状態を取得できませんでした';
     summary.textContent=e.message;
   }
+}
+async function runMultiMissionE2E(){
+  const button=$('#runMultiMissionE2E');if(!button)return;
+  button.disabled=true;button.textContent='Mission検証中…';
+  try{
+    const data=await api('/api/v1/completion/multi-mission-e2e/run',{method:'POST',body:'{}'});
+    toast(
+      data.verified?'複数Mission E2E: PASS':'複数Mission E2E: 要確認',
+      data.verified?'success':'info'
+    );
+    await loadGrowthLab();
+  }catch(e){
+    toast('Mission E2Eを完了できませんでした: '+e.message,'error');
+  }finally{button.disabled=false;button.textContent='Mission E2E';}
 }
 async function runCrossModeE2E(){
   const button=$('#runCrossModeE2E');if(!button)return;
@@ -1133,7 +1150,7 @@ document.querySelectorAll('[data-starter-mode]').forEach(b=>b.onclick=()=>{
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 document.querySelectorAll('[data-mobile-view]').forEach(b=>b.onclick=()=>setView(b.dataset.mobileView));
 $('#mobileNewChat').onclick=newChat;
-$('#newChat').onclick=newChat;$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#runCrossModeE2E').onclick=runCrossModeE2E;$('#refreshCompletion').onclick=refreshCompletion;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#runCrossModeE2E').onclick=runCrossModeE2E;$('#runMultiMissionE2E').onclick=runMultiMissionE2E;$('#refreshCompletion').onclick=refreshCompletion;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;storageSet('ui-theme',next);};
 document.addEventListener('keydown',e=>{
