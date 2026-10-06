@@ -1239,8 +1239,12 @@ function openConnectorDialog(id){
   $('#connectorDialogDescription').textContent=row.description||'';
   const fields=[];
   for(const field of row.config_fields||[]){
-    const value=(row.config||{})[field.key]||'';
-    fields.push('<label>'+esc(field.label)+'<input data-connector-config="'+esc(field.key)+'" value="'+esc(value)+'" placeholder="'+esc(field.placeholder||'')+'"></label>');
+    const value=(row.config||{})[field.key];
+    if(field.type==='checkbox'){
+      fields.push('<label class="check-row"><input type="checkbox" data-connector-config="'+esc(field.key)+'" data-config-type="checkbox" '+(value?'checked':'')+'> '+esc(field.label)+'</label>');
+    }else{
+      fields.push('<label>'+esc(field.label)+'<input data-connector-config="'+esc(field.key)+'" value="'+esc(value||'')+'" placeholder="'+esc(field.placeholder||'')+'"></label>');
+    }
   }
   for(const field of row.credential_fields||[]){
     const status=(row.credentials||{})[field.key]||{};
@@ -1255,7 +1259,7 @@ function openConnectorDialog(id){
 
 async function saveConnectorSettings(){
   const dialog=$('#connectorDialog');const id=dialog.dataset.connectorId;if(!id)return;
-  const config={};document.querySelectorAll('[data-connector-config]').forEach(x=>config[x.dataset.connectorConfig]=x.value||'');
+  const config={};document.querySelectorAll('[data-connector-config]').forEach(x=>config[x.dataset.connectorConfig]=x.dataset.configType==='checkbox'?x.checked:(x.value||''));
   const credentials={};document.querySelectorAll('[data-connector-credential]').forEach(x=>{if(x.value)credentials[x.dataset.connectorCredential]=x.value;});
   const button=$('#saveConnector');button.disabled=true;button.textContent='保存中…';
   try{
