@@ -80,6 +80,7 @@ class AIChatEngine:
     DEFAULT_MODELS = {
         "openai": "gpt-6-astra",
         "gemini": "gemini-3.5-flash",
+        "ollama": "qwen2.5:7b",
     }
 
     def __init__(
@@ -135,7 +136,7 @@ class AIChatEngine:
         allowed_capabilities = {"fast", "reasoning", "coding", "vision", "research", "security"}
         if capability not in allowed_capabilities:
             raise ValueError("unsupported model-route capability")
-        if provider not in {"none", "openai", "gemini"}:
+        if provider not in {"none", "openai", "gemini", "ollama"}:
             raise ValueError("unsupported provider")
         data = self._read()
         routes = data.get("ai_routes") if isinstance(data.get("ai_routes"), dict) else {}
@@ -158,7 +159,7 @@ class AIChatEngine:
             return None
         provider = str(row.get("provider") or "").strip().lower()
         model = str(row.get("model") or "").strip()
-        if provider not in {"openai", "gemini"}:
+        if provider not in {"openai", "gemini", "ollama"}:
             return None
         if not model:
             model = self.DEFAULT_MODELS.get(provider, "")
@@ -166,16 +167,16 @@ class AIChatEngine:
 
     def configure(self, provider: str, model: str, api_key: str = "", *, remember_key: bool = True) -> None:
         provider = provider.strip().lower()
-        if provider not in {"none", "openai", "gemini"}:
+        if provider not in {"none", "openai", "gemini", "ollama"}:
             raise ValueError("unsupported provider")
         data = self._read()
         data["ai_provider"] = provider
         data["ai_model"] = model.strip() or self.DEFAULT_MODELS.get(provider, "")
         profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
-        if provider in {"openai", "gemini"}:
+        if provider in {"openai", "gemini", "ollama"}:
             profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
             profile["model"] = data["ai_model"]
-            if api_key:
+            if api_key and provider in {"openai", "gemini"}:
                 clean_key = api_key.strip()
                 self._session_key = clean_key
                 self._session_keys[provider] = clean_key
@@ -197,15 +198,18 @@ class AIChatEngine:
         *,
         remember_key: bool = True,
         make_default: bool = False,
+        base_url: str = "",
     ) -> None:
         provider = provider.strip().lower()
-        if provider not in {"openai", "gemini"}:
+        if provider not in {"openai", "gemini", "ollama"}:
             raise ValueError("unsupported provider")
         data = self._read()
         profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
         profile = profiles.get(provider) if isinstance(profiles.get(provider), dict) else {}
         profile["model"] = model.strip() or self.DEFAULT_MODELS.get(provider, "")
-        if api_key:
+        if provider == "ollama":
+            profile["base_url"] = base_url.strip().rstrip("/") or str(profile.get("base_url") or "http://127.0.0.1:11434")
+        if api_key and provider in {"openai", "gemini"}:
             clean_key = api_key.strip()
             self._session_keys[provider] = clean_key
             self.credentials.set(f"{provider}.api_key", clean_key, remember=remember_key)
@@ -236,7 +240,7 @@ class AIChatEngine:
 
     def disconnect_provider(self, provider: str) -> None:
         provider = provider.strip().lower()
-        if provider not in {"openai", "gemini"}:
+        if provider not in {"openai", "gemini", "ollama"}:
             return
         self.credentials.delete(f"{provider}.api_key")
         self._session_keys.pop(provider, None)
@@ -254,6 +258,8 @@ class AIChatEngine:
 
     def _key(self, provider: str) -> str:
         provider = provider.strip().lower()
+        if provider == "ollama":
+            return ""
         stored = self.credentials.get(f"{provider}.api_key")
         if stored:
             return stored
@@ -290,6 +296,8 @@ class AIChatEngine:
         model = (model or (str(cfg["model"]) if provider == cfg["provider"] else self.provider_settings(provider)["model"])).strip()
         if provider == "none":
             return ChatProviderStatus(provider, model, False, "AIモデル未接続")
+        if provider == "ollama":
+            return ChatProviderStatus(provider, model, True, f"ollama / {model}")
         if provider not in {"openai", "gemini"}:
             return ChatProviderStatus(provider, model, False, "未対応プロバイダ")
         if not self._key(provider):
@@ -301,6 +309,13 @@ class AIChatEngine:
         provider = cfg["provider"]
         model = cfg["model"]
         key = self._key(provider)
+        if provider == "ollama":
+            profile = self.provider_settings("ollama")
+            data = self._read()
+            profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+            raw = profiles.get("ollama") if isinstance(profiles.get("ollama"), dict) else {}
+            base_url = os.environ.get("AIVY_OLLAMA_URL", str(raw.get("base_url") or "http://127.0.0.1:11434")).strip().rstrip("/")
+            return self._ollama_reply(model, history, user_text, system_instruction, base_url=base_url)
         if provider not in {"openai", "gemini"}:
             raise RuntimeError("AIモデルが未接続です")
         if not key:
@@ -315,33 +330,70 @@ class AIChatEngine:
         user_text: str,
         system_instruction: str,
     ) -> str:
-        """Use the configured cloud model, then fall back to local Ollama.
+        """Use configured provider, explicit cloud fallbacks, then local Ollama.
 
-        Local fallback never needs an API key and only talks to localhost by
-        default. If neither path is available, the caller can use its
-        deterministic fallback response.
+        Paid/cloud fallback providers are never used merely because credentials
+        exist. They must be explicitly listed in ai_fallback_order. Ollama is a
+        free/local final fallback and can be disabled with AIVY_DISABLE_OLLAMA_FALLBACK=1.
         """
         errors: list[str] = []
-        try:
-            status = self.status()
-            if status.connected:
-                return self.reply(history, user_text, system_instruction)
-        except Exception as exc:
-            errors.append(f"configured:{type(exc).__name__}")
+        settings = self.settings()
+        primary = str(settings.get("provider") or "none").strip().lower()
+        attempted: set[str] = set()
 
-        model = os.environ.get("AIVY_OLLAMA_MODEL", "qwen2.5:7b").strip() or "qwen2.5:7b"
-        base_url = os.environ.get("AIVY_OLLAMA_URL", "http://127.0.0.1:11434").strip().rstrip("/")
-        try:
-            return self._ollama_reply(
-                model,
-                history,
-                user_text,
-                system_instruction,
-                base_url=base_url,
-            )
-        except Exception as exc:
-            errors.append(f"ollama:{type(exc).__name__}")
+        if primary != "none":
+            attempted.add(primary)
+            try:
+                status = self.status(primary)
+                if status.connected:
+                    return self.reply(history, user_text, system_instruction)
+            except Exception as exc:
+                errors.append(f"{primary}:{type(exc).__name__}")
+
+        data = self._read()
+        fallback_order = data.get("ai_fallback_order") if isinstance(data.get("ai_fallback_order"), list) else []
+        for provider in [str(x).strip().lower() for x in fallback_order]:
+            if provider in attempted or provider not in {"openai", "gemini", "ollama"}:
+                continue
+            attempted.add(provider)
+            try:
+                if provider == "ollama":
+                    raw_profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+                    raw = raw_profiles.get("ollama") if isinstance(raw_profiles.get("ollama"), dict) else {}
+                    model = str(raw.get("model") or self.DEFAULT_MODELS["ollama"])
+                    base_url = os.environ.get("AIVY_OLLAMA_URL", str(raw.get("base_url") or "http://127.0.0.1:11434")).strip().rstrip("/")
+                    return self._ollama_reply(model, history, user_text, system_instruction, base_url=base_url)
+                profile = self.provider_settings(provider)
+                if self._key(provider):
+                    return self.reply_routed(provider, str(profile.get("model") or ""), history, user_text, system_instruction)
+            except Exception as exc:
+                errors.append(f"{provider}:{type(exc).__name__}")
+
+        if os.environ.get("AIVY_DISABLE_OLLAMA_FALLBACK", "").strip().lower() not in {"1", "true", "yes", "on"} and "ollama" not in attempted:
+            raw_profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+            raw = raw_profiles.get("ollama") if isinstance(raw_profiles.get("ollama"), dict) else {}
+            model = os.environ.get("AIVY_OLLAMA_MODEL", str(raw.get("model") or self.DEFAULT_MODELS["ollama"])).strip() or self.DEFAULT_MODELS["ollama"]
+            base_url = os.environ.get("AIVY_OLLAMA_URL", str(raw.get("base_url") or "http://127.0.0.1:11434")).strip().rstrip("/")
+            try:
+                return self._ollama_reply(model, history, user_text, system_instruction, base_url=base_url)
+            except Exception as exc:
+                errors.append(f"ollama:{type(exc).__name__}")
         raise RuntimeError("AI conversation providers unavailable: " + ", ".join(errors))
+
+    def configure_fallback_order(self, providers: list[str]) -> None:
+        clean = []
+        for provider in providers:
+            name = str(provider or "").strip().lower()
+            if name in {"openai", "gemini", "ollama"} and name not in clean:
+                clean.append(name)
+        data = self._read()
+        data["ai_fallback_order"] = clean
+        self._write(data)
+
+    def fallback_order(self) -> list[str]:
+        data = self._read()
+        rows = data.get("ai_fallback_order") if isinstance(data.get("ai_fallback_order"), list) else []
+        return [str(x) for x in rows if str(x) in {"openai", "gemini", "ollama"}]
 
     def reply_routed(
         self,
@@ -353,6 +405,12 @@ class AIChatEngine:
     ) -> str:
         provider = provider.strip().lower()
         key = self._key(provider)
+        if provider == "ollama":
+            data = self._read()
+            profiles = data.get("ai_profiles") if isinstance(data.get("ai_profiles"), dict) else {}
+            raw = profiles.get("ollama") if isinstance(profiles.get("ollama"), dict) else {}
+            base_url = os.environ.get("AIVY_OLLAMA_URL", str(raw.get("base_url") or "http://127.0.0.1:11434")).strip().rstrip("/")
+            return self._ollama_reply(model or self.DEFAULT_MODELS["ollama"], history, user_text, system_instruction, base_url=base_url)
         if provider not in {"openai", "gemini"}:
             raise RuntimeError("AIモデルが未接続です")
         if not key:
