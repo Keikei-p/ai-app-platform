@@ -17,12 +17,44 @@ from .config import ROOT_DIR
 MAX_BODY = 1024 * 1024
 
 
+def remote_bind_policy(host: str, env: dict[str, str] | None = None) -> dict[str, Any]:
+    values = os.environ if env is None else env
+    normalized = str(host or "").strip().lower()
+    loopback = normalized in {"127.0.0.1", "localhost", "::1"}
+    token = str(values.get("AI_APP_LOCAL_API_TOKEN") or "").strip()
+    remote_enabled = str(values.get("AI_APP_ENABLE_REMOTE") or "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    allowed = loopback or (remote_enabled and bool(token))
+    return {
+        "host": normalized,
+        "loopback": loopback,
+        "remote_enabled": remote_enabled,
+        "token_configured": bool(token),
+        "allowed": allowed,
+        "requires_bearer": not loopback,
+        "reason": (
+            "loopback"
+            if loopback
+            else "remote_enabled_with_token"
+            if allowed
+            else "remote_bind_requires_AI_APP_ENABLE_REMOTE_and_AI_APP_LOCAL_API_TOKEN"
+        ),
+    }
+
+
 class PlatformAPI:
     """Loopback-only JSON API for future React/Tauri and CLI clients."""
 
-    def __init__(self, service: PlatformService | None = None):
+    def __init__(
+        self,
+        service: PlatformService | None = None,
+        *,
+        remote_mode: bool = False,
+    ):
         self.service = service or PlatformService()
         self.csrf = secrets.token_urlsafe(24)
+        self.remote_mode = bool(remote_mode)
 
     def handler_class(self):
         api = self
@@ -95,20 +127,33 @@ class PlatformAPI:
                     raise ValueError("JSON object required")
                 return data
 
+            def _bearer_allowed(self) -> bool:
+                configured = os.environ.get("AI_APP_LOCAL_API_TOKEN", "").strip()
+                if not configured:
+                    return not api.remote_mode
+                supplied = self.headers.get("Authorization", "")
+                return secrets.compare_digest(supplied, "Bearer " + configured)
+
             def _mutating_allowed(self) -> bool:
                 token = self.headers.get("X-CSRF-Token", "")
                 if not secrets.compare_digest(token, api.csrf):
                     return False
-                configured = os.environ.get("AI_APP_LOCAL_API_TOKEN", "").strip()
-                if not configured:
-                    return True
-                supplied = self.headers.get("Authorization", "")
-                return secrets.compare_digest(supplied, "Bearer " + configured)
+                return self._bearer_allowed()
 
             def do_GET(self):
                 parsed = urlparse(self.path)
                 path = parsed.path.rstrip("/") or "/"
                 try:
+                    if path in {"/healthz", "/api/v1/healthz"}:
+                        self._json(200, {
+                            "status": "ok",
+                            "service": "aivy",
+                            "remote_mode": api.remote_mode,
+                        })
+                        return
+                    if api.remote_mode and path.startswith("/api/") and not self._bearer_allowed():
+                        self._json(401, {"error": "bearer_token_required"})
+                        return
                     if path in {"/", "/ui"}:
                         self._asset("index.html", "text/html; charset=utf-8")
                         return
@@ -701,9 +746,10 @@ class PlatformAPI:
 
 
 def serve(host: str = "127.0.0.1", port: int = 8766, *, open_browser: bool = False) -> None:
-    if host not in {"127.0.0.1", "localhost"}:
-        raise RuntimeError("Platform API is loopback-only")
-    api = PlatformAPI()
+    policy = remote_bind_policy(host)
+    if not policy["allowed"]:
+        raise RuntimeError(str(policy["reason"]))
+    api = PlatformAPI(remote_mode=not bool(policy["loopback"]))
     server = ThreadingHTTPServer((host, port), api.handler_class())
     url = f"http://{host}:{port}/"
     print(f"Aivy Web: {url}", flush=True)
