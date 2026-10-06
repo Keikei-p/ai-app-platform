@@ -176,13 +176,17 @@
                 <h3 id="completionHeadline">完成度をEvidenceで評価しています…</h3>
                 <p id="completionSummary">100%は全基準が検証済みの場合だけ表示します。</p>
               </div>
-              <button id="refreshCompletion" class="agent-action secondary" type="button">完成度を再評価</button>
+              <div class="growth-actions">
+                <button id="runCrossModeE2E" class="agent-action" type="button">実E2E検証</button>
+                <button id="refreshCompletion" class="agent-action secondary" type="button">完成度を再評価</button>
+              </div>
             </div>
             <div class="completion-meter">
               <div class="completion-meter-track"><i id="completionBar"></i></div>
               <strong id="completionScore">—%</strong>
             </div>
             <div id="completionGap" class="completion-gap"><span class="meta">最大ギャップを解析中…</span></div>
+            <div id="completionEvidence" class="completion-evidence"><span class="meta">実E2E Evidenceを確認中…</span></div>
             <div id="completionCriteria" class="completion-criteria"></div>
           </div>
 
