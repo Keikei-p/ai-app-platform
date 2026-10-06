@@ -12,7 +12,8 @@ import unittest
 
 from src.core.cloud_runtime import CloudRuntimeReadinessVerifier
 from src.core.config import resolve_state_dir
-from src.core.platform_api import PlatformAPI, remote_bind_policy
+from src.core.platform_api import PlatformAPI
+from src.core.remote_access import remote_bind_policy
 
 
 class CloudRuntimeTests(unittest.TestCase):
@@ -106,6 +107,7 @@ class CloudRuntimeTests(unittest.TestCase):
             for rel in (
                 "config.py",
                 "platform_api.py",
+                "remote_access.py",
                 "cloud_runtime.py",
             ):
                 (src / rel).write_text("# stable\n", encoding="utf-8")
