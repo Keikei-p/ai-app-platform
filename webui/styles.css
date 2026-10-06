@@ -283,3 +283,11 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .completion-criterion p{margin:5px 0 0;color:var(--muted);font-size:.65rem;line-height:1.4}
 @media(max-width:900px){.completion-criteria{grid-template-columns:1fr 1fr}}
 @media(max-width:620px){.completion-readiness-head{display:block}.completion-readiness-head .agent-action{width:100%;margin-top:12px}.completion-criteria{grid-template-columns:1fr}}
+
+
+.completion-evidence{border:1px solid var(--border);border-radius:12px;background:var(--surface-soft);padding:10px 12px;margin-bottom:10px;color:var(--muted);font-size:.7rem;line-height:1.5}
+.completion-evidence strong{color:var(--text)}
+.completion-evidence .e2e-modes{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.completion-evidence .e2e-mode{border:1px solid var(--border);border-radius:999px;padding:4px 8px;font-size:.62rem;font-weight:850}
+.completion-evidence .e2e-mode.pass{background:#dcfae6;color:#067647}
+.completion-evidence .e2e-mode.fail{background:#fee4e2;color:#b42318}
