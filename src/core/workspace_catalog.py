@@ -11,6 +11,7 @@ import uuid
 from .config import WORKSPACE_DIR
 from .database import connect, list_projects, log_event
 from .path_security import safe_child
+from .redaction import redact_sensitive
 
 
 def _now() -> str:
@@ -182,7 +183,7 @@ class ConversationStore:
     def append(self, thread_id: str, role: str, content: str, created_at: str | None = None) -> None:
         if role not in {"user", "assistant"}:
             raise ValueError("invalid chat role")
-        clean = str(content)
+        clean = redact_sensitive(str(content))
         now = created_at or _now()
         with connect() as conn:
             conn.execute(
@@ -210,7 +211,7 @@ class ConversationStore:
             role = str(row.get("role") or "")
             if role not in {"user", "assistant"}:
                 continue
-            content = str(row.get("content") or "")
+            content = redact_sensitive(str(row.get("content") or ""))
             at = str(row.get("at") or now)
             normalized.append((role, content, at))
         with connect() as conn:
