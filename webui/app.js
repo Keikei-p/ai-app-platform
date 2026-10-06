@@ -1,4 +1,4 @@
-const state={csrf:'',view:'home',conversations:[],projects:[],currentThread:null,lastGoal:'',pendingInstruction:null,busy:false,currentMode:'chat',activeBuildStage:null};
+const state={csrf:'',view:'home',conversations:[],projects:[],currentThread:null,lastGoal:'',pendingInstruction:null,busy:false,currentMode:'chat',activeBuildStage:null,connectors:[],connectorMap:{},ownership:null,setup:null};
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
 const api=async(path,options={})=>{
@@ -68,13 +68,14 @@ function setView(name){
   $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
   document.querySelectorAll('[data-mobile-view]').forEach(b=>b.classList.toggle('active',b.dataset.mobileView===name));
-  const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'制作物',missions:'ミッション',lab:'IVY LAB',downloads:'ダウンロード',settings:'設定'};
+  const titles={home:state.currentThread?.title||'新しいチャット',conversations:'最近の会話',projects:'制作物',missions:'ミッション',lab:'IVY LAB',integrations:'連携・サービス',downloads:'ダウンロード',settings:'設定'};
   $('#topbarTitle').textContent=titles[name]||'Aivy';
   closeSidebar();
   if(name==='conversations')loadConversations();
   if(name==='projects')loadProjects();
   if(name==='missions')loadMissions();
   if(name==='lab')loadGrowthLab();
+  if(name==='integrations')loadIntegrations();
   if(name==='downloads')loadDownloads();
   if(name==='settings'){loadModelRoutes();loadEvolutionSummary();loadKnowledgeSummary();loadLearningSummary();loadSquadSummary();loadHealthSummary();loadBenchmarkSummary();}
 }
@@ -1147,13 +1148,251 @@ async function runPractice(){
   }finally{button.disabled=false;button.textContent='今すぐ自主トレ';}
 }
 
+async function loadIntegrations(){
+  try{
+    const [data,ownership,setup]=await Promise.all([
+      api('/api/v1/connectors'),
+      api('/api/v1/ownership'),
+      api('/api/v1/setup')
+    ]);
+    state.connectors=data.connectors||[];
+    state.connectorMap=Object.fromEntries(state.connectors.map(x=>[x.connector_id,x]));
+    state.ownership=ownership||{};
+    state.setup=setup||{};
+
+    const brand=String(ownership.brand_name||ownership.product_name||'Aivy').trim()||'Aivy';
+    const brandName=$('#brandName');if(brandName)brandName.textContent=brand;
+    const brandMark=$('#brandMark');if(brandMark)brandMark.textContent=brand.slice(0,1).toUpperCase()||'A';
+    document.title=brand+' — AI App Development Partner';
+    if(ownership.accent_color&&/^#[0-9a-f]{6}$/i.test(ownership.accent_color)){
+      document.documentElement.style.setProperty('--accent',ownership.accent_color);
+    }
+
+    const wizard=$('#setupWizard');
+    if(wizard){
+      wizard.hidden=Boolean(setup.completed);
+      $('#setupAI').value=setup.ai_choice||'';
+      $('#setupGit').value=setup.github_choice||'';
+      $('#setupCloud').value=setup.cloud_choice||'';
+    }
+
+    const usage=data.current_usage||{};
+    const usageLabels={ai:'AI',coding:'コード生成',image:'画像',research:'調査',git:'Git管理'};
+    $('#currentServiceUsage').innerHTML=Object.entries(usageLabels).map(([key,label])=>
+      '<div><strong>'+esc(label)+'</strong><span>'+esc(usage[key]||'未設定')+'</span></div>'
+    ).join('');
+
+    const deps=data.dependencies||[];
+    $('#currentDependencies').innerHTML=deps.map(x=>
+      '<div class="dependency-row"><strong>'+esc(x.name)+'</strong><span>'+esc((x.capabilities||[]).join(' / '))+'</span><b>'+esc(x.status_label||x.status)+'</b></div>'
+    ).join('')||'<span class="meta">外部依存はまだありません。SQLiteなどローカル機能だけでも起動できます。</span>';
+
+    const categories={};
+    for(const row of state.connectors){
+      (categories[row.category]||(categories[row.category]=[])).push(row);
+    }
+    $('#connectorCategories').innerHTML=Object.entries(categories).map(([category,rows])=>
+      '<section class="connector-category"><div class="connector-category-head"><h3>'+esc(category)+'</h3><span>'+rows.length+' services</span></div>'+
+      '<div class="connector-grid">'+rows.map(renderConnectorCard).join('')+'</div></section>'
+    ).join('');
+
+    document.querySelectorAll('[data-connector-settings]').forEach(b=>b.onclick=()=>openConnectorDialog(b.dataset.connectorSettings));
+    document.querySelectorAll('[data-connector-test]').forEach(b=>b.onclick=()=>testConnector(b.dataset.connectorTest));
+    document.querySelectorAll('[data-connector-disconnect]').forEach(b=>b.onclick=()=>disconnectConnector(b.dataset.connectorDisconnect));
+
+    $('#ownerProductName').value=ownership.product_name||'';
+    $('#ownerBrandName').value=ownership.brand_name||'';
+    $('#ownerName').value=ownership.owner_name||'';
+    $('#ownerOrganization').value=ownership.organization_name||'';
+    $('#ownerLicense').value=ownership.license_label||'';
+    $('#ownerAccent').value=ownership.accent_color||'';
+    $('#ownerSupportUrl').value=ownership.support_url||'';
+    $('#ownerSupportEmail').value=ownership.support_email||'';
+  }catch(e){
+    toast('連携・サービスを読み込めませんでした: '+e.message,'error');
+  }
+}
+
+function renderConnectorCard(row){
+  const canConfigure=(row.config_fields||[]).length||(row.credential_fields||[]).length;
+  const configuredCreds=Object.values(row.credentials||{}).filter(x=>x&&x.configured);
+  const masked=configuredCreds.map(x=>x.masked).filter(Boolean).join(' / ');
+  const detail=(row.capabilities||[]).map(x=>'<li>'+esc(x)+'</li>').join('');
+  const req=(row.requirements||[]).map(x=>'<li>'+esc(x)+'</li>').join('');
+  return '<article class="service-card" data-status="'+esc(row.status)+'">'+
+    '<div class="service-card-head"><div><h4>'+esc(row.name)+'</h4><p>'+esc(row.description||'')+'</p></div><span class="service-card-status">'+esc(row.status_label||row.status)+'</span></div>'+
+    '<div class="service-meta-row"><span class="chip">'+esc(row.requirement_level)+'</span><span class="chip">'+esc(row.cost_label)+'</span></div>'+
+    (masked?'<div class="service-credential">'+esc(masked)+'</div>':'')+
+    '<details><summary>できること・必要なもの</summary><div><p><strong>接続するとできること</strong></p><ul class="service-detail-list">'+detail+'</ul><p><strong>必要なもの</strong></p><ul class="service-detail-list">'+req+'</ul><p>'+esc(row.cost_note||'')+'</p></div></details>'+
+    '<div class="service-card-actions">'+
+      (canConfigure&&row.available?'<button class="agent-action secondary" data-connector-settings="'+esc(row.connector_id)+'" type="button">設定</button>':'')+
+      '<button class="agent-action secondary" data-connector-test="'+esc(row.connector_id)+'" type="button" '+(!row.available?'disabled':'')+'>接続テスト</button>'+
+      ((row.status!=='disconnected'&&row.available)?'<button class="agent-action secondary" data-connector-disconnect="'+esc(row.connector_id)+'" type="button">切断</button>':'')+
+    '</div></article>';
+}
+
+function openConnectorDialog(id){
+  const row=state.connectorMap[id];if(!row)return;
+  const dialog=$('#connectorDialog');dialog.dataset.connectorId=id;
+  $('#connectorDialogCategory').textContent=row.category||'SERVICE';
+  $('#connectorDialogTitle').textContent=row.name+' 設定';
+  $('#connectorDialogDescription').textContent=row.description||'';
+  const fields=[];
+  for(const field of row.config_fields||[]){
+    const value=(row.config||{})[field.key]||'';
+    fields.push('<label>'+esc(field.label)+'<input data-connector-config="'+esc(field.key)+'" value="'+esc(value)+'" placeholder="'+esc(field.placeholder||'')+'"></label>');
+  }
+  for(const field of row.credential_fields||[]){
+    const status=(row.credentials||{})[field.key]||{};
+    fields.push('<label>'+esc(field.label)+'<input type="password" autocomplete="new-password" data-connector-credential="'+esc(field.key)+'" placeholder="'+esc(status.masked||field.placeholder||'未設定')+'"><small>現在: '+esc(status.configured?(status.masked||'設定済み'):'未設定')+' · '+esc(status.backend||'')+'</small></label>');
+  }
+  $('#connectorDialogFields').innerHTML=fields.join('')||'<p class="meta">このサービスに入力設定はありません。</p>';
+  $('#connectorDefaultRow').hidden=!['openai','gemini'].includes(id);
+  $('#connectorMakeDefault').checked=false;
+  $('#connectorRemember').checked=true;
+  dialog.showModal();
+}
+
+async function saveConnectorSettings(){
+  const dialog=$('#connectorDialog');const id=dialog.dataset.connectorId;if(!id)return;
+  const config={};document.querySelectorAll('[data-connector-config]').forEach(x=>config[x.dataset.connectorConfig]=x.value||'');
+  const credentials={};document.querySelectorAll('[data-connector-credential]').forEach(x=>{if(x.value)credentials[x.dataset.connectorCredential]=x.value;});
+  const button=$('#saveConnector');button.disabled=true;button.textContent='保存中…';
+  try{
+    await api('/api/v1/connectors/'+encodeURIComponent(id)+'/configure',{
+      method:'POST',
+      body:JSON.stringify({config,credentials,remember:$('#connectorRemember').checked,make_default:$('#connectorMakeDefault').checked})
+    });
+    dialog.close();
+    toast('Connector設定を保存しました。Credentialは通常設定へ保存しません。','success');
+    await loadIntegrations();
+  }catch(e){toast('設定を保存できませんでした: '+e.message,'error');}
+  finally{button.disabled=false;button.textContent='保存';}
+}
+
+async function testConnector(id){
+  try{
+    const result=await api('/api/v1/connectors/'+encodeURIComponent(id)+'/test',{method:'POST',body:'{}'});
+    toast(result.message||'接続テスト完了',result.ok?'success':'error');
+    await loadIntegrations();
+  }catch(e){toast('接続テストに失敗しました: '+e.message,'error');}
+}
+
+async function disconnectConnector(id){
+  if(!confirm('このサービスをIvyから切断します。外部サービス側のアカウントは削除されません。'))return;
+  try{
+    await api('/api/v1/connectors/'+encodeURIComponent(id)+'/disconnect',{method:'POST',body:'{}'});
+    toast('Ivy側のCredentialを切断しました。','success');
+    await loadIntegrations();
+  }catch(e){toast('切断できませんでした: '+e.message,'error');}
+}
+
+async function saveOwnership(){
+  const values={
+    product_name:$('#ownerProductName').value,
+    brand_name:$('#ownerBrandName').value,
+    owner_name:$('#ownerName').value,
+    organization_name:$('#ownerOrganization').value,
+    license_label:$('#ownerLicense').value,
+    accent_color:$('#ownerAccent').value,
+    support_url:$('#ownerSupportUrl').value,
+    support_email:$('#ownerSupportEmail').value
+  };
+  try{
+    await api('/api/v1/ownership',{method:'POST',body:JSON.stringify({values})});
+    toast('所有者・OEM設定を保存しました。','success');
+    await loadIntegrations();
+  }catch(e){toast('所有者設定を保存できませんでした: '+e.message,'error');}
+}
+
+function setupSelections(){
+  return {ai_choice:$('#setupAI').value||'',github_choice:$('#setupGit').value||'',cloud_choice:$('#setupCloud').value||''};
+}
+
+function setupSelectedIds(){
+  const x=setupSelections();return [x.ai_choice,x.github_choice,x.cloud_choice].filter(Boolean);
+}
+
+function setupOpenSelected(){
+  const ids=setupSelectedIds();
+  const id=ids.find(x=>state.connectorMap[x]&&state.connectorMap[x].status!=='connected')||ids[0];
+  if(!id){$('#setupMessage').textContent='外部サービスなしで開始できます。必要になったら後から設定できます。';return;}
+  openConnectorDialog(id);
+}
+
+async function setupTestSelected(){
+  const ids=setupSelectedIds();if(!ids.length){$('#setupMessage').textContent='外部サービスを選んでいないため、接続テストは不要です。';return;}
+  const results=[];
+  for(const id of ids){
+    try{const r=await api('/api/v1/connectors/'+encodeURIComponent(id)+'/test',{method:'POST',body:'{}'});results.push((state.connectorMap[id]?.name||id)+': '+(r.message||r.status));}
+    catch(e){results.push((state.connectorMap[id]?.name||id)+': '+e.message);}
+  }
+  $('#setupMessage').textContent=results.join(' / ');
+  await loadIntegrations();
+}
+
+async function finishSetup(){
+  const values={...setupSelections(),completed:true};
+  try{
+    await api('/api/v1/setup',{method:'POST',body:JSON.stringify({values})});
+    toast('初期セットアップを完了しました。','success');
+    await loadIntegrations();
+    setView('home');
+  }catch(e){toast('セットアップを完了できませんでした: '+e.message,'error');}
+}
+
+async function exportPortableConfig(){
+  try{
+    const data=await api('/api/v1/config/export');
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='ivy-config.json';a.click();URL.revokeObjectURL(url);
+    $('#configTransferMessage').textContent='Credentialを含まない設定をExportしました。';
+  }catch(e){toast('設定Exportに失敗しました: '+e.message,'error');}
+}
+
+async function importPortableConfig(file){
+  if(!file)return;
+  try{
+    const raw=JSON.parse(await file.text());
+    const result=await api('/api/v1/config/import',{method:'POST',body:JSON.stringify({config:raw})});
+    $('#configTransferMessage').textContent=result.message||'Import完了';
+    toast('設定をImportしました。Credentialは再認証してください。','success');
+    await loadIntegrations();
+  }catch(e){toast('設定Importに失敗しました: '+e.message,'error');}
+}
+
+function renderTransferAudit(data){
+  const target=$('#transferAuditResult');if(!target)return;
+  const rows=data.findings||[];
+  target.innerHTML='<strong>'+esc(data.status||'監査完了')+'</strong><p class="meta">Blocker '+esc((data.blockers||[]).length)+' · Git履歴 '+(data.git_history_checked?'確認済み':'未確認')+' · CredentialはPackageへ含めません</p>'+
+    (rows.slice(0,16).map(x=>'<div class="transfer-finding '+esc(x.severity||'')+'">'+esc(x.message||x.code)+'</div>').join('')||'<div class="transfer-finding">問題は検出されませんでした。</div>');
+}
+
+async function runTransferAudit(){
+  const target=$('#transferAuditResult');target.innerHTML='<span class="meta">Credential・Git履歴・ログ・個人依存を検査しています…</span>';
+  try{const data=await api('/api/v1/transfer/audit');renderTransferAudit(data);}catch(e){target.textContent='監査できませんでした: '+e.message;}
+}
+
+async function createTransferPackage(){
+  if(!confirm('現在のIvyは変更せず、別の譲渡用Packageを作成します。先に監査とバックアップを行います。実行しますか？'))return;
+  try{
+    const data=await api('/api/v1/transfer/package',{method:'POST',body:JSON.stringify({approved:true})});
+    renderTransferAudit(data.audit||{});
+    if(data.created){
+      $('#transferAuditResult').insertAdjacentHTML('beforeend','<div class="transfer-finding"><strong>Package:</strong> '+esc(data.path||'作成済み')+'<br><strong>Backup:</strong> '+esc(data.backup_path||'')+'</div>');
+      toast('Credentialを含まない譲渡用Ivyを作成しました。','success');
+    }else{toast('譲渡準備のBlockerを先に解消してください。','error');}
+  }catch(e){toast('譲渡用Ivyを作成できませんでした: '+e.message,'error');}
+}
+
 async function boot(){
   try{
     const status=await api('/api/v1/status');state.csrf=status.csrf||'';
     $('#coreStatus').innerHTML='<i></i>Core接続';$('#coreStatus').classList.add('success');
     await Promise.all([loadConversations(),loadProjects()]);
-    await Promise.all([loadModelRoutes(),loadEvolutionSummary(),loadKnowledgeSummary(),loadLearningSummary(),loadSquadSummary(),loadHealthSummary(),loadBenchmarkSummary()]);
+    await Promise.all([loadModelRoutes(),loadEvolutionSummary(),loadKnowledgeSummary(),loadLearningSummary(),loadSquadSummary(),loadHealthSummary(),loadBenchmarkSummary(),loadIntegrations()]);
     renderResume();
+    if(state.setup&&!state.setup.completed&&!state.conversations.length&&!state.projects.length)setView('integrations');
   }catch(e){
     $('#coreStatus').textContent='Core未接続';
     toast('Aivy Coreへ接続できません。起動状態を確認してください。','error');
@@ -1175,7 +1414,7 @@ document.querySelectorAll('[data-starter-mode]').forEach(b=>b.onclick=()=>{
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 document.querySelectorAll('[data-mobile-view]').forEach(b=>b.onclick=()=>setView(b.dataset.mobileView));
 $('#mobileNewChat').onclick=newChat;
-$('#newChat').onclick=newChat;$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#runCrossModeE2E').onclick=runCrossModeE2E;$('#runMultiMissionE2E').onclick=runMultiMissionE2E;$('#checkpointSoak').onclick=checkpointSoak;$('#refreshCompletion').onclick=refreshCompletion;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#refreshConnectors').onclick=loadIntegrations;$('#saveConnector').onclick=saveConnectorSettings;$('#saveOwnership').onclick=saveOwnership;$('#setupOpenSelected').onclick=setupOpenSelected;$('#setupTestSelected').onclick=setupTestSelected;$('#finishSetup').onclick=finishSetup;$('#exportConfig').onclick=exportPortableConfig;$('#runTransferAudit').onclick=runTransferAudit;$('#createTransferPackage').onclick=createTransferPackage;$('#importConfigFile').onchange=e=>importPortableConfig(e.target.files?.[0]);$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#runCrossModeE2E').onclick=runCrossModeE2E;$('#runMultiMissionE2E').onclick=runMultiMissionE2E;$('#checkpointSoak').onclick=checkpointSoak;$('#refreshCompletion').onclick=refreshCompletion;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;storageSet('ui-theme',next);};
 document.addEventListener('keydown',e=>{
