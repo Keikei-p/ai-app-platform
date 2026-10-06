@@ -153,8 +153,9 @@ class PortableConfigManager:
             if key != "completed"
         }
         if for_transfer:
-            # Preserve generic/OEM presentation, but never carry the seller's
-            # personal owner/support identity into a new-owner package.
+            # Preserve only generic/OEM presentation. New-owner packages must
+            # not carry seller account identity, repository names, project IDs,
+            # account IDs, service URLs or other owner-specific connector config.
             ownership = {
                 "product_name": ownership.get("product_name") or "Aivy",
                 "brand_name": ownership.get("brand_name") or ownership.get("product_name") or "Aivy",
@@ -166,6 +167,7 @@ class PortableConfigManager:
                 "support_email": "",
                 "support_url": "",
             }
+            safe_connectors = {}
             setup = {
                 "ai_choice": "",
                 "github_choice": "",
