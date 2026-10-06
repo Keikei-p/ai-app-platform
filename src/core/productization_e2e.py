@@ -366,6 +366,11 @@ class BuyerJourneyE2EVerifier:
                 and package_config.get("ownership", {}).get("organization_name") == ""
                 and package_config.get("ownership", {}).get("support_email") == ""
             )
+            checks["transfer_package_resets_connector_configuration"] = bool(
+                package_config.get("connectors") == {}
+                and "buyer-owned/example" not in json.dumps(package_config, ensure_ascii=False)
+                and "synthetic-account" not in json.dumps(package_config, ensure_ascii=False)
+            )
             checks["transfer_package_has_no_credentials"] = all(
                 marker.encode("utf-8") not in payload
                 for marker in secret_markers
@@ -383,9 +388,55 @@ class BuyerJourneyE2EVerifier:
                     checks["transfer_package_created"],
                     checks["transfer_package_excludes_runtime_data"],
                     checks["transfer_package_resets_owner_identity"],
+                    checks["transfer_package_resets_connector_configuration"],
                     checks["transfer_package_has_no_credentials"],
                     checks["live_source_state_not_mutated"],
                 ))
+                else "fail",
+            })
+
+            # Simulate the package arriving on a third, brand-new owner machine.
+            new_owner = sandbox / "new-owner"
+            new_owner.mkdir()
+            new_owner_store = CredentialStore(
+                backend=SessionCredentialBackend(),
+                namespace="AivyNewOwnerE2E",
+            )
+            new_owner_connectors = ConnectorManager(
+                credentials=new_owner_store,
+                config_path=new_owner / "connectors.json",
+                providers=providers,
+            )
+            new_owner_ownership = OwnershipProfileStore(new_owner / "ownership.json")
+            new_owner_setup = SetupStateStore(new_owner / "setup.json")
+            new_owner_settings = new_owner / "settings.json"
+            new_owner_portable = PortableConfigManager(
+                connectors=new_owner_connectors,
+                ownership=new_owner_ownership,
+                setup=new_owner_setup,
+                settings_path=new_owner_settings,
+            )
+            new_owner_import = new_owner_portable.import_dict(package_config)
+            new_owner_profile = new_owner_ownership.get().to_dict()
+            checks["new_owner_starts_without_seller_identity"] = bool(
+                new_owner_import.get("requires_reauthentication")
+                and new_owner_profile.get("brand_name") == "Buyer Ready Builder"
+                and new_owner_profile.get("owner_name") == ""
+                and new_owner_profile.get("organization_name") == ""
+                and new_owner_profile.get("support_email") == ""
+            )
+            checks["new_owner_starts_without_seller_connectors"] = bool(
+                not new_owner_store.has("github.token")
+                and not new_owner_store.has("cloudflare.token")
+                and new_owner_connectors.get_public("github").get("config") == {}
+                and new_owner_connectors.get_public("cloudflare").get("config") == {}
+                and new_owner_setup.get().get("completed") is False
+            )
+            stages.append({
+                "stage": "new_owner_first_boot",
+                "status": "pass"
+                if checks["new_owner_starts_without_seller_identity"]
+                and checks["new_owner_starts_without_seller_connectors"]
                 else "fail",
             })
 
