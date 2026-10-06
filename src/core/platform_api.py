@@ -173,6 +173,9 @@ class PlatformAPI:
                     if path == "/api/v1/strategic-goals":
                         self._json(200, api.service.strategic_goal_status())
                         return
+                    if path == "/api/v1/completion/readiness":
+                        self._json(200, api.service.completion_readiness_status())
+                        return
                     if path == "/api/v1/learning/examples":
                         query = parse_qs(parsed.query)
                         limit = max(1, min(int((query.get("limit") or ["50"])[0]), 200))
