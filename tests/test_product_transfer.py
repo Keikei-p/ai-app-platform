@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import json
+import sqlite3
 import unittest
 import zipfile
 
@@ -41,6 +42,8 @@ class ProductTransferTests(unittest.TestCase):
             credentials=credentials,
             root_dir=root/"product",
             settings_path=settings,
+            log_dir=root/"logs",
+            db_path=root/"state"/"platform.db",
         )
         return credentials,connectors,ownership,setup,portable,auditor
 
@@ -67,6 +70,31 @@ class ProductTransferTests(unittest.TestCase):
             report=auditor.run()
             self.assertFalse(report["ready"])
             self.assertTrue(any(x["code"]=="env_file_present" for x in report["blockers"]))
+
+    def test_runtime_db_scan_reports_location_without_secret_value(self):
+        with TemporaryDirectory() as tmp:
+            root=Path(tmp);product=root/"product";product.mkdir()
+            _,_,_,_,_,auditor=self.make_parts(root)
+            db=root/"state"/"platform.db"
+            db.parent.mkdir(parents=True,exist_ok=True)
+            conn=sqlite3.connect(db)
+            try:
+                conn.execute("CREATE TABLE chats (content TEXT, email TEXT, auth_token TEXT)")
+                conn.execute(
+                    "INSERT INTO chats(content,email,auth_token) VALUES(?,?,?)",
+                    ("hello","buyer@example.com","sk-"+"A"*30),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            report=auditor.run()
+            serialized=json.dumps(report,ensure_ascii=False)
+            self.assertIn("runtime_db_credential_data",serialized)
+            self.assertIn("runtime_db_personal_data",serialized)
+            self.assertIn("chats.auth_token",serialized)
+            self.assertNotIn("buyer@example.com",serialized)
+            self.assertNotIn("sk-"+"A"*30,serialized)
+            self.assertTrue(report["ready"])
 
     def test_transfer_package_is_non_destructive_and_excludes_runtime_data(self):
         with TemporaryDirectory() as tmp:
