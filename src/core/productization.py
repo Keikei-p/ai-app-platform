@@ -135,7 +135,7 @@ class PortableConfigManager:
         self.setup = setup
         self.settings_path = Path(settings_path or SETTINGS_PATH)
 
-    def export_dict(self) -> dict[str, Any]:
+    def export_dict(self, *, for_transfer: bool = False) -> dict[str, Any]:
         settings = self._safe_settings()
         connector_state = self.connectors._read()
         safe_connectors: dict[str, Any] = {}
@@ -146,18 +146,41 @@ class PortableConfigManager:
             safe_connectors[definition.connector_id] = {
                 "config": self.connectors._safe_config(definition, saved.get("config")),
             }
+        ownership = self.ownership.get().to_dict()
+        setup = {
+            key: value
+            for key, value in self.setup.get().items()
+            if key != "completed"
+        }
+        if for_transfer:
+            # Preserve generic/OEM presentation, but never carry the seller's
+            # personal owner/support identity into a new-owner package.
+            ownership = {
+                "product_name": ownership.get("product_name") or "Aivy",
+                "brand_name": ownership.get("brand_name") or ownership.get("product_name") or "Aivy",
+                "owner_name": "",
+                "organization_name": "",
+                "license_label": "Unconfigured",
+                "accent_color": ownership.get("accent_color") or "",
+                "logo_path": "",
+                "support_email": "",
+                "support_url": "",
+            }
+            setup = {
+                "ai_choice": "",
+                "github_choice": "",
+                "cloud_choice": "",
+                "updated_at": None,
+            }
         return {
             "schema_version": self.SCHEMA_VERSION,
             "kind": "ivy-config",
             "credentials_included": False,
+            "transfer_sanitized": bool(for_transfer),
             "settings": settings,
             "connectors": safe_connectors,
-            "ownership": self.ownership.get().to_dict(),
-            "setup": {
-                key: value
-                for key, value in self.setup.get().items()
-                if key != "completed"
-            },
+            "ownership": ownership,
+            "setup": setup,
             "exported_at": _now(),
         }
 
@@ -617,7 +640,7 @@ class TransferPackageBuilder:
         backup = self.backup_dir / f"transfer-prep-{stamp}"
         backup.mkdir(parents=True, exist_ok=True)
         (backup / "ivy-config.json").write_text(
-            json.dumps(self.portable_config.export_dict(), ensure_ascii=False, indent=2),
+            json.dumps(self.portable_config.export_dict(for_transfer=True), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         (backup / "transfer-audit.json").write_text(
@@ -643,7 +666,7 @@ class TransferPackageBuilder:
 
             archive.writestr(
                 "ivy-config.json",
-                json.dumps(self.portable_config.export_dict(), ensure_ascii=False, indent=2),
+                json.dumps(self.portable_config.export_dict(for_transfer=True), ensure_ascii=False, indent=2),
             )
             archive.writestr(
                 "TRANSFER_READY.json",
