@@ -67,6 +67,7 @@ from .daily_evolution import DailyEvolutionEngine
 from .strategic_goals import StrategicGoalStore, StrategicAutonomyEngine
 from .completion_readiness import CompletionReadinessEngine
 from .cross_mode_e2e import CrossModeE2EVerifier
+from .multi_mission_e2e import MultiMissionE2EVerifier
 
 
 class PlatformService:
@@ -191,6 +192,7 @@ class PlatformService:
             strategy_status=self.strategic_autonomy.status,
         )
         self.cross_mode_e2e = CrossModeE2EVerifier()
+        self.multi_mission_e2e = MultiMissionE2EVerifier()
         self.completion_readiness = CompletionReadinessEngine(
             capability_snapshot=lambda: self.status().get("capabilities", {}),
             self_drive_status=self.self_drive.status,
@@ -292,7 +294,7 @@ class PlatformService:
                 "strategic_mission_approval_boundary": True,
                 "completion_readiness_engine": True,
                 "cross_mode_real_app_e2e_verified": bool(self.cross_mode_e2e.status().get("verified")),
-                "multi_mission_end_to_end_verified": False,
+                "multi_mission_end_to_end_verified": bool(self.multi_mission_e2e.status().get("verified")),
                 "long_run_soak_verified": False,
                 "cloud_runtime_ready": False,
             },
@@ -831,6 +833,12 @@ class PlatformService:
 
     def run_cross_mode_e2e(self) -> dict[str, Any]:
         return self.cross_mode_e2e.run()
+
+    def multi_mission_e2e_status(self) -> dict[str, Any]:
+        return self.multi_mission_e2e.status()
+
+    def run_multi_mission_e2e(self) -> dict[str, Any]:
+        return self.multi_mission_e2e.run()
 
     def completion_readiness_status(self) -> dict[str, Any]:
         return self.completion_readiness.assess()
