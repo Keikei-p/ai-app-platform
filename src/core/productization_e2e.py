@@ -395,6 +395,80 @@ class BuyerJourneyE2EVerifier:
                 else "fail",
             })
 
+            # Also prove a direct handoff on the same machine is safe. The
+            # previous owner may have Ivy-managed credentials/config locally.
+            reused = sandbox / "reused-owner-machine"
+            reused.mkdir()
+            reused_backend = SessionCredentialBackend()
+            reused_store = CredentialStore(
+                backend=reused_backend,
+                namespace="AivyReusedOwnerE2E",
+            )
+            reused_connectors = ConnectorManager(
+                credentials=reused_store,
+                config_path=reused / "connectors.json",
+                providers=providers,
+            )
+            reused_ownership = OwnershipProfileStore(reused / "ownership.json")
+            reused_setup = SetupStateStore(reused / "setup.json")
+            reused_settings = reused / "settings.json"
+            reused_portable = PortableConfigManager(
+                connectors=reused_connectors,
+                ownership=reused_ownership,
+                setup=reused_setup,
+                settings_path=reused_settings,
+            )
+            reused_connectors.connect(
+                "github",
+                config={"repository": "old-owner/private"},
+                credentials={"token": "old-owner-local-token"},
+                remember=True,
+            )
+            reused_ownership.update({
+                "brand_name": "Old Owner Brand",
+                "owner_name": "Old Owner",
+                "organization_name": "Old Owner Org",
+                "support_email": "old-owner@example.invalid",
+            })
+            reused_setup.update({
+                "completed": True,
+                "ai_choice": "openai",
+                "github_choice": "github",
+                "cloud_choice": "cloudflare",
+            })
+            reused_import = reused_portable.import_dict(package_config)
+            reused_profile = reused_ownership.get().to_dict()
+
+            checks["same_machine_handoff_clears_ivy_credentials"] = bool(
+                reused_import.get("connector_state_reset")
+                and not reused_backend.has(reused_store.target("github.token"))
+            )
+            checks["same_machine_handoff_clears_connector_config"] = bool(
+                reused_connectors._read() == {}
+            )
+            checks["same_machine_handoff_reopens_setup"] = bool(
+                reused_import.get("owner_setup_reset")
+                and reused_setup.get().get("completed") is False
+                and reused_setup.get().get("github_choice") == ""
+            )
+            checks["same_machine_handoff_resets_owner_identity"] = bool(
+                reused_profile.get("brand_name") == "Buyer Ready Builder"
+                and reused_profile.get("owner_name") == ""
+                and reused_profile.get("organization_name") == ""
+                and reused_profile.get("support_email") == ""
+            )
+            stages.append({
+                "stage": "same_machine_owner_handoff",
+                "status": "pass"
+                if all((
+                    checks["same_machine_handoff_clears_ivy_credentials"],
+                    checks["same_machine_handoff_clears_connector_config"],
+                    checks["same_machine_handoff_reopens_setup"],
+                    checks["same_machine_handoff_resets_owner_identity"],
+                ))
+                else "fail",
+            })
+
             # Simulate the package arriving on a third, brand-new owner machine.
             new_owner = sandbox / "new-owner"
             new_owner.mkdir()
