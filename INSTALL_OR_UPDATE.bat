@@ -2,7 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 title Aivy - Install or Update
 
-set "REPO=https://github.com/Keikei-p/ai-app-platform.git"
+set "REPO=%AIVY_UPSTREAM_REPO%"
 set "DEST=%USERPROFILE%\AI-App-Platform-Git"
 set "CHANNEL=develop"
 
@@ -22,10 +22,22 @@ echo   %DEST%
 echo.
 
 where git >nul 2>nul
-if errorlevel 1 goto :no_git
+if errorlevel 1 goto :repo_missing
+echo.
+echo ERROR: No update source is configured.
+echo Set AIVY_UPSTREAM_REPO to the repository owned by this Ivy distribution,
+echo or install from the credential-free transfer/OEM package.
+pause
+exit /b 1
 
-if exist "%DEST%\.git" goto :update
+:no_git
+
+if exist "%DEST%\.git" (
+    if not defined REPO for /f "delims=" %%I in ('git -C "%DEST%" remote get-url origin 2^>nul') do set "REPO=%%I"
+    goto :update
+)
 if exist "%DEST%" goto :folder_exists
+if not defined REPO goto :repo_missing
 
 echo [1/3] Downloading Aivy...
 git clone --branch "%CHANNEL%" "%REPO%" "%DEST%"
