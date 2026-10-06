@@ -6,6 +6,7 @@ import json
 import re
 from .development_memory import DevelopmentMemory
 from .language_understanding import LanguageUnderstandingEngine, UnderstandingResult
+from .redaction import redact_sensitive
 
 
 @dataclass(frozen=True)
@@ -449,7 +450,7 @@ class ChatPartner:
     def _append(state: dict, role: str, content: str) -> None:
         state.setdefault("history", []).append({
             "role": role,
-            "content": content,
+            "content": redact_sensitive(content),
             "at": datetime.now(timezone.utc).isoformat(),
         })
         state["history"] = state["history"][-200:]
