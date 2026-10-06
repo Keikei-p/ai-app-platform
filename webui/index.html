@@ -169,6 +169,23 @@
           <div class="page-heading">
             <div><span class="eyebrow">IVY LAB</span><h2>自律成長</h2><p>検証済みの成功体験だけをSkillへ変換し、次の制作に再利用します。</p></div>
           </div>
+          <div class="completion-readiness-card data-card">
+            <div class="completion-readiness-head">
+              <div>
+                <span class="eyebrow">COMPLETION READINESS</span>
+                <h3 id="completionHeadline">完成度をEvidenceで評価しています…</h3>
+                <p id="completionSummary">100%は全基準が検証済みの場合だけ表示します。</p>
+              </div>
+              <button id="refreshCompletion" class="agent-action secondary" type="button">完成度を再評価</button>
+            </div>
+            <div class="completion-meter">
+              <div class="completion-meter-track"><i id="completionBar"></i></div>
+              <strong id="completionScore">—%</strong>
+            </div>
+            <div id="completionGap" class="completion-gap"><span class="meta">最大ギャップを解析中…</span></div>
+            <div id="completionCriteria" class="completion-criteria"></div>
+          </div>
+
           <div class="daily-evolution-card data-card">
             <div class="daily-evolution-head">
               <div>
