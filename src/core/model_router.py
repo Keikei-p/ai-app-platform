@@ -88,6 +88,15 @@ class ModelRouter:
             )
         provider = str(settings.get("provider") or getattr(status, "provider", "") or "legacy")
         model = str(settings.get("model") or getattr(status, "model", "") or "")
+        if capability == "vision" and provider == "ollama":
+            return ModelRoute(
+                task=task,
+                mode="deterministic_fallback",
+                provider="none",
+                model="",
+                capability=capability,
+                reason="The configured Ollama connector does not advertise vision support yet.",
+            )
         return ModelRoute(
             task=task,
             mode="configured_provider",
