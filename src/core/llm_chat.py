@@ -138,6 +138,8 @@ class AIChatEngine:
             raise ValueError("unsupported model-route capability")
         if provider not in {"none", "openai", "gemini", "ollama"}:
             raise ValueError("unsupported provider")
+        if capability == "vision" and provider == "ollama":
+            raise ValueError("ollama vision routing is not supported by this connector yet")
         data = self._read()
         routes = data.get("ai_routes") if isinstance(data.get("ai_routes"), dict) else {}
         if provider == "none":
