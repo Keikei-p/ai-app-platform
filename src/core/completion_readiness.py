@@ -87,6 +87,7 @@ class CompletionReadinessEngine:
                     "ios source": caps.get("ios_source"),
                     "automation": caps.get("social_automation"),
                     "artifact catalog": caps.get("artifact_catalog"),
+                    "cross-mode real E2E": caps.get("cross_mode_real_app_e2e_verified"),
                 },
                 next_action="各モードの実生成E2Eケースを増やし失敗率を下げる",
             ),
@@ -173,6 +174,7 @@ class CompletionReadinessEngine:
                     "approval boundary": caps.get("strategic_mission_approval_boundary"),
                     "no build auto approval": strategic.get("build_auto_approval") is False,
                     "mission limit": strategic.get("max_missions_created_per_cycle") == 1,
+                    "multi-mission E2E": caps.get("multi_mission_end_to_end_verified"),
                 },
                 next_action="複数Mission完走シナリオを実アプリで検証する",
             ),
@@ -189,6 +191,7 @@ class CompletionReadinessEngine:
                     "health guarded": str(health.get("status") or "").lower() not in {"failed", "critical"},
                     # A local-first process is not equivalent to proven 24/7 operation.
                     "24h soak evidence": bool(caps.get("long_run_soak_verified")),
+                    "cloud runtime ready": bool(caps.get("cloud_runtime_ready")),
                 },
                 next_action="24時間相当のSoak Testと再起動復旧Evidenceを作る",
             ),
