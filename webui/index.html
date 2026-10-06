@@ -349,6 +349,11 @@
 
             <section class="data-card transfer-card">
               <span class="eyebrow">TRANSFER READY</span><h3>譲渡準備</h3><p>現在のIvyを変更せず、個人Credentialを含まない譲渡用Packageを別に作成します。</p>
+              <div class="buyer-e2e-box">
+                <div><strong>販売前 Buyer Journey E2E</strong><p>新品Ivy → Ollama → GitHub/Cloud → Export/Import → 再認証 → 譲渡Packageまで隔離環境で自動確認します。</p></div>
+                <button id="runBuyerE2E" class="agent-action secondary" type="button">販売前E2Eを実行</button>
+              </div>
+              <div id="buyerE2EResult" class="transfer-audit-result"><span class="meta">Evidenceを確認中…</span></div>
               <div class="stack-actions">
                 <button id="runTransferAudit" class="agent-action secondary" type="button">Credential / 個人依存を検査</button>
                 <button id="createTransferPackage" class="agent-action" type="button">譲渡用Ivyを作成</button>
