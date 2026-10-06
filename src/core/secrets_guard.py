@@ -15,6 +15,8 @@ SECRET_KEY_NAMES = {
 SECRET_VALUE_PATTERNS = (
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+    re.compile(r"\b(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,})\b"),
+    re.compile(r"\bAIza[A-Za-z0-9_-]{30,}\b"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
 )
 
