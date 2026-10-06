@@ -8,7 +8,7 @@ from typing import Any
 import json
 
 from .config import DATA_DIR, ROOT_DIR, resolve_state_dir
-from .platform_api import remote_bind_policy
+from .remote_access import remote_bind_policy
 
 
 def _now() -> str:
@@ -27,6 +27,7 @@ class CloudRuntimeReadinessVerifier:
     SOURCE_PATHS = (
         "src/core/config.py",
         "src/core/platform_api.py",
+        "src/core/remote_access.py",
         "src/core/cloud_runtime.py",
     )
 
