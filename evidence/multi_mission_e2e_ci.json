@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "kind": "multi_mission_end_to_end",
+  "verified": true,
+  "checks": {
+    "first_mission_created": true,
+    "first_waited_for_approval": true,
+    "second_created_only_after_first_completed": true,
+    "second_waited_for_approval": true,
+    "two_missions_completed": true,
+    "explicit_approval_evidence_preserved": true,
+    "mission_budget_stops_more_work": true,
+    "no_auto_build_approval": true
+  },
+  "source_blobs": {
+    "src/core/mission_control.py": "212c0211ef2d11afd258fefe567a0154c7a611a1",
+    "src/core/strategic_goals.py": "49e69045c9490da2bfff870b2ff8a2beea4e628f",
+    "src/core/multi_mission_e2e.py": "41d3ec6ff1c8a97ab467a1522d3dbad71f879bb0"
+  },
+  "approval_boundary_observed": true,
+  "external_actions": false,
+  "credentials_used": false,
+  "paid_actions": false,
+  "production_data_written": false,
+  "ci": {
+    "run_id": 37417715501,
+    "run_number": 900,
+    "conclusion": "success",
+    "tested_commit": "60d120b381dcc0508895fa4fb8cffd463a82fff7",
+    "source_base_commit": "dd4808544f397d336d0243f97ba53d8708c974ac"
+  },
+  "created_at": "2026-10-06T05:20:00+00:00"
+}
