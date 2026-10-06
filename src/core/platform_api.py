@@ -179,6 +179,9 @@ class PlatformAPI:
                     if path == "/api/v1/completion/cross-mode-e2e":
                         self._json(200, api.service.cross_mode_e2e_status())
                         return
+                    if path == "/api/v1/completion/multi-mission-e2e":
+                        self._json(200, api.service.multi_mission_e2e_status())
+                        return
                     if path == "/api/v1/learning/examples":
                         query = parse_qs(parsed.query)
                         limit = max(1, min(int((query.get("limit") or ["50"])[0]), 200))
@@ -331,6 +334,9 @@ class PlatformAPI:
                         return
                     if path == "/api/v1/completion/cross-mode-e2e/run":
                         self._json(200, api.service.run_cross_mode_e2e())
+                        return
+                    if path == "/api/v1/completion/multi-mission-e2e/run":
+                        self._json(200, api.service.run_multi_mission_e2e())
                         return
                     if path == "/api/v1/daily-evolution/run":
                         self._json(200, api.service.run_daily_evolution())
