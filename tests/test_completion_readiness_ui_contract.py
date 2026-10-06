@@ -24,7 +24,9 @@ class CompletionReadinessUIContractTests(unittest.TestCase):
         self.assertIn("LongRunSoakMonitor", service)
         self.assertIn('"long_run_soak_verified": bool(self.long_run_soak.status().get("verified"))', service)
         self.assertIn("self.long_run_soak.start_background()", service)
-        self.assertIn('"cloud_runtime_ready": False', service)
+        self.assertIn("CloudRuntimeReadinessVerifier", service)
+        self.assertIn('"cloud_runtime_ready": bool(self.cloud_runtime.status().get("verified"))', service)
+        self.assertIn("self.cloud_runtime.run()", service)
 
     def test_ivy_lab_shows_completion_score_and_highest_gap(self):
         html = (ROOT / "webui" / "index.html").read_text(encoding="utf-8")
