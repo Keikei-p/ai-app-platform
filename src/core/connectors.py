@@ -79,7 +79,10 @@ class ConnectorRegistry:
                 ("OpenAIアカウント", "APIキー"),
                 "推奨", "有料の場合あり",
                 "外部サービス側で利用料金が発生する可能性があります。最新料金は提供元で確認してください。",
-                ({"key": "model", "label": "使用モデル", "placeholder": "例: gpt-6-astra"},),
+                (
+                    {"key": "model", "label": "使用モデル", "placeholder": "例: gpt-6-astra"},
+                    {"key": "auto_fallback", "label": "障害時の自動フォールバックを許可", "type": "checkbox"},
+                ),
                 ({"key": "api_key", "label": "APIキー", "placeholder": "sk-...", "remember_default": True},),
                 True, "openai",
             ),
@@ -90,7 +93,10 @@ class ConnectorRegistry:
                 ("Googleアカウント", "Gemini APIキー"),
                 "推奨", "無料枠あり / 有料の場合あり",
                 "料金や無料枠は変更される可能性があります。最新料金は提供元で確認してください。",
-                ({"key": "model", "label": "使用モデル", "placeholder": "例: gemini-3.5-flash"},),
+                (
+                    {"key": "model", "label": "使用モデル", "placeholder": "例: gemini-3.5-flash"},
+                    {"key": "auto_fallback", "label": "障害時の自動フォールバックを許可", "type": "checkbox"},
+                ),
                 ({"key": "api_key", "label": "APIキー", "placeholder": "API key", "remember_default": True},),
                 True, "gemini",
             ),
@@ -304,10 +310,15 @@ class ConnectorManager:
             raise ValueError("このConnectorは現在利用できません")
         state = self._read()
         saved = state.get(definition.connector_id) if isinstance(state.get(definition.connector_id), dict) else {}
-        allowed_config = {str(x["key"]) for x in definition.config_fields}
+        field_map = {str(x["key"]): x for x in definition.config_fields}
+        allowed_config = set(field_map)
         clean_config = dict(saved.get("config") or {})
         for key, value in dict(config or {}).items():
-            if key in allowed_config:
+            if key not in allowed_config:
+                continue
+            if str(field_map[key].get("type") or "") == "checkbox":
+                clean_config[key] = bool(value)
+            else:
                 clean_config[key] = str(value or "").strip()[:2000]
         for field in definition.credential_fields:
             key = str(field["key"])
@@ -500,10 +511,18 @@ class ConnectorManager:
         return "setting_incomplete"
 
     @staticmethod
-    def _safe_config(definition: ConnectorDefinition, raw: Any) -> dict[str, str]:
+    def _safe_config(definition: ConnectorDefinition, raw: Any) -> dict[str, Any]:
         values = raw if isinstance(raw, dict) else {}
-        allowed = {str(x["key"]) for x in definition.config_fields}
-        return {key: str(value) for key, value in values.items() if key in allowed}
+        field_map = {str(x["key"]): x for x in definition.config_fields}
+        result: dict[str, Any] = {}
+        for key, value in values.items():
+            if key not in field_map:
+                continue
+            if str(field_map[key].get("type") or "") == "checkbox":
+                result[key] = bool(value)
+            else:
+                result[key] = str(value)
+        return result
 
     def _required_secret(self, credential_id: str, label: str) -> str:
         value = self.credentials.get(credential_id)
