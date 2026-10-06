@@ -264,11 +264,15 @@ class TransferAuditor:
         credentials: CredentialStore,
         root_dir: Path | None = None,
         settings_path: Path | None = None,
+        log_dir: Path | None = None,
+        db_path: Path | None = None,
     ):
         self.connectors = connectors
         self.credentials = credentials
         self.root_dir = Path(root_dir or ROOT_DIR)
         self.settings_path = Path(settings_path or SETTINGS_PATH)
+        self.log_dir = Path(log_dir or LOG_DIR)
+        self.db_path = Path(db_path or DB_PATH)
         self.secrets = SecretsGuard()
 
     def run(self) -> dict[str, Any]:
@@ -298,10 +302,10 @@ class TransferAuditor:
         current_scan = self._scan_current_tree()
         findings.extend(current_scan)
 
-        log_scan = self._scan_directory(LOG_DIR, scope="logs")
+        log_scan = self._scan_directory(self.log_dir, scope="logs")
         findings.extend(log_scan)
 
-        database_scan = self._scan_sqlite_db(DB_PATH)
+        database_scan = self._scan_sqlite_db(self.db_path)
         findings.extend(database_scan)
 
         history = self._scan_git_history()
