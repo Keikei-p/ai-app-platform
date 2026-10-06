@@ -842,7 +842,7 @@ async function loadGrowthLab(){
       completionCriteria.innerHTML=(completion.criteria||[]).map(x=>
         '<div class="completion-criterion '+esc(x.status||'partial')+'">'+
         '<div class="completion-criterion-head"><strong>'+esc(x.title||x.criterion_id||'criterion')+'</strong><span>'+esc(x.score||0)+'/'+esc(x.weight||0)+'</span></div>'+
-        '<p>'+(x.gaps||[]).length?'不足: '+esc((x.gaps||[]).join(', ')):'Evidence OK'+'</p></div>'
+        '<p>'+((x.gaps||[]).length?'不足: '+esc((x.gaps||[]).join(', ')):'Evidence OK')+'</p></div>'
       ).join('');
     }
 
