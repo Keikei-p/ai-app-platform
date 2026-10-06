@@ -814,13 +814,14 @@ async function loadGrowthLab(){
   const driveHeadline=$('#selfDriveHeadline');const driveSummary=$('#selfDriveSummary');const driveToggle=$('#toggleSelfDrive');
   if(!headline||!summary||!toggle||!driveHeadline||!driveSummary||!driveToggle)return;
   try{
-    const [data,practice,drive,backlog,daily,completion]=await Promise.all([
+    const [data,practice,drive,backlog,daily,completion,crossMode]=await Promise.all([
       api('/api/v1/growth/status'),
       api('/api/v1/practice/status'),
       api('/api/v1/self-drive/status'),
       api('/api/v1/backlog/today'),
       api('/api/v1/daily-evolution/status'),
-      api('/api/v1/completion/readiness')
+      api('/api/v1/completion/readiness'),
+      api('/api/v1/completion/cross-mode-e2e')
     ]);
 
     const completionScore=Number(completion.percentage||0);
@@ -837,6 +838,17 @@ async function loadGrowthLab(){
       ? '<strong>最大ギャップ: '+esc(topGap.title||topGap.criterion_id||'未確認')+' · -'+esc(topGap.lost_points||0)+'pt</strong>'+
         '<p>'+esc((topGap.missing||[]).join(' / ')||'Evidence不足')+'<br>次: '+esc(topGap.next_action||'再評価')+'</p>'
       : '<strong>主要ギャップなし</strong><p>全採点基準を通過しています。</p>';
+    const completionEvidence=$('#completionEvidence');
+    if(completionEvidence){
+      const modeRows=crossMode.cases||[];
+      completionEvidence.innerHTML=
+        '<strong>Cross-mode real E2E: '+(crossMode.verified?'VERIFIED':'UNVERIFIED')+'</strong>'+
+        '<div>source: '+esc(crossMode.source||'none')+(crossMode.stale?' · STALE':'')+'</div>'+
+        '<div class="e2e-modes">'+['app','web','automation'].map(mode=>{
+          const row=modeRows.find(x=>x.mode===mode)||{};
+          return '<span class="e2e-mode '+(row.passed?'pass':'fail')+'">'+mode.toUpperCase()+' '+(row.passed?'PASS':'未検証')+'</span>';
+        }).join('')+'</div>';
+    }
     const completionCriteria=$('#completionCriteria');
     if(completionCriteria){
       completionCriteria.innerHTML=(completion.criteria||[]).map(x=>
@@ -965,6 +977,18 @@ async function loadGrowthLab(){
     headline.textContent='成長状態を取得できませんでした';
     summary.textContent=e.message;
   }
+}
+async function runCrossModeE2E(){
+  const button=$('#runCrossModeE2E');if(!button)return;
+  button.disabled=true;button.textContent='3モード検証中…';
+  try{
+    const data=await api('/api/v1/completion/cross-mode-e2e/run',{method:'POST',body:'{}'});
+    const passed=(data.cases||[]).filter(x=>x.passed).length;
+    toast('実E2E: '+passed+'/3 モードPASS',data.verified?'success':'info');
+    await loadGrowthLab();
+  }catch(e){
+    toast('実E2E検証を完了できませんでした: '+e.message,'error');
+  }finally{button.disabled=false;button.textContent='実E2E検証';}
 }
 async function refreshCompletion(){
   const button=$('#refreshCompletion');if(!button)return;
@@ -1109,7 +1133,7 @@ document.querySelectorAll('[data-starter-mode]').forEach(b=>b.onclick=()=>{
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 document.querySelectorAll('[data-mobile-view]').forEach(b=>b.onclick=()=>setView(b.dataset.mobileView));
 $('#mobileNewChat').onclick=newChat;
-$('#newChat').onclick=newChat;$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#refreshCompletion').onclick=refreshCompletion;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
+$('#newChat').onclick=newChat;$('#createStrategicGoal').onclick=createStrategicGoal;$('#runStrategicGoal').onclick=runStrategicGoal;$('#createMission').onclick=createMission;$('#runCrossModeE2E').onclick=runCrossModeE2E;$('#refreshCompletion').onclick=refreshCompletion;$('#refreshBacklog').onclick=refreshBacklog;$('#toggleDailyEvolution').onclick=toggleDailyEvolution;$('#runDailyEvolution').onclick=runDailyEvolution;$('#toggleSelfDrive').onclick=toggleSelfDrive;$('#runSelfDrive').onclick=runSelfDrive;$('#toggleGrowth').onclick=toggleGrowth;$('#runGrowth').onclick=runGrowth;$('#runPractice').onclick=runPractice;$('#openSidebar').onclick=openSidebar;$('#closeSidebar').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;$('#closeInspector').onclick=()=>$('#inspector').classList.remove('open');
 $('#conversationSearch').addEventListener('input',e=>loadConversations(e.target.value));
 $('#themeToggle').onclick=()=>{const order=['system','light','dark'];const current=document.documentElement.dataset.theme||'system';const next=order[(order.indexOf(current)+1)%order.length];document.documentElement.dataset.theme=next;storageSet('ui-theme',next);};
 document.addEventListener('keydown',e=>{
