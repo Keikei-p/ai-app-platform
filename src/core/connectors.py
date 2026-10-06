@@ -486,11 +486,7 @@ class ConnectorManager:
     def _status(self, definition: ConnectorDefinition, saved: dict[str, Any]) -> str:
         if not definition.available:
             return "unavailable"
-        last = saved.get("last_test")
-        if isinstance(last, dict):
-            state = str(last.get("status") or "")
-            if state in self.STATUS_LABELS:
-                return state
+
         missing_config = [
             str(field["key"])
             for field in definition.config_fields
@@ -501,10 +497,20 @@ class ConnectorManager:
             for field in definition.credential_fields
             if not self.credentials.has(f"{definition.connector_id}.{field['key']}")
         ]
+
+        # A stale successful test must never outlive the credential/config that
+        # made it successful.
         if definition.credential_fields and len(missing_secret) == len(definition.credential_fields):
             return "disconnected"
         if missing_config or missing_secret:
             return "setting_incomplete"
+
+        last = saved.get("last_test")
+        if isinstance(last, dict):
+            state = str(last.get("status") or "")
+            if state in self.STATUS_LABELS:
+                return state
+
         if not definition.credential_fields and not definition.config_fields:
             if definition.test_mode in {"sqlite", "local_git", "windows"}:
                 return "setting_incomplete"
