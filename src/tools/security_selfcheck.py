@@ -62,19 +62,37 @@ def main() -> int:
                         failures.append(f"shell_true: {rel}")
 
     platform_api_path = ROOT_DIR / "src" / "core" / "platform_api.py"
+    remote_access_path = ROOT_DIR / "src" / "core" / "remote_access.py"
     if not platform_api_path.is_file():
         failures.append("platform_api.py missing")
     else:
         platform_api_text = platform_api_path.read_text(encoding="utf-8").lower()
         if "threadinghttpserver" not in platform_api_text:
             failures.append("platform_api is not using reviewed stdlib HTTP server")
-        if '127.0.0.1' not in platform_api_text or 'localhost' not in platform_api_text:
-            failures.append("platform_api loopback binding guard missing")
-        if 'host not in {"127.0.0.1", "localhost"}' not in platform_api_text:
-            failures.append("platform_api does not explicitly reject non-loopback host binding")
+        if "remote_bind_policy" not in platform_api_text:
+            failures.append("platform_api is missing guarded remote bind policy")
+        if "bearer_token_required" not in platform_api_text:
+            failures.append("platform_api remote reads are not bearer protected")
+        if '"/api/v1/healthz"' not in platform_api_text:
+            failures.append("platform_api cloud health endpoint is missing")
         for term in FORBIDDEN_REMOTE_NETWORK_TERMS:
             if term in platform_api_text:
                 failures.append(f"platform_api contains forbidden public-exposure mechanism: {term}")
+
+    if not remote_access_path.is_file():
+        failures.append("remote_access.py missing")
+    else:
+        remote_access_text = remote_access_path.read_text(encoding="utf-8").lower()
+        for required in (
+            "127.0.0.1",
+            "localhost",
+            "ai_app_enable_remote",
+            "ai_app_local_api_token",
+            "remote_enabled and bool(token)",
+            "requires_bearer",
+        ):
+            if required not in remote_access_text:
+                failures.append(f"guarded remote access policy missing: {required}")
 
     research_path = ROOT_DIR / "src" / "core" / "research_provider.py"
     if not research_path.is_file():
@@ -162,7 +180,7 @@ def main() -> int:
     print("SECURITY SELF-CHECK PASSED")
     print("- AST scan found no dynamic eval/exec/os.system/shell=True/Popen/pickle load in runtime code")
     print("- generated-code templates are not mistaken for executable platform source")
-    print("- inbound listeners are limited to reviewed Remote LAN module and loopback-only Platform API")
+    print("- Platform API defaults to loopback; remote bind requires explicit opt-in + bearer token")
     print("- outbound Research Provider is HTTPS-only and rejects private/local targets and unsafe redirects")
     print("- browser screenshots require a verified loopback preview and reviewed fixed browser arguments")
     print("- preview runtime exposes no generic shell/process action")
