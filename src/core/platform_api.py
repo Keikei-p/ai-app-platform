@@ -221,6 +221,9 @@ class PlatformAPI:
                     if path == "/api/v1/transfer/audit":
                         self._json(200, api.service.transfer_audit())
                         return
+                    if path == "/api/v1/productization/e2e":
+                        self._json(200, api.service.buyer_productization_e2e_status())
+                        return
                     if path == "/api/v1/config/export":
                         self._json(200, api.service.export_portable_config())
                         return
@@ -416,6 +419,9 @@ class PlatformAPI:
                         self._json(200, api.service.create_transfer_package(
                             approved=data.get("approved") is True,
                         ))
+                        return
+                    if path == "/api/v1/productization/e2e/run":
+                        self._json(200, api.service.run_buyer_productization_e2e())
                         return
                     if path == "/api/v1/daily-evolution/run":
                         self._json(200, api.service.run_daily_evolution())
