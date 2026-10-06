@@ -30,15 +30,16 @@ class DevelopmentMemoryV09Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "memory.jsonl"
             memory = DevelopmentMemory(path)
+            secret="sk-" + "abcdefghijklmnopqrstuvwxyz123456"
             memory.record(
                 category="verified",
-                input_text="Authorization: Bearer sk-abcdefghijklmnopqrstuvwxyz123456",
-                lesson="never persist Authorization: Bearer sk-abcdefghijklmnopqrstuvwxyz123456",
+                input_text="Authorization: Bearer " + secret,
+                lesson="never persist Authorization: Bearer " + secret,
                 verified=True,
                 evidence_source="test",
             )
             raw = path.read_text(encoding="utf-8")
-            self.assertNotIn("sk-abcdefghijklmnopqrstuvwxyz123456", raw)
+            self.assertNotIn(secret, raw)
 
     def test_agent_context_only_uses_verified_lessons(self):
         with tempfile.TemporaryDirectory() as td:
