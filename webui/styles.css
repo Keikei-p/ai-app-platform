@@ -299,3 +299,52 @@ button,textarea,input{font:inherit}.app-shell{display:grid;grid-template-columns
 .soak-track{height:7px;border-radius:999px;background:var(--surface-soft);overflow:hidden;margin:9px 0 7px}
 .soak-track i{display:block;height:100%;width:0;border-radius:inherit;background:var(--accent);transition:width .35s ease}
 .soak-evidence p{margin:0;color:var(--muted);font-size:.67rem;line-height:1.45}
+
+
+/* Productization / Connectors */
+.setup-wizard,.service-usage{margin-bottom:14px}
+.setup-wizard-head,.connector-dialog-head,.service-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.setup-wizard-head h3,.service-usage h3,.ownership-card h3,.portability-card h3,.transfer-card h3{margin:5px 0 6px;font-size:1.12rem}
+.setup-wizard-head p,.service-usage p,.ownership-card p,.portability-card p,.transfer-card p{margin:0;color:var(--muted);font-size:.76rem;line-height:1.5}
+.setup-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:14px 0}
+.setup-steps label,.compact-form label{display:grid;gap:6px;color:var(--muted);font-size:.67rem;font-weight:750}
+.setup-steps select,.compact-form input,.compact-form select,.compact-form textarea{width:100%;min-height:40px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--text);padding:8px 10px;font:inherit;font-size:.76rem}
+.setup-actions,.stack-actions,.dialog-actions,.service-card-actions{display:flex;gap:8px;flex-wrap:wrap}
+.setup-actions .agent-action,.stack-actions .agent-action,.dialog-actions .agent-action,.service-card-actions .agent-action{width:auto}
+.service-usage-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:12px}
+.service-usage-grid>div{padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--surface-soft)}
+.service-usage-grid strong{display:block;font-size:.72rem}.service-usage-grid span{display:block;color:var(--muted);font-size:.66rem;margin-top:4px;word-break:break-word}
+.connector-categories{display:grid;gap:16px}
+.connector-category-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:6px 1px 8px}
+.connector-category-head h3{margin:0;font-size:.9rem}.connector-category-head span{color:var(--muted);font-size:.65rem}
+.connector-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.service-card{border:1px solid var(--border);border-radius:15px;background:var(--surface);padding:13px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.service-card h4{margin:0;font-size:.88rem}.service-card p{margin:0;color:var(--muted);font-size:.7rem;line-height:1.48}
+.service-card-status{display:flex;align-items:center;gap:7px;font-size:.67rem;font-weight:850;white-space:nowrap}
+.service-card-status::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 3px color-mix(in srgb,var(--muted) 12%,transparent)}
+.service-card[data-status="connected"] .service-card-status::before{background:#198754}
+.service-card[data-status="error"] .service-card-status::before{background:#b42318}
+.service-card[data-status="setting_incomplete"] .service-card-status::before{background:#b54708}
+.service-card[data-status="unavailable"]{opacity:.72}
+.service-meta-row{display:flex;gap:6px;flex-wrap:wrap}.service-meta-row .chip{font-size:.6rem}
+.service-card details{border-top:1px solid var(--border);padding-top:9px}
+.service-card summary{cursor:pointer;font-size:.68rem;font-weight:800;color:var(--muted)}
+.service-detail-list{margin:8px 0 0;padding-left:17px;color:var(--muted);font-size:.67rem;line-height:1.5}
+.service-credential{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.65rem;color:var(--muted);word-break:break-all}
+.productization-grid{display:grid;grid-template-columns:1.2fr .8fr .9fr;gap:10px;margin-top:16px}
+.compact-form{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0}
+.ownership-card .agent-action{width:auto}
+.file-action{display:inline-flex;align-items:center;justify-content:center;min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--surface-soft);padding:0 12px;font-size:.71rem;font-weight:800;cursor:pointer}
+.file-action input{display:none}
+.transfer-audit-result{margin-top:10px;border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--surface-soft);font-size:.69rem;line-height:1.5}
+.transfer-finding{padding:7px 0;border-bottom:1px solid var(--border)}.transfer-finding:last-child{border-bottom:0}
+.transfer-finding.danger{font-weight:800}.transfer-finding.warning{color:var(--muted)}
+.connector-dialog{width:min(680px,calc(100vw - 24px));border:1px solid var(--border);border-radius:18px;background:var(--surface);color:var(--text);padding:0;box-shadow:0 24px 80px rgba(0,0,0,.28)}
+.connector-dialog::backdrop{background:rgba(0,0,0,.42);backdrop-filter:blur(3px)}
+.connector-dialog-shell{padding:18px}
+.connector-dialog .compact-form{grid-template-columns:1fr}
+.check-row{display:flex!important;align-items:center;gap:8px!important;margin:10px 0;color:var(--muted);font-size:.7rem!important}
+.check-row input{width:auto;min-height:auto}
+.dialog-actions{justify-content:flex-end;margin-top:14px}
+@media(max-width:1000px){.connector-grid{grid-template-columns:1fr 1fr}.productization-grid{grid-template-columns:1fr}.service-usage-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:680px){.setup-wizard-head,.service-card-head{display:block}.setup-steps,.connector-grid,.compact-form{grid-template-columns:1fr}.service-usage-grid{grid-template-columns:1fr 1fr}.setup-actions .agent-action,.stack-actions .agent-action,.ownership-card .agent-action{width:100%}.connector-dialog-shell{padding:14px}}
