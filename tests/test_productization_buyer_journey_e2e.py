@@ -71,6 +71,10 @@ class BuyerJourneyE2ETests(unittest.TestCase):
             self.assertTrue(checks["transfer_package_resets_owner_identity"])
             self.assertTrue(checks["transfer_package_resets_connector_configuration"])
             self.assertTrue(checks["transfer_package_has_no_credentials"])
+            self.assertTrue(checks["same_machine_handoff_clears_ivy_credentials"])
+            self.assertTrue(checks["same_machine_handoff_clears_connector_config"])
+            self.assertTrue(checks["same_machine_handoff_reopens_setup"])
+            self.assertTrue(checks["same_machine_handoff_resets_owner_identity"])
             self.assertTrue(checks["new_owner_starts_without_seller_identity"])
             self.assertTrue(checks["new_owner_starts_without_seller_connectors"])
 
