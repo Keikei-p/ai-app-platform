@@ -77,6 +77,7 @@ class LongRunSoakMonitor:
             state_path or (DATA_DIR / "completion_evidence" / "long_run_soak.json")
         )
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.backup_path = self.state_path.with_suffix(self.state_path.suffix + ".bak")
         self.now_fn = now_fn or _utc_now
         self.target_seconds = max(60, int(target_seconds or self.TARGET_SECONDS))
         self.heartbeat_seconds = max(30, int(heartbeat_seconds or self.HEARTBEAT_SECONDS))
@@ -387,18 +388,52 @@ class LongRunSoakMonitor:
         return value.astimezone(timezone.utc)
 
     def _read(self) -> dict[str, Any]:
-        if not self.state_path.is_file():
+        primary = self._read_path(self.state_path)
+        if primary:
+            return primary
+
+        backup = self._read_path(self.backup_path)
+        if not backup:
+            return {}
+
+        recovered = dict(backup)
+        recovered["state_recovery"] = {
+            "recovered_from_backup": True,
+            "recovered_at": _iso(self._now()),
+            "reason": (
+                "primary_state_invalid"
+                if self.state_path.exists()
+                else "primary_state_missing"
+            ),
+        }
+        # Restore the primary atomically without rotating a corrupt/missing
+        # primary over the last known-good backup.
+        self._write(recovered)
+        return recovered
+
+    @staticmethod
+    def _read_path(path: Path) -> dict[str, Any]:
+        if not path.is_file():
             return {}
         try:
-            raw = json.loads(self.state_path.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8"))
             return raw if isinstance(raw, dict) else {}
         except Exception:
             return {}
 
-    def _write(self, raw: dict[str, Any]) -> None:
-        tmp = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
+    @staticmethod
+    def _write_json_atomically(path: Path, raw: dict[str, Any]) -> None:
+        tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(self.state_path)
+        tmp.replace(path)
+
+    def _write(self, raw: dict[str, Any]) -> None:
+        current = self._read_path(self.state_path)
+        if current:
+            # Keep the previous verified-readable checkpoint. If the primary
+            # is already corrupt, never overwrite the last known-good backup.
+            self._write_json_atomically(self.backup_path, current)
+        self._write_json_atomically(self.state_path, raw)
 
     @staticmethod
     def _git_blob_sha(path: Path) -> str:
