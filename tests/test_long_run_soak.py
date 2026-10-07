@@ -134,6 +134,59 @@ class LongRunSoakTests(unittest.TestCase):
             self.assertEqual(second["elapsed_seconds"], 0)
             self.assertIn("monitoring gap", second.get("restart_reason", ""))
 
+    def test_corrupt_primary_recovers_last_known_good_checkpoint(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            monitor = self.make_monitor(root, clock)
+            started = monitor.start(reset=True)
+            first = monitor.checkpoint(trigger="first")
+            clock.advance(900)
+            second = monitor.checkpoint(trigger="second")
+
+            self.assertEqual(second["sample_count"], 2)
+            self.assertTrue((root / "soak.json.bak").is_file())
+
+            (root / "soak.json").write_text("{broken-json", encoding="utf-8")
+            restarted = self.make_monitor(root, clock)
+            recovered = restarted.ensure_active()
+
+            self.assertEqual(recovered["session_id"], started["session_id"])
+            self.assertEqual(recovered["sample_count"], first["sample_count"])
+            self.assertTrue(recovered["state_recovery"]["recovered_from_backup"])
+            self.assertEqual(
+                recovered["state_recovery"]["reason"],
+                "primary_state_invalid",
+            )
+
+            persisted = (root / "soak.json").read_text(encoding="utf-8")
+            self.assertIn('"recovered_from_backup": true', persisted)
+
+            clock.advance(900)
+            resumed = restarted.checkpoint(trigger="after_recovery")
+            self.assertEqual(resumed["session_id"], started["session_id"])
+            self.assertEqual(resumed["sample_count"], 2)
+
+    def test_corrupt_primary_and_backup_never_claim_old_evidence(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            monitor = self.make_monitor(root, clock)
+            old = monitor.start(reset=True)
+            monitor.checkpoint(trigger="first")
+            clock.advance(900)
+            monitor.checkpoint(trigger="second")
+
+            (root / "soak.json").write_text("{broken-primary", encoding="utf-8")
+            (root / "soak.json.bak").write_text("{broken-backup", encoding="utf-8")
+
+            restarted = self.make_monitor(root, clock)
+            fresh = restarted.ensure_active()
+
+            self.assertNotEqual(fresh["session_id"], old["session_id"])
+            self.assertEqual(fresh["sample_count"], 0)
+            self.assertFalse(fresh["verified"])
+
     def test_runtime_failure_prevents_verification(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
