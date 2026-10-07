@@ -48,6 +48,7 @@ class MissionStore:
     def __init__(self, path: Path | None = None):
         self.path = path or (DATA_DIR / "aivy_missions.json")
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.backup_path = self.path.with_suffix(self.path.suffix + ".bak")
         self._lock = RLock()
         self._recover_interrupted()
 
@@ -174,10 +175,21 @@ class MissionStore:
             changed = False
             for mission in rows.values():
                 if mission.status == "running":
+                    interrupted_build = bool(mission.build_job_id)
                     mission.status = "paused"
                     mission.phase = "resume_required"
                     mission.requires_approval = False
-                    mission.message = "Aivy restarted while this mission was active. State was preserved for safe resume."
+                    # BuildJobManager workers are process-local. After a host
+                    # restart the old job id cannot be trusted or resumed.
+                    # Clear it so the mission can safely re-run preflight and
+                    # stop at the normal build-approval boundary.
+                    mission.build_job_id = None
+                    mission.message = (
+                        "Aivy restarted during an active build. Mission state and evidence were "
+                        "preserved; preflight must be repeated before a new build approval."
+                        if interrupted_build
+                        else "Aivy restarted while this mission was active. State was preserved for safe resume."
+                    )
                     mission.updated_at = _now()
                     mission.history.append({
                         "at": mission.updated_at,
@@ -185,19 +197,24 @@ class MissionStore:
                         "phase": mission.phase,
                         "message": mission.message,
                     })
+                    mission.history = mission.history[-200:]
                     changed = True
             if changed:
                 self._write(rows)
 
     def _read(self) -> dict[str, Mission]:
-        if not self.path.is_file():
-            return {}
-        try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
+        raw = self._read_payload(self.path)
+        if raw is None:
+            backup = self._read_payload(self.backup_path)
+            if backup is None:
+                return {}
+            # Restore the last verified-readable snapshot without copying a
+            # corrupt primary over the backup.
+            self._write_payload_atomically(self.path, backup)
+            raw = backup
+
         rows: dict[str, Mission] = {}
-        for item in raw if isinstance(raw, list) else []:
+        for item in raw:
             try:
                 mission = Mission(
                     mission_id=str(item["mission_id"]),
@@ -222,10 +239,28 @@ class MissionStore:
                 continue
         return rows
 
-    def _write(self, rows: dict[str, Mission]) -> None:
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+    @staticmethod
+    def _read_payload(path: Path) -> list[Any] | None:
+        if not path.is_file():
+            return None
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        return raw if isinstance(raw, list) else None
+
+    @staticmethod
+    def _write_payload_atomically(path: Path, payload: list[dict[str, Any]]) -> None:
+        tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(
-            json.dumps([x.to_dict() for x in rows.values()], ensure_ascii=False, indent=2),
+            json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        tmp.replace(self.path)
+        tmp.replace(path)
+
+    def _write(self, rows: dict[str, Mission]) -> None:
+        current = self._read_payload(self.path)
+        if current is not None:
+            self._write_payload_atomically(self.backup_path, current)
+        payload = [x.to_dict() for x in rows.values()]
+        self._write_payload_atomically(self.path, payload)
