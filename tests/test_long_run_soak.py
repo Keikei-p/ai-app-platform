@@ -162,7 +162,8 @@ class LongRunSoakTests(unittest.TestCase):
             persisted = (root / "soak.json").read_text(encoding="utf-8")
             self.assertIn('"recovered_from_backup": true', persisted)
 
-            clock.advance(900)
+            # Startup recovery is immediately followed by the monitor's first
+            # checkpoint, so the restored heartbeat remains inside the gap budget.
             resumed = restarted.checkpoint(trigger="after_recovery")
             self.assertEqual(resumed["session_id"], started["session_id"])
             self.assertEqual(resumed["sample_count"], 2)
