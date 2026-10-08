@@ -215,29 +215,39 @@ class MissionStore:
 
         rows: dict[str, Mission] = {}
         for item in raw:
-            try:
-                mission = Mission(
-                    mission_id=str(item["mission_id"]),
-                    project_slug=str(item["project_slug"]),
-                    goal=str(item["goal"]),
-                    status=str(item["status"]),
-                    phase=str(item["phase"]),
-                    created_at=str(item["created_at"]),
-                    updated_at=str(item["updated_at"]),
-                    cycle=max(0, int(item.get("cycle") or 0)),
-                    max_cycles=max(1, min(int(item.get("max_cycles") or 8), 32)),
-                    requires_approval=bool(item.get("requires_approval")),
-                    message=str(item.get("message") or ""),
-                    plan=dict(item.get("plan") or {}),
-                    build_job_id=str(item.get("build_job_id") or "") or None,
-                    evidence_refs=[str(x) for x in item.get("evidence_refs") or ()],
-                    history=[dict(x) for x in item.get("history") or () if isinstance(x, dict)],
-                    result=dict(item["result"]) if isinstance(item.get("result"), dict) else None,
-                )
+            mission = self._parse_mission(item)
+            if mission is not None:
                 rows[mission.mission_id] = mission
-            except Exception:
-                continue
         return rows
+
+    @staticmethod
+    def _parse_mission(item: Any) -> Mission | None:
+        # A future schema must remain opaque, even if some old fields match.
+        if not isinstance(item, dict):
+            return None
+        if "schema_version" in item and item["schema_version"] != 1:
+            return None
+        try:
+            return Mission(
+                mission_id=str(item["mission_id"]),
+                project_slug=str(item["project_slug"]),
+                goal=str(item["goal"]),
+                status=str(item["status"]),
+                phase=str(item["phase"]),
+                created_at=str(item["created_at"]),
+                updated_at=str(item["updated_at"]),
+                cycle=max(0, int(item.get("cycle") or 0)),
+                max_cycles=max(1, min(int(item.get("max_cycles") or 8), 32)),
+                requires_approval=bool(item.get("requires_approval")),
+                message=str(item.get("message") or ""),
+                plan=dict(item.get("plan") or {}),
+                build_job_id=str(item.get("build_job_id") or "") or None,
+                evidence_refs=[str(x) for x in item.get("evidence_refs") or ()],
+                history=[dict(x) for x in item.get("history") or () if isinstance(x, dict)],
+                result=dict(item["result"]) if isinstance(item.get("result"), dict) else None,
+            )
+        except Exception:
+            return None
 
     @staticmethod
     def _read_payload(path: Path) -> list[Any] | None:
@@ -250,7 +260,7 @@ class MissionStore:
         return raw if isinstance(raw, list) else None
 
     @staticmethod
-    def _write_payload_atomically(path: Path, payload: list[dict[str, Any]]) -> None:
+    def _write_payload_atomically(path: Path, payload: list[Any]) -> None:
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -262,5 +272,19 @@ class MissionStore:
         current = self._read_payload(self.path)
         if current is not None:
             self._write_payload_atomically(self.backup_path, current)
-        payload = [x.to_dict() for x in rows.values()]
+        # Keep unknown/future rows byte-for-byte equivalent at the JSON-value
+        # level. Do not silently delete records this version cannot interpret.
+        payload: list[Any] = []
+        written: set[str] = set()
+        if current is not None:
+            for item in current:
+                decoded = self._parse_mission(item)
+                if decoded is None or decoded.mission_id not in rows:
+                    payload.append(item)
+                    continue
+                # Preserve unrecognized extension keys on otherwise readable
+                # missions, so a downgrade/update/upgrade does not lose data.
+                payload.append({**item, **rows[decoded.mission_id].to_dict()})
+                written.add(decoded.mission_id)
+        payload.extend(row.to_dict() for key, row in rows.items() if key not in written)
         self._write_payload_atomically(self.path, payload)
