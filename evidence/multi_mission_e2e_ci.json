@@ -13,7 +13,7 @@
     "no_auto_build_approval": true
   },
   "source_blobs": {
-    "src/core/mission_control.py": "8351d8f34c97db05a54a5de6d3d1aab69b05f124",
+    "src/core/mission_control.py": "d4648d011ee4ac7c0bffef463302fc4db62b9cfe",
     "src/core/strategic_goals.py": "49e69045c9490da2bfff870b2ff8a2beea4e628f",
     "src/core/multi_mission_e2e.py": "41d3ec6ff1c8a97ab467a1522d3dbad71f879bb0"
   },
@@ -23,11 +23,11 @@
   "paid_actions": false,
   "production_data_written": false,
   "ci": {
-    "run_id": 37567407596,
-    "run_number": 1017,
+    "run_id": 37724826614,
+    "run_number": 1019,
     "conclusion": "runtime_e2e_passed_attestation_refresh_required",
-    "tested_commit": "a243ff27de351de926562eb42df8e1ee42c63cd4",
-    "source_base_commit": "da5dd070c17ae9b5c906fe2f43b153e8d4a63585"
+    "tested_commit": "95e77daaa559f6228ae29c220a2448ec44116dec",
+    "source_base_commit": "95e77daaa559f6228ae29c220a2448ec44116dec"
   },
-  "created_at": "2026-10-07T03:36:00+00:00"
+  "created_at": "2026-10-08T03:53:38+00:00"
 }
