@@ -86,6 +86,83 @@ class MissionStoreTests(unittest.TestCase):
             restored_payload = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(restored_payload[0]["mission_id"], mission.mission_id)
 
+    def test_unrecoverable_mission_files_are_never_overwritten(self):
+        for condition in (
+            "primary_only_corrupt",
+            "both_corrupt",
+            "backup_only_corrupt",
+            "primary_valid_backup_corrupt",
+        ):
+            with self.subTest(condition=condition):
+                with tempfile.TemporaryDirectory() as td:
+                    path = Path(td) / "missions.json"
+                    backup = path.with_suffix(".json.bak")
+                    store = MissionStore(path)
+                    mission = store.create(
+                        project_slug="demo", goal="Preserve data", plan={}
+                    )
+
+                    if condition == "primary_only_corrupt":
+                        path.write_bytes(b"{primary-unreadable")
+                    elif condition == "both_corrupt":
+                        store.update(mission.mission_id, phase="review")
+                        path.write_bytes(b"{primary-unreadable")
+                        backup.write_bytes(b"{backup-unreadable")
+                    elif condition == "backup_only_corrupt":
+                        path.unlink()
+                        backup.write_bytes(b"{backup-unreadable")
+                    else:
+                        backup.write_bytes(b"{backup-unreadable")
+
+                    before = {
+                        p: p.read_bytes()
+                        for p in (path, backup)
+                        if p.exists()
+                    }
+                    # A new process must not turn an unreadable on-disk state
+                    # into an empty writable Mission database.
+                    restarted = MissionStore(path)
+                    with self.assertRaisesRegex(
+                        RuntimeError, "Mission persistence is blocked"
+                    ):
+                        restarted.create(
+                            project_slug="demo", goal="Should not overwrite", plan={}
+                        )
+                    self.assertEqual(
+                        {
+                            p: p.read_bytes()
+                            for p in (path, backup)
+                            if p.exists()
+                        },
+                        before,
+                    )
+
+    def test_state_corrupted_after_read_still_blocks_write(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "missions.json"
+            store = MissionStore(path)
+            store.create(project_slug="demo", goal="Before corruption", plan={})
+            rows = store._read()
+            path.write_bytes(b"{corrupted-since-read")
+            original = path.read_bytes()
+
+            with self.assertRaisesRegex(RuntimeError, "Mission persistence is blocked"):
+                store._write(rows)
+
+            self.assertEqual(path.read_bytes(), original)
+            self.assertFalse(path.with_suffix(".json.bak").exists())
+
+    def test_clean_install_still_creates_missions(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "missions.json"
+            store = MissionStore(path)
+            mission = store.create(project_slug="demo", goal="New installation", plan={})
+            self.assertEqual(store.get(mission.mission_id).goal, "New installation")
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8"))[0]["mission_id"],
+                mission.mission_id,
+            )
+
     def test_active_build_cannot_be_cancelled_mid_write(self):
         with tempfile.TemporaryDirectory() as td:
             store = MissionStore(Path(td) / "missions.json")
