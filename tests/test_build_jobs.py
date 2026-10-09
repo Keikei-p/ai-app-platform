@@ -88,6 +88,7 @@ class BuildJobManagerTests(unittest.TestCase):
                 time.sleep(0.02)
             self.assertEqual(first.get(job.job_id).status, "completed")
             self.assertEqual(first.get(job.job_id).result["message"], "done")
+            first._executor.shutdown(wait=True)
             restarted = BuildJobManager(history_path=history)
             saved = restarted.get(job.job_id)
             self.assertEqual(saved.status, "completed")
@@ -124,6 +125,7 @@ class BuildJobManagerTests(unittest.TestCase):
                 self.assertEqual(executions, ["started"])
             finally:
                 release.set()
+                original._executor.shutdown(wait=True)
 
     def test_sensitive_results_and_exception_details_never_persist(self):
         with tempfile.TemporaryDirectory() as td:
@@ -142,6 +144,7 @@ class BuildJobManagerTests(unittest.TestCase):
                 time.sleep(0.02)
             self.assertEqual(manager.get(job.job_id).status, "failed")
             self.assertIn(secret, manager.get(job.job_id).error)
+            manager._executor.shutdown(wait=True)
             saved = history.read_text(encoding="utf-8")
             self.assertNotIn(secret, saved)
             self.assertNotIn("RuntimeError", saved)
@@ -159,6 +162,7 @@ class BuildJobManagerTests(unittest.TestCase):
                         if original.get(job.job_id).status == "completed":
                             break
                         time.sleep(0.02)
+                    original._executor.shutdown(wait=True)
                     if mode == "primary":
                         history.write_text("{invalid", encoding="utf-8")
                         # The valid backup remains available for recovery.
@@ -209,6 +213,7 @@ class BuildJobManagerTests(unittest.TestCase):
             self.assertEqual(calls, [1])
         finally:
             release.set()
+            manager._executor.shutdown(wait=True)
 
 
 if __name__ == "__main__":
