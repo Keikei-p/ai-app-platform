@@ -254,6 +254,7 @@ class PlatformService:
             "product": self.ownership.get().to_dict(),
             "architecture": "local-first-core-service",
             "project_count": len(list_projects()),
+            "build_history_watchdog": self.build_jobs.watchdog_status(),
             "capabilities": {
                 "web": True,
                 "windows": True,
@@ -1877,6 +1878,10 @@ class PlatformService:
 
     def build_job(self, job_id: str) -> dict[str, Any]:
         return self.build_jobs.get(job_id).to_dict()
+
+    def build_watchdog_status(self) -> dict[str, Any]:
+        """Observe stalled/interrupted builds without retrying or approving them."""
+        return self.build_jobs.watchdog_status()
 
     def build_project(
         self,
