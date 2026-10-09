@@ -169,6 +169,17 @@ class LongRunSoakMonitor:
             }:
                 raw = self._new_session(now)
 
+            # Wall-clock regressions invalidate continuous-duration evidence.
+            # Do this before returning an already verified session.
+            started_at = _parse(raw.get("started_at"))
+            last_sample_at = _parse(raw.get("last_sample_at"))
+            if (
+                (started_at is not None and now < started_at)
+                or (last_sample_at is not None and now < last_sample_at)
+            ):
+                raw = self._new_session(now)
+                raw["restart_reason"] = "system clock moved backwards; new soak window started"
+
             if raw.get("verified") is True:
                 return self._status_from(raw, now)
 
@@ -220,11 +231,13 @@ class LongRunSoakMonitor:
             enough_samples = int(raw.get("sample_count") or 0) >= self.min_samples
             no_failures = int(raw.get("failure_count") or 0) == 0
             source_unchanged = raw.get("source_blobs") == self.source_blobs()
+            sources_present = not self._missing_source_paths()
             verified = bool(
                 enough_time
                 and enough_samples
                 and no_failures
                 and source_unchanged
+                and sources_present
             )
             raw["verified"] = verified
             raw["status"] = "verified" if verified else "running"
@@ -246,6 +259,27 @@ class LongRunSoakMonitor:
                     "background_active": self._background_started,
                 }
 
+            started_at = _parse(raw.get("started_at"))
+            last_sample_at = _parse(raw.get("last_sample_at"))
+            if (
+                (started_at is not None and now < started_at)
+                or (last_sample_at is not None and now < last_sample_at)
+            ):
+                return {
+                    **self._status_from(raw, now),
+                    "status": "stale",
+                    "verified": False,
+                    "stale": True,
+                    "reason": "system clock moved backwards since soak evidence",
+                }
+            if self._missing_source_paths():
+                return {
+                    **self._status_from(raw, now),
+                    "status": "stale",
+                    "verified": False,
+                    "stale": True,
+                    "reason": "covered source file missing",
+                }
             if raw.get("source_blobs") != self.source_blobs():
                 return {
                     **self._status_from(raw, now),
@@ -313,6 +347,9 @@ class LongRunSoakMonitor:
         except Exception as exc:
             reasons.append("health_status_error:" + type(exc).__name__)
 
+        if self._missing_source_paths():
+            reasons.append("covered_source_missing")
+
         return {
             "at": _iso(now),
             "trigger": str(trigger)[:80],
@@ -369,9 +406,16 @@ class LongRunSoakMonitor:
             ),
             "no_failures": int(raw.get("failure_count") or 0) == 0,
             "source_unchanged": raw.get("source_blobs") == self.source_blobs(),
+            "sources_present": not self._missing_source_paths(),
             "max_gap_seconds": int(raw.get("max_gap_seconds") or self.max_gap_seconds),
         }
         return result
+
+    def _missing_source_paths(self) -> list[str]:
+        return [
+            rel for rel in self.SOURCE_PATHS
+            if not (self.root_dir / rel).is_file()
+        ]
 
     def source_blobs(self) -> dict[str, str]:
         rows: dict[str, str] = {}

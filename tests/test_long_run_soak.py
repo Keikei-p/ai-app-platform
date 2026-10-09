@@ -225,6 +225,58 @@ class LongRunSoakTests(unittest.TestCase):
                 row["samples"][-1]["reasons"],
             )
 
+    def test_backward_clock_invalidates_soak_evidence_before_checkpoint(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            monitor = self.make_monitor(root, clock)
+            old = monitor.start(reset=True)
+            monitor.checkpoint(trigger="first")
+            clock.advance(900)
+            monitor.checkpoint(trigger="second")
+            clock.advance(-1000)
+
+            stale = monitor.status()
+            self.assertFalse(stale["verified"])
+            self.assertEqual(stale["status"], "stale")
+            self.assertIn("clock moved backwards", stale["reason"])
+
+            fresh = monitor.checkpoint(trigger="after_clock_rollback")
+            self.assertNotEqual(fresh["session_id"], old["session_id"])
+            self.assertEqual(fresh["sample_count"], 1)
+            self.assertEqual(fresh["elapsed_seconds"], 0)
+            self.assertFalse(fresh["verified"])
+            self.assertIn("clock moved backwards", fresh["restart_reason"])
+
+    def test_missing_covered_source_cannot_pass_even_with_duration_and_samples(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            monitor = LongRunSoakMonitor(
+                **healthy_callbacks(),
+                root_dir=root / "missing_source_checkout",
+                state_path=root / "soak.json",
+                now_fn=clock.now,
+                target_seconds=3600,
+                heartbeat_seconds=900,
+                max_gap_seconds=1200,
+                min_samples=5,
+            )
+            monitor.start(reset=True)
+            for index in range(5):
+                if index:
+                    clock.advance(900)
+                result = monitor.checkpoint(trigger="test")
+
+            self.assertTrue(result["requirements"]["elapsed_target_met"])
+            self.assertTrue(result["requirements"]["sample_target_met"])
+            self.assertFalse(result["requirements"]["sources_present"])
+            self.assertFalse(result["verified"])
+            self.assertIn("covered_source_missing", result["last_failure"]["reasons"])
+            stale = monitor.status()
+            self.assertEqual(stale["status"], "stale")
+            self.assertFalse(stale["verified"])
+
     def test_default_contract_is_real_24h_not_short_simulation(self):
         callbacks = healthy_callbacks()
         with TemporaryDirectory() as tmp:
