@@ -12,8 +12,16 @@ If IsAivyRunning(url & "api/v1/status") Then
 End If
 
 home = shell.ExpandEnvironmentStrings("%USERPROFILE%")
-repo = home & "\Aivy-Latest"
+' Prefer the installed folder containing this launcher; never assume the
+' original developer's path or overwrite anything in the user workspace.
+repo = fso.GetParentFolderName(WScript.ScriptFullName)
 
+If Not fso.FileExists(repo & "\AIVY.bat") Then
+    repo = home & "\AI-App-Platform-Git"
+End If
+If Not fso.FileExists(repo & "\AIVY.bat") Then
+    repo = home & "\Aivy-Latest"
+End If
 If Not fso.FileExists(repo & "\AIVY.bat") Then
     repo = home & "\Aivy-Latest-Git"
 End If
