@@ -270,6 +270,24 @@ class MissionStore:
 
     def _write(self, rows: dict[str, Mission]) -> None:
         current = self._read_payload(self.path)
+        # The primary and backup may both be unreadable. In that case _read()
+        # cannot recover any rows, but treating the state as a fresh install
+        # would silently overwrite irreplaceable user data. Fail closed and
+        # leave the original bytes untouched for manual recovery.
+        if current is None and (self.path.exists() or self.backup_path.exists()):
+            raise RuntimeError(
+                "Mission persistence is blocked: existing state needs recovery; "
+                "no mission data was overwritten."
+            )
+        # Likewise, a corrupt backup should not be silently replaced by a
+        # new checkpoint. A healthy primary is not permission to destroy
+        # potentially recoverable backup bytes.
+        if current is not None and self.backup_path.exists():
+            if self._read_payload(self.backup_path) is None:
+                raise RuntimeError(
+                    "Mission persistence is blocked: backup needs recovery; "
+                    "no mission data was overwritten."
+                )
         if current is not None:
             self._write_payload_atomically(self.backup_path, current)
         # Keep unknown/future rows byte-for-byte equivalent at the JSON-value
