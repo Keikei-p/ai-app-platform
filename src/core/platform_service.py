@@ -10,7 +10,7 @@ from .agent_runtime import AgentOrchestrator, EvidenceLedger
 from .checkpoint_manager import CheckpointManager
 from .chat_partner import ChatPartner
 from .conversation_brain import ConversationBrain
-from .config import WORKSPACE_DIR
+from .config import DATA_DIR, WORKSPACE_DIR
 from .database import list_projects
 from .path_security import safe_child
 from .project_manager import ProjectManager
@@ -131,7 +131,7 @@ class PlatformService:
         self.evolution = VerifiedEvolutionEngine()
         self.evolution_experiments = EvolutionExperimentStore()
         self.knowledge_verifier = ProjectKnowledgeVerifier(self.knowledge)
-        self.build_jobs = BuildJobManager()
+        self.build_jobs = BuildJobManager(history_path=DATA_DIR / "aivy_build_jobs.json")
         self.tool_executor = AgentToolExecutor(
             registry=self.tools,
             catalog=self.catalog,
