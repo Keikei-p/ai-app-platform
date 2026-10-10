@@ -111,13 +111,36 @@ class LongRunSoakMonitor:
 
     def _background_loop(self) -> None:
         waiter = Event()
+        # Checking the clock is cheap; writing evidence is not. Poll once a
+        # minute so a Windows sleep/wake or paused host is noticed promptly,
+        # while retaining the existing 15-minute evidence cadence.
         while True:
             try:
-                self.checkpoint(trigger="background")
+                self.background_poll_once()
             except Exception:
-                # Monitoring must never crash Aivy.
+                # Monitoring failures must never take down Aivy.
                 pass
-            waiter.wait(self.heartbeat_seconds)
+            waiter.wait(min(60, self.heartbeat_seconds))
+
+    def background_poll_once(self) -> bool:
+        """Persist only when due, including after suspend or a clock rollback.
+
+        This is an observation/checkpoint; it never restarts builds, bypasses
+        approval, or edits projects. Exposed for deterministic scheduler tests.
+        """
+        with self._state_lock:
+            raw = self._read()
+            now = self._now()
+            last = _parse(raw.get("last_sample_at"))
+            if last is not None and now >= last:
+                if raw.get("verified") is True:
+                    # A completed soak is historical evidence, not an
+                    # instruction to continuously overwrite its snapshot.
+                    return False
+                if (now - last).total_seconds() < self.heartbeat_seconds:
+                    return False
+        self.checkpoint(trigger="background")
+        return True
 
     def ensure_active(self) -> dict[str, Any]:
         with self._state_lock:
@@ -296,6 +319,21 @@ class LongRunSoakMonitor:
                     "verified": False,
                     "stale": True,
                     "reason": "system clock moved backwards since soak evidence",
+                }
+            if (
+                raw.get("verified") is not True
+                and last_sample_at is not None
+                and (now - last_sample_at).total_seconds() > self.max_gap_seconds
+            ):
+                # Detect a sleep/power-off gap even before the background
+                # thread has had a chance to write its new checkpoint.
+                return {
+                    **self._status_from(raw, now),
+                    "status": "stale",
+                    "verified": False,
+                    "stale": True,
+                    "reason": "monitoring gap exceeded; next checkpoint will restart the soak window",
+                    "requires_checkpoint": True,
                 }
             if self._missing_source_paths():
                 return {
