@@ -123,6 +123,9 @@ class LongRunSoakMonitor:
         with self._state_lock:
             raw = self._read()
             now = self._now()
+            issue = self._storage_issue()
+            if issue:
+                raise RuntimeError("Soak evidence is blocked: " + issue)
             if not raw or str(raw.get("status") or "") in {
                 "failed",
                 "invalidated",
@@ -168,6 +171,9 @@ class LongRunSoakMonitor:
         with self._state_lock:
             raw = self._read()
             now = self._now()
+            issue = self._storage_issue()
+            if issue:
+                raise RuntimeError("Soak evidence is blocked: " + issue)
             if not raw or str(raw.get("status") or "") in {
                 "failed",
                 "invalidated",
