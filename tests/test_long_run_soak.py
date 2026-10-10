@@ -168,25 +168,78 @@ class LongRunSoakTests(unittest.TestCase):
             self.assertEqual(resumed["session_id"], started["session_id"])
             self.assertEqual(resumed["sample_count"], 2)
 
-    def test_corrupt_primary_and_backup_never_claim_old_evidence(self):
+    def test_corrupt_primary_and_backup_block_writes_without_erasing_evidence(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             clock = FakeClock()
             monitor = self.make_monitor(root, clock)
-            old = monitor.start(reset=True)
+            monitor.start(reset=True)
             monitor.checkpoint(trigger="first")
             clock.advance(900)
             monitor.checkpoint(trigger="second")
 
-            (root / "soak.json").write_text("{broken-primary", encoding="utf-8")
-            (root / "soak.json.bak").write_text("{broken-backup", encoding="utf-8")
+            primary = root / "soak.json"
+            backup = root / "soak.json.bak"
+            primary.write_bytes(b"{broken-primary")
+            backup.write_bytes(b"{broken-backup")
+            before = (primary.read_bytes(), backup.read_bytes())
 
             restarted = self.make_monitor(root, clock)
-            fresh = restarted.ensure_active()
+            with self.assertRaisesRegex(RuntimeError, "Soak evidence is blocked"):
+                restarted.ensure_active()
+            with self.assertRaisesRegex(RuntimeError, "Soak evidence is blocked"):
+                restarted.checkpoint(trigger="restarted")
+            blocked = restarted.status()
+            self.assertEqual(blocked["status"], "blocked")
+            self.assertFalse(blocked["verified"])
+            self.assertEqual(blocked["storage_issue"], "unrecoverable_evidence_files")
+            self.assertEqual((primary.read_bytes(), backup.read_bytes()), before)
+            # An unreadable audit file must not prevent the Ivy service from
+            # starting; the background monitor can report a blocked condition.
+            self.assertTrue(restarted.start_background())
+            self.assertEqual(restarted.status()["status"], "blocked")
+            self.assertEqual((primary.read_bytes(), backup.read_bytes()), before)
 
-            self.assertNotEqual(fresh["session_id"], old["session_id"])
-            self.assertEqual(fresh["sample_count"], 0)
-            self.assertFalse(fresh["verified"])
+    def test_unreadable_backup_blocks_verified_claim_and_preserves_both_files(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            monitor = self.make_monitor(root, clock)
+            monitor.start(reset=True)
+            monitor.checkpoint(trigger="first")
+            for _ in range(4):
+                clock.advance(900)
+                verified = monitor.checkpoint(trigger="next")
+            self.assertTrue(verified["verified"])
+
+            primary = root / "soak.json"
+            backup = root / "soak.json.bak"
+            backup.write_bytes(b"{broken-backup")
+            before = (primary.read_bytes(), backup.read_bytes())
+
+            self.assertEqual(monitor.status()["status"], "blocked")
+            self.assertFalse(monitor.status()["verified"])
+            self.assertEqual(
+                monitor.status()["storage_issue"], "unreadable_evidence_backup"
+            )
+            with self.assertRaisesRegex(RuntimeError, "Soak evidence is blocked"):
+                monitor.checkpoint(trigger="do_not_reuse_verification")
+            self.assertEqual((primary.read_bytes(), backup.read_bytes()), before)
+
+    def test_unreadable_backup_only_never_becomes_fresh_install(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clock = FakeClock()
+            backup = root / "soak.json.bak"
+            backup.write_bytes(b"{unrecoverable-backup")
+            monitor = self.make_monitor(root, clock)
+            with self.assertRaisesRegex(RuntimeError, "Soak evidence is blocked"):
+                monitor.start(reset=True)
+            with self.assertRaisesRegex(RuntimeError, "Soak evidence is blocked"):
+                monitor.ensure_active()
+            self.assertFalse((root / "soak.json").exists())
+            self.assertEqual(backup.read_bytes(), b"{unrecoverable-backup")
+            self.assertEqual(monitor.status()["status"], "blocked")
 
     def test_runtime_failure_prevents_verification(self):
         with TemporaryDirectory() as tmp:
