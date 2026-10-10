@@ -95,6 +95,89 @@ class LongRunSoakTests(unittest.TestCase):
             self.assertEqual(row["elapsed_seconds"], 0)
             self.assertIn("monitoring gap", row.get("restart_reason", ""))
 
+    def test_background_poll_keeps_cadence_without_redundant_writes(self):
+        with TemporaryDirectory() as tmp:
+            clock = FakeClock()
+            monitor = self.make_monitor(Path(tmp), clock)
+            monitor.ensure_active()
+            self.assertTrue(monitor.background_poll_once())
+            original = (Path(tmp) / "soak.json").read_bytes()
+            self.assertFalse(monitor.background_poll_once())
+            self.assertEqual((Path(tmp) / "soak.json").read_bytes(), original)
+            clock.advance(60)
+            self.assertFalse(monitor.background_poll_once())
+            self.assertEqual(monitor.status()["sample_count"], 1)
+            clock.advance(840)
+            self.assertTrue(monitor.background_poll_once())
+            self.assertEqual(monitor.status()["sample_count"], 2)
+
+    def test_sleep_gap_is_stale_before_first_resume_checkpoint(self):
+        with TemporaryDirectory() as tmp:
+            clock = FakeClock()
+            monitor = self.make_monitor(Path(tmp), clock)
+            first = monitor.start(reset=True)
+            monitor.checkpoint(trigger="before_sleep")
+            clock.advance(1800)
+
+            stale = monitor.status()
+            self.assertEqual(stale["status"], "stale")
+            self.assertFalse(stale["verified"])
+            self.assertTrue(stale["requires_checkpoint"])
+            self.assertIn("monitoring gap", stale["reason"])
+            self.assertEqual(stale["session_id"], first["session_id"])
+
+            self.assertTrue(monitor.background_poll_once())
+            resumed = monitor.status()
+            self.assertEqual(resumed["status"], "running")
+            self.assertFalse(resumed["verified"])
+            self.assertNotEqual(resumed["session_id"], first["session_id"])
+            self.assertEqual(resumed["sample_count"], 1)
+            self.assertIn("monitoring gap", resumed["restart_reason"])
+
+    def test_background_poll_after_restart_respects_last_checkpoint(self):
+        with TemporaryDirectory() as tmp:
+            clock = FakeClock()
+            old = self.make_monitor(Path(tmp), clock)
+            old.start(reset=True)
+            old.checkpoint(trigger="first")
+            clock.advance(600)
+            restarted = self.make_monitor(Path(tmp), clock)
+            restarted.ensure_active()
+            self.assertFalse(restarted.background_poll_once())
+            self.assertEqual(restarted.status()["sample_count"], 1)
+            clock.advance(300)
+            self.assertTrue(restarted.background_poll_once())
+            self.assertEqual(restarted.status()["sample_count"], 2)
+
+    def test_verified_soak_is_not_rewritten_on_idle_poll(self):
+        with TemporaryDirectory() as tmp:
+            clock = FakeClock()
+            monitor = self.make_monitor(Path(tmp), clock)
+            monitor.start(reset=True)
+            for index in range(5):
+                if index:
+                    clock.advance(900)
+                verified = monitor.checkpoint(trigger="test")
+            self.assertTrue(verified["verified"])
+            saved = (Path(tmp) / "soak.json").read_bytes()
+            clock.advance(1800)
+            self.assertFalse(monitor.background_poll_once())
+            self.assertEqual(monitor.status()["status"], "verified")
+            self.assertEqual((Path(tmp) / "soak.json").read_bytes(), saved)
+
+    def test_background_poll_detects_clock_rollback(self):
+        with TemporaryDirectory() as tmp:
+            clock = FakeClock()
+            monitor = self.make_monitor(Path(tmp), clock)
+            monitor.start(reset=True)
+            first = monitor.checkpoint(trigger="before_rollback")
+            clock.advance(-60)
+            self.assertTrue(monitor.background_poll_once())
+            fresh = monitor.status()
+            self.assertNotEqual(first["session_id"], fresh["session_id"])
+            self.assertFalse(fresh["verified"])
+            self.assertIn("clock moved backwards", fresh["restart_reason"])
+
     def test_restart_within_gap_preserves_real_soak_window(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
