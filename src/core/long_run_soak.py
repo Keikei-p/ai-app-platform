@@ -95,7 +95,13 @@ class LongRunSoakMonitor:
             if self._background_started:
                 return False
             self._background_started = True
-        self.ensure_active()
+        try:
+            self.ensure_active()
+        except RuntimeError:
+            # Unrecoverable audit files must not stop Ivy's UI/service from
+            # starting. The monitor stays blocked until an operator restores
+            # them; the periodic worker will not overwrite corrupt evidence.
+            pass
         Thread(
             target=self._background_loop,
             name="aivy-long-run-soak",
@@ -251,6 +257,19 @@ class LongRunSoakMonitor:
         with self._state_lock:
             raw = self._read()
             now = self._now()
+            storage_issue = self._storage_issue()
+            if storage_issue:
+                # Never claim an old 24h verification while its evidence
+                # cannot be safely written or recovered.
+                return {
+                    "schema_version": 1,
+                    "kind": "long_run_soak",
+                    "status": "blocked",
+                    "verified": False,
+                    "background_active": self._background_started,
+                    "storage_issue": storage_issue,
+                    "reason": "Soak evidence requires manual recovery before it can be updated.",
+                }
             if not raw:
                 return {
                     **self._new_session(now),
@@ -452,7 +471,7 @@ class LongRunSoakMonitor:
         }
         # Restore the primary atomically without rotating a corrupt/missing
         # primary over the last known-good backup.
-        self._write(recovered)
+        self._write_json_atomically(self.state_path, recovered)
         return recovered
 
     @staticmethod
@@ -471,7 +490,24 @@ class LongRunSoakMonitor:
         tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(path)
 
+    def _storage_issue(self) -> str | None:
+        primary = self._read_path(self.state_path)
+        backup = self._read_path(self.backup_path)
+        if not primary and not backup and (
+            self.state_path.exists() or self.backup_path.exists()
+        ):
+            return "unrecoverable_evidence_files"
+        if primary and self.backup_path.exists() and not backup:
+            return "unreadable_evidence_backup"
+        return None
+
     def _write(self, raw: dict[str, Any]) -> None:
+        issue = self._storage_issue()
+        if issue:
+            # Never erase recoverable bytes merely because verification cannot
+            # proceed. Healthy new installations have no state files and are
+            # unaffected; the primary can still be restored from a good backup.
+            raise RuntimeError("Soak evidence is blocked: " + issue)
         current = self._read_path(self.state_path)
         if current:
             # Keep the previous verified-readable checkpoint. If the primary
