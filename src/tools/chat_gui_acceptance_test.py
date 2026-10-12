@@ -3,10 +3,25 @@ import os
 import tempfile
 import time
 from pathlib import Path
+from unittest.mock import patch
+
+
+def _assert_inside(widget, parent, label):
+    if not widget.winfo_viewable():
+        raise AssertionError(f"{label}: {widget} is not visible")
+    x, y = widget.winfo_rootx(), widget.winfo_rooty()
+    px, py = parent.winfo_rootx(), parent.winfo_rooty()
+    if (x < px or y < py or x + widget.winfo_width() > px + parent.winfo_width()
+            or y + widget.winfo_height() > py + parent.winfo_height()):
+        raise AssertionError(f"{label} is clipped")
 
 
 def _assert_chat_visible(app, label: str) -> None:
     app.update_idletasks()
+    for widget in (app.instruction, app.send_button, app.ai_button, app.connection_note):
+        _assert_inside(widget, app, label)
+    if app.chat_history.winfo_height() < 56:
+        raise AssertionError(f"history has no useful reading area at {label}")
     if not app.chat_history.winfo_viewable():
         raise AssertionError(f"chat history is not viewable at {label}")
     if not app.instruction.winfo_viewable():
@@ -44,9 +59,22 @@ def main() -> int:
         from src.ui.workspace_center import WorkspaceCenter
         from src.core.config import WORKSPACE_DIR
 
-        app = MainWindow()
+        configure_styles = MainWindow._configure_styles
+        def scaled_styles(window):
+            window.tk.call("tk", "scaling", float(os.environ.get("IVY_TEST_TK_SCALING", "1.333")))
+            configure_styles(window)
+
+        # Reproduce a short laptop work area independently of the runner monitor.
+        with patch("src.ui.main_window.work_area", return_value=(0, 0, 1280, 720)), \
+                patch.object(MainWindow, "_configure_styles", scaled_styles):
+            app = MainWindow()
         try:
             app.deiconify(); app.update()
+            app.chat_engine.configure("none", "", "", remember_key=False)
+            app._refresh_ai_status()
+            if app.winfo_rooty() + app.winfo_height() > 720:
+                raise AssertionError("initial window extends below the laptop work area")
+            _assert_chat_visible(app, "initial short-screen startup")
 
             # Landing page must be AI-first: no category-choice buttons or template picker.
             if hasattr(app, "starter_frame"):
@@ -83,12 +111,40 @@ def main() -> int:
                 raise AssertionError("AI connection control should remain available on landing")
 
             # Compact windows must preserve the actual chat and composer inside the visible client area.
-            for width, height in ((820, 520), (700, 460), (680, 440)):
+            for width, height in ((820, 520), (700, 460), (680, 440), (390, 600), (360, 440)):
                 app.geometry(f"{width}x{height}"); app.update()
                 app._apply_responsive_layout(width, height); app.update()
                 _assert_chat_visible(app, f"{width}x{height}")
                 if app.sidebar.winfo_manager():
                     raise AssertionError(f"sidebar did not collapse at {width}x{height}")
+                if (app.winfo_width(), app.winfo_height()) != (width, height):
+                    raise AssertionError("requested narrow size was silently clamped")
+                app._toggle_sidebar(); app.update()
+                _assert_inside(app.menu_button, app, "close navigation")
+                app._toggle_sidebar(); app.update()
+                _assert_chat_visible(app, "after closing navigation")
+
+            # Exercise the real settings action; do not send API requests.
+            app.ai_button.invoke(); app.update()
+            import tkinter as tk
+            dialog = next(w for w in app.winfo_children() if isinstance(w, tk.Toplevel))
+            dialog.geometry("340x380"); app.update()
+            def descendants(widget):
+                for child in widget.winfo_children():
+                    yield child
+                    yield from descendants(child)
+            save = next(w for w in descendants(dialog)
+                        if "text" in w.keys() and w.cget("text") == "保存")
+            _assert_inside(save, dialog, "AI settings save")
+            dialog.destroy()
+
+            from src.core.llm_chat import ChatProviderStatus
+            with patch.object(app.chat_engine, "status", return_value=ChatProviderStatus(
+                    "ollama", "example", True, "configured")):
+                app._refresh_ai_status()
+                if "疎通は未確認" not in app.connection_note.cget("text"):
+                    raise AssertionError("configuration was mistaken for verified connectivity")
+            app._refresh_ai_status()
 
             app.geometry("1280x820"); app.update()
             app._apply_responsive_layout(1280, 820); app.update()
@@ -104,6 +160,8 @@ def main() -> int:
             greeting_text = app.chat_history.get("1.0", "end-1c")
             if "こんにちは" not in greeting_text or "作りたい" not in greeting_text:
                 raise AssertionError("natural opening conversation was not rendered")
+            if "AI未接続・定型案内" not in greeting_text:
+                raise AssertionError("offline reply was presented as a live AI answer")
             persisted = app.conversations.messages(app.current_thread_id)
             if len(persisted) < 2 or persisted[0].get("role") != "user":
                 raise AssertionError("standalone chat was not persisted")
@@ -140,6 +198,13 @@ def main() -> int:
                 raise AssertionError("app generated before explicit approval")
             if not app.build_confirm_button.winfo_manager():
                 raise AssertionError("explicit build approval control was not shown")
+            for width, height in ((360, 440), (680, 440)):
+                app.geometry(f"{width}x{height}"); app.update()
+                app._apply_responsive_layout(width, height); app.update()
+                _assert_chat_visible(app, "pending build approval")
+                _assert_inside(app.build_confirm_button, app, "build approval")
+            app.geometry("1280x820"); app.update()
+            app._apply_responsive_layout(1280, 820); app.update()
             if app.progress_title_var.get() != "設計内容を確認してください":
                 raise AssertionError("review state was not surfaced")
 
