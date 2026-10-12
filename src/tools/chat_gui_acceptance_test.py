@@ -123,6 +123,9 @@ def main() -> int:
                 _assert_inside(app.menu_button, app, "close navigation")
                 app._toggle_sidebar(); app.update()
                 _assert_chat_visible(app, "after closing navigation")
+                app._set_project_actions_visible(True); app.update()
+                _assert_inside(app.ai_button, app, "AI setup after project action refresh")
+                app._set_project_actions_visible(False)
 
             # Exercise the real settings action; do not send API requests.
             app.ai_button.invoke(); app.update()

@@ -471,7 +471,7 @@ class MainWindow(tk.Tk):
     def _set_project_actions_visible(self, visible: bool):
         if not hasattr(self, "preview_button"):
             return
-        if visible:
+        if visible and not self._compact_layout:
             if not self.preview_button.winfo_manager():
                 self.preview_button.pack(side="left", padx=3, before=self.ai_button)
             if not self.details_button.winfo_manager():
@@ -530,7 +530,7 @@ class MainWindow(tk.Tk):
         body.bind("<Configure>", lambda e: form.configure(scrollregion=form.bbox("all")))
 
         tk.Label(body, text="AIモデルを接続", bg="#FBFBFC", fg="#111827",
-                 font=(self.ui_font_semibold, 16, "bold")).pack(anchor="w")
+                 font=(self.ui_font_semibold, 16, "bold"), wraplength=260).pack(anchor="w")
         tk.Label(
             body,
             text="1. プロバイダーを選択\n2. モデルとAPIキーを入力\n3. 保存してチャットで応答を確認\nAPI利用料金は各サービスで発生します。",
@@ -564,7 +564,7 @@ class MainWindow(tk.Tk):
         ).pack(anchor="w", pady=(0, 14))
 
         remember_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(body, text="このWindowsユーザーに暗号化して保存",
+        ttk.Checkbutton(body, text="キーを暗号化して保存",
                         variable=remember_var).pack(anchor="w")
 
         def save():
