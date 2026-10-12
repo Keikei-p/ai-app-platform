@@ -1,50 +1,37 @@
-AI App Platform v0.6.3
+Aivy 0.8.0 - Windows 10/11 quick start
+=======================================
 
-1) START.bat starts the app
-2) CHECK.bat runs all checks
-3) BUILD_WINDOWS.bat builds the Windows executable
-4) DIAGNOSTICS.bat collects diagnostics if something fails
+[Most convenient] Double-click AIVY_DESKTOP_SILENT.vbs
+    Opens the normal desktop GUI without flashing a BAT/PowerShell window.
+    Safely updates source code from the Git branch when possible; no hard reset.
+    The very first launch can take longer for Git fetch and readiness checks.
 
-Main v0.5.0 changes:
-- Chat-first app creation and correction flow
-- Functional Web generation with auth/SQLite/session/CSRF
-- Development Memory and Design AI
-- Android/iPhone Expo source generation
-- Capability/GAP reporting so unfinished work is not called complete
-- Existing Safety Gate, Code Vault, backup, update and LAN Remote Beta remain
+[When debugging] Double-click AIVY.bat
+    Shows update/startup messages in a command window to investigate failures.
 
-LAN Remote Beta is for trusted private networks only.
-Do NOT port-forward the Remote port to the internet.
-User data stays under %LOCALAPPDATA%\AI-App-Platform.
+[Browser alternative] Double-click AIVY_WEB_SILENT.vbs
+    Uses an existing local Aivy Web server or starts the browser UI.
 
-GitHub is the source of truth for program code. Runtime user data and secrets must never be committed.
+[Full quality verification] Double-click CHECK.bat
+    Runs the large unit/security/GUI/build/smoke suite separately.
+    The ordinary START.bat now performs only critical readiness checks first.
 
+[If problems occur] Double-click DIAGNOSTICS.bat
+    Run SETUP.bat if Python 3.11+ is missing.
 
-v0.5.2 usability update:
-- Chat-first layout redesigned for clarity
-- Live visible work stages while AI builds/tests
-- Instant new chat without naming dialog
-- Clearer action names and simplified advanced controls
-- Background generation keeps the interface responsive
+What to try:
+    Chat -> explain the app you want -> review the plan -> confirm building
+    -> verify the generated result -> request edits -> preview -> download.
+    Builds, external publishing, payments and authorization still require
+    the respective reviews and approvals.
 
+Existing project data, chat histories, databases, secrets and backups
+remain in %LOCALAPPDATA%\AI-App-Platform. Safe Git updates must not
+overwrite runtime data or local source edits.
 
-v0.6.1 chat update:
-- High-contrast visible message composer
-- Responsive compact-window layout that keeps chat visible
-- Optional OpenAI / Gemini real LLM conversation
-- Explicit AI未接続 state until a provider key is configured
-- Approval-first generation from v0.6.0 remains enforced
+Only one Tk desktop GUI runs per Windows logon session. An existing GUI is
+not killed when a second shortcut is opened. The web UI runs separately.
 
-
-v0.6.2 responsive fix:
-- Chat composer is pinned to the bottom
-- Send button stays visible at compact sizes
-- Chat/history/input visibility is acceptance-tested at 680x440
-- Nonessential UI collapses before the conversation area
-
-
-v0.6.3 design update:
-- Removed app-category shortcut buttons
-- Premium AI-first landing with a single conversational entry point
-- Project-only controls stay hidden until relevant
-- Large progress UI only appears during active work
+Ivy running only on a PC cannot continue working after the PC powers off.
+24-hour continuous operation and recovery after a real physical Windows
+reboot require separate validation. Passing CI is not proof of those claims.
