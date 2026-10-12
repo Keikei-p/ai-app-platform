@@ -7,6 +7,8 @@ import re
 import shutil
 import subprocess
 
+from .process_launch import quiet_process_options
+
 @dataclass(frozen=True)
 class TestResult:
     name: str
@@ -65,6 +67,7 @@ class ProjectTestRunner:
                     timeout=20,
                     check=False,
                     shell=False,
+                    **quiet_process_options(),
                 )
                 results.append(
                     TestResult(

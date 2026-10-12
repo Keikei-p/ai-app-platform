@@ -6,6 +6,8 @@ from typing import Any, Callable
 import os
 import shutil
 import subprocess
+
+from .process_launch import quiet_process_options
 import tempfile
 
 from .preview_runtime import PreviewRuntime, PreviewSession
@@ -134,6 +136,7 @@ class BrowserScreenshotCapture:
             capture_output=True,
             text=True,
             shell=False,
+            **quiet_process_options(),
         )
 
     @staticmethod

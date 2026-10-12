@@ -9,6 +9,8 @@ import os
 import plistlib
 import shutil
 import subprocess
+
+from .process_launch import quiet_process_options
 import sys
 import zipfile
 
@@ -340,6 +342,7 @@ class IOSSimulatorPackager:
             timeout=timeout,
             check=False,
             shell=False,
+            **quiet_process_options(),
         )
         if completed.returncode != 0:
             output = ((completed.stdout or "") + "\n" + (completed.stderr or ""))[-14000:]

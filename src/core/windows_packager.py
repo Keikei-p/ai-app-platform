@@ -8,6 +8,8 @@ import json
 import os
 import shutil
 import subprocess
+
+from .process_launch import quiet_process_options
 import sys
 
 from .app_spec import AppSpec
@@ -149,6 +151,7 @@ class WindowsPackager:
                 text=True,
                 timeout=timeout,
                 check=False,
+                **quiet_process_options(),
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             log_event("packager.windows.build_failed", str(exc), spec.slug)
@@ -174,6 +177,7 @@ class WindowsPackager:
                 timeout=min(60, max(15, timeout)),
                 check=False,
                 shell=False,
+                **quiet_process_options(),
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             self_test = None
