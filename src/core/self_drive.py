@@ -108,13 +108,25 @@ class SelfDriveEngine:
             return default
         try:
             raw = json.loads(self.settings_path.read_text(encoding="utf-8"))
-        except Exception:
-            return default
+        except (OSError, ValueError, UnicodeError):
+            # Do not restart autonomous work on an unreadable or corrupt policy.
+            return {**default, "enabled": False, "config_error": "unreadable_settings"}
         if not isinstance(raw, dict):
-            return default
+            return {**default, "enabled": False, "config_error": "invalid_settings"}
         cfg = {**default, **raw}
-        cfg["enabled"] = bool(cfg.get("enabled"))
-        cfg["interval_seconds"] = max(300, min(int(cfg.get("interval_seconds") or 600), 86400))
+        enabled = cfg.get("enabled")
+        if isinstance(enabled, bool):
+            cfg["enabled"] = enabled
+        elif isinstance(enabled, str):
+            cfg["enabled"] = enabled.strip().lower() in {"true", "1", "yes", "on"}
+        else:
+            # Fail closed rather than trusting an unexpected configuration type.
+            cfg["enabled"] = False
+        try:
+            interval = int(cfg.get("interval_seconds"))
+        except (TypeError, ValueError, OverflowError):
+            interval = 600
+        cfg["interval_seconds"] = max(300, min(interval, 86400))
         cfg["max_actions_per_cycle"] = 1
         for key in (
             "allow_source_self_edit",
@@ -165,11 +177,39 @@ class SelfDriveEngine:
             waiter.wait(int(cfg["interval_seconds"]))
             if not self.settings().get("enabled"):
                 continue
-            try:
+            self._background_step()
+
+    def _background_step(self) -> None:
+        """Run one scheduled attempt; never silently discard scheduler errors."""
+        try:
+            if self.settings().get("enabled"):
                 self.run_cycle(trigger="background")
-            except Exception:
-                # Self-drive must never crash the host application.
-                pass
+        except Exception as exc:
+            # Planning and storage errors occur outside run_cycle's task handler.
+            # Record only the error type: exception messages may include secrets.
+            failure = {
+                "status": "failed",
+                "trigger": "background",
+                "actions_executed": 0,
+                "outcome": {
+                    "status": "failed",
+                    "error_type": type(exc).__name__,
+                    "message": "Background scheduling failed before completing a task.",
+                },
+                "created_at": _now(),
+                "protected_actions_unchanged": True,
+                "approval_bypassed": False,
+            }
+            try:
+                self._append(failure)
+            except (OSError, ValueError, TypeError):
+                # A full or unavailable disk must not bring down the application.
+                return
+            if self._after_cycle is not None:
+                try:
+                    self._after_cycle(failure)
+                except Exception:
+                    pass
 
     def status(self) -> dict[str, Any]:
         cfg = self.settings()
@@ -340,8 +380,15 @@ class SelfDriveEngine:
             started = time.monotonic()
             try:
                 outcome = self._execute(task)
+                reported_status = str(outcome.get("status") or "").strip().lower()
+                failed = reported_status in {"fail", "failed", "failure", "error"}
+                if task.kind == "project_health":
+                    failed = failed or not all(
+                        outcome.get(key) is True
+                        for key in ("tests_passed", "design_passed", "security_passed")
+                    )
                 result = {
-                    "status": "completed",
+                    "status": "failed" if failed else "completed",
                     "trigger": trigger,
                     "actions_executed": 1,
                     "task": task.to_dict(),
