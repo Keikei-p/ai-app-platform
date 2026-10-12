@@ -22,15 +22,11 @@ echo   %DEST%
 echo.
 
 where git >nul 2>nul
-if errorlevel 1 goto :repo_missing
-echo.
-echo ERROR: No update source is configured.
-echo Set AIVY_UPSTREAM_REPO to the repository owned by this Ivy distribution,
-echo or install from the credential-free transfer/OEM package.
-pause
-exit /b 1
+if errorlevel 1 goto :no_git
 
-:no_git
+rem Reuse the checkout's own origin when no OEM/upstream override is supplied.
+rem Do not embed a developer's personal remote in a redistributable launcher.
+if not defined REPO if exist "%~dp0.git" for /f "delims=" %%I in ('git -C "%~dp0" remote get-url origin 2^>nul') do set "REPO=%%I"
 
 if exist "%DEST%\.git" (
     if not defined REPO for /f "delims=" %%I in ('git -C "%DEST%" remote get-url origin 2^>nul') do set "REPO=%%I"
@@ -102,6 +98,15 @@ if exist AIVY.bat (
     call START.bat
 )
 exit /b %errorlevel%
+
+:repo_missing
+echo.
+echo ERROR: No update source is configured.
+echo Set AIVY_UPSTREAM_REPO to the repository owned by this Ivy distribution,
+echo or launch this installer from a trusted Git checkout.
+echo No user data was changed.
+pause
+exit /b 1
 
 :no_git
 if exist "%DEST%\START.bat" (

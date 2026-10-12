@@ -70,6 +70,24 @@ class AivyLauncherSafetyTests(unittest.TestCase):
         self.assertNotIn("reset --hard", lowered)
         self.assertNotIn("clean -fd", lowered)
 
+    def test_one_click_installers_have_reachable_git_and_missing_repo_paths(self):
+        for name in ("INSTALL_OR_UPDATE.bat", "OPEN_AIVY_WEB.bat"):
+            with self.subTest(script=name):
+                script = self.read_root(name).lower()
+                self.assertIn("if errorlevel 1 goto :no_git" if name.startswith("INSTALL") else "if errorlevel 1 goto :git_missing", script)
+                self.assertEqual(script.count("\n:repo_missing\n"), 1)
+                self.assertEqual(script.count("\n:git_missing\n") if name.startswith("OPEN") else script.count("\n:no_git\n"), 1)
+                self.assertIn('if not defined repo if exist "%~dp0.git"', script)
+                self.assertIn('remote get-url origin', script)
+                self.assertIn("git clone --branch", script)
+                self.assertIn("merge --ff-only", script)
+                self.assertNotIn("reset --hard", script)
+                self.assertNotIn("clean -fd", script)
+                # Successful Git detection must reach update/clone logic before any error exit.
+                after_git_probe = script.split("where git >nul 2>nul", 1)[1]
+                first_routine = after_git_probe.split("\n:update\n", 1)[0]
+                self.assertNotIn("\nexit /b 1\n", first_routine)
+
     def test_launcher_runtime_state_is_not_committed(self):
         ignored = self.read_root(".gitignore").splitlines()
         self.assertIn(".aivy/", ignored)
