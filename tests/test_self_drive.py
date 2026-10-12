@@ -217,5 +217,73 @@ class SelfDriveTests(unittest.TestCase):
             self.assertIn("approval_bypass", status["protected_actions"])
 
 
+    def test_string_false_disables_self_drive_and_invalid_interval_recovers(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            engine, _ = self.make_engine(root)
+            (root / "drive.json").write_text(
+                '{"enabled": "false", "interval_seconds": "invalid", "allow_main_merge": true}',
+                encoding="utf-8",
+            )
+            cfg = engine.settings()
+            self.assertFalse(cfg["enabled"])
+            self.assertEqual(cfg["interval_seconds"], 600)
+            self.assertFalse(cfg["allow_main_merge"])
+            self.assertEqual(engine.run_cycle(trigger="test")["status"], "disabled")
+
+    def test_corrupt_policy_fails_closed_instead_of_resuming_background_work(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            engine, _ = self.make_engine(root)
+            (root / "drive.json").write_text("{not valid json", encoding="utf-8")
+            self.assertFalse(engine.settings()["enabled"])
+            self.assertEqual(engine.settings()["config_error"], "unreadable_settings")
+
+    def test_background_planning_exception_is_recorded_without_sensitive_message(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            engine, _ = self.make_engine(root)
+            observed = []
+            engine.list_missions = lambda: (_ for _ in ()).throw(
+                RuntimeError("private-token-do-not-log")
+            )
+            engine.set_after_cycle(lambda result: observed.append(result["status"]))
+            engine._background_step()
+            latest = engine.recent(1)[0]
+            self.assertEqual(latest["status"], "failed")
+            self.assertEqual(latest["outcome"]["error_type"], "RuntimeError")
+            self.assertNotIn("private-token-do-not-log", str(latest))
+            self.assertEqual(observed, ["failed"])
+
+    def test_reported_failure_does_not_claim_successful_autonomous_cycle(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            engine, _ = self.make_engine(root)
+            engine.growth_cycle = lambda: {
+                "status": "failed",
+                "skills_added": 0,
+                "skills_updated": 0,
+                "total_skills": 0,
+            }
+            result = engine.run_cycle(trigger="test")
+            self.assertEqual(result["status"], "failed")
+            self.assertEqual(engine.recent(1)[0]["status"], "failed")
+
+    def test_failed_project_health_is_not_reported_as_completed(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            engine, _ = self.make_engine(
+                root,
+                projects=[{"slug": "needs-attention", "quality": "BLOCKED", "status": "issue"}],
+            )
+            engine.health_check = lambda slug: {
+                "status": "fail",
+                "tests_passed": False,
+                "design_passed": True,
+                "security_passed": True,
+            }
+            self.assertEqual(engine.run_cycle(trigger="test")["status"], "failed")
+
+
 if __name__ == "__main__":
     unittest.main()
