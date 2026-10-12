@@ -6,6 +6,8 @@ import os
 import shutil
 import stat
 import subprocess
+
+from .process_launch import quiet_process_options
 import sys
 import tempfile
 import zipfile
@@ -289,6 +291,7 @@ class UpdateEngine:
                 text=True,
                 capture_output=True,
                 timeout=180,
+                **quiet_process_options(),
             )
             output.append((proc.stdout or "")[-2500:])
             output.append((proc.stderr or "")[-1500:])

@@ -41,7 +41,7 @@
     "src/core/planner.py": "71d66c3e1d19dd0ab272a5cf4c48e0041072ed89",
     "src/core/generator.py": "a11fa3123e62fd983e6e7ad271364fb6b0f136c0",
     "src/core/social_generator.py": "93849484b177a3f30a958afb5dc47222be9ec834",
-    "src/core/test_runner.py": "55298ce89b66c57e13cc06f2f24cf9c11587391e",
+    "src/core/test_runner.py": "17ad65e749dac220ea62b8fa32e8f66ea775b1af",
     "src/core/design_ai.py": "346169fbaa82fb88efb3e48ca4b110cfbba7a0ac",
     "src/core/capability.py": "b245b63d2e503d807cafd3608d494d1259526cfd",
     "src/core/generation_pipeline.py": "5e5c53a2b10d9b8b76b2ca68ae439d339109e459",
@@ -58,5 +58,13 @@
     "tested_commit": "9559aabc05e29b8c496414148539185352809c5b",
     "source_base_commit": "72d78a719aade89e359fbccfce1fcea445f558a7"
   },
-  "created_at": "2026-10-06T05:10:00+00:00"
+  "created_at": "2026-10-06T05:10:00+00:00",
+  "reverification": {
+    "source_change": "Windows background process launch uses non-shell CREATE_NO_WINDOW options",
+    "source_validation": "The three cross-mode real-app E2E cases passed in Windows CI run before the stale attestation test failed",
+    "verification_run_id": 38321533796,
+    "attestation_refresh_reason": "The covered test_runner.py source blob changed; previous hash is stale",
+    "ci_full_pass_at_refresh": false,
+    "external_actions": false
+  }
 }
