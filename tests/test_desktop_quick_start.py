@@ -39,6 +39,7 @@ class FastDesktopStartupTests(unittest.TestCase):
         script = (ROOT / "AIVY_DESKTOP_SILENT.vbs").read_text(encoding="utf-8").lower()
         self.assertIn("shell.run(command, 0, true)", script)
         self.assertIn("call aivy.bat", script)
+        self.assertIn('shell.appactivate("ai app platform v")', script)
         self.assertIn("cmd.exe /d /c", script)
         self.assertNotIn("powershell", script)
         self.assertNotIn("enable_aivy_autostart", script)
