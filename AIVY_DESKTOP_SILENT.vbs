@@ -1,6 +1,6 @@
 Option Explicit
 
-' Quiet, one-click desktop launcher. No PowerShell and no scheduled startup.
+' Quiet, one-click desktop launcher. No terminal subprocess or scheduled startup.
 ' Full source tests remain available through CHECK.bat.
 Dim shell, fso, repo, command, exitCode
 Set shell = CreateObject("WScript.Shell")
