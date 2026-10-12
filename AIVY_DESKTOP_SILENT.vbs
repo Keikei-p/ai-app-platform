@@ -6,6 +6,15 @@ Dim shell, fso, repo, command, exitCode
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
+' Prefer the already-running interactive GUI. Updating source while it is
+' running can leave the current process using mismatched code versions.
+' The Python named mutex is an independent second layer of protection.
+On Error Resume Next
+If shell.AppActivate("AI App Platform v") Then
+    WScript.Quit 0
+End If
+On Error GoTo 0
+
 repo = fso.GetParentFolderName(WScript.ScriptFullName)
 If Not fso.FileExists(repo & "\AIVY.bat") Then
     MsgBox "Aivyの起動ファイルが見つかりません。インストール先で開いてください。", _
