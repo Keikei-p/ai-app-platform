@@ -1,0 +1,41 @@
+name: Ivy Cloud Growth Audit (read only)
+
+# Prepared on develop. GitHub only activates scheduled/manual workflows when
+# the workflow exists on the repository's default branch (currently main).
+# This file does NOT activate an hourly schedule while only on develop.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivy-cloud-growth-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Ivy develop without persisting credentials
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Verify protected source and Evidence
+        run: python -m src.tools.cloud_growth_audit
+      - name: Verify audit's own safety contracts
+        run: python -m unittest discover -s tests -p "test_cloud_growth_audit.py" -v
+      - name: Mission persistence regression
+        run: python -m unittest discover -s tests -p "test_mission_control.py" -v
+      - name: Build recovery regression
+        run: python -m unittest discover -s tests -p "test_build_jobs.py" -v
+      - name: Long-run evidence and suspend simulation
+        run: python -m unittest discover -s tests -p "test_long_run_soak.py" -v
