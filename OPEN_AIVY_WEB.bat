@@ -16,15 +16,10 @@ echo   %DEST%
 echo.
 
 where git >nul 2>nul
-if errorlevel 1 goto :repo_missing
-echo.
-echo No update source is configured.
-echo For a buyer/OEM installation, use the delivered Ivy package.
-echo For a Git-based installation, set AIVY_UPSTREAM_REPO to your own repository URL.
-pause
-exit /b 1
+if errorlevel 1 goto :git_missing
 
-:git_missing
+rem Git checkouts can discover their own upstream without requiring a console.
+if not defined REPO if exist "%~dp0.git" for /f "delims=" %%I in ('git -C "%~dp0" remote get-url origin 2^>nul') do set "REPO=%%I"
 
 if exist "%DEST%\.git" (
     if not defined REPO for /f "delims=" %%I in ('git -C "%DEST%" remote get-url origin 2^>nul') do set "REPO=%%I"
@@ -80,6 +75,15 @@ echo [3/3] Opening Aivy Web...
 cd /d "%DEST%"
 call AIVY_WEB.bat
 exit /b %errorlevel%
+
+:repo_missing
+echo.
+echo No update source is configured.
+echo For a buyer/OEM installation, use the delivered Ivy package.
+echo For a Git-based installation, set AIVY_UPSTREAM_REPO to your own repository URL.
+echo No user data was changed.
+pause
+exit /b 1
 
 :git_missing
 echo.
