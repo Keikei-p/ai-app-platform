@@ -24,7 +24,7 @@ CRITICAL_SOURCES = (
 
 
 def blob_sha(data: bytes) -> str:
-    return sha1(f"blob {len(data)}\\0".encode("ascii") + data).hexdigest()
+    return sha1(f"blob {len(data)}".encode("ascii") + bytes([0]) + data).hexdigest()
 
 
 def inspect(root: Path = ROOT) -> dict[str, Any]:
@@ -47,7 +47,7 @@ def inspect(root: Path = ROOT) -> dict[str, Any]:
             issues.append(f"attestation_unreadable:{rel}")
             continue
         blobs = raw.get("source_blobs") if isinstance(raw, dict) else None
-        if raw.get("verified") is not True or not isinstance(blobs, dict) or not blobs:
+        if not isinstance(raw, dict) or raw.get("verified") is not True or not isinstance(blobs, dict) or not blobs:
             checks[f"attestation:{rel}"] = False
             issues.append(f"attestation_unverified:{rel}")
             continue
@@ -66,7 +66,7 @@ def inspect(root: Path = ROOT) -> dict[str, Any]:
             if not item.is_relative_to(root) or not item.is_file():
                 valid = False
                 break
-            if blob_sha(item.read_bytes().replace(b"\\r\\n", b"\\n")) != expected:
+            if blob_sha(item.read_bytes().replace(bytes([13, 10]), bytes([10]))) != expected:
                 valid = False
                 break
         checks[f"attestation:{rel}"] = valid
