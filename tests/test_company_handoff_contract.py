@@ -14,6 +14,7 @@ class FakeService:
     def __init__(self):
         self.missions = {}
         self.created = 0
+        self.calls = []
 
     def status(self):
         return {"ok": True, "service": "ivy-test"}
@@ -34,6 +35,13 @@ class FakeService:
 
     def mission_detail(self, mission_id):
         return self.missions[mission_id]
+
+    def run_mission_cycle(self, mission_id, *, approved_build=False):
+        self.calls.append(("run_mission", mission_id, approved_build))
+        result = self.missions[mission_id]
+        result["status"] = "running" if approved_build else "approval_required"
+        result["requires_approval"] = not approved_build
+        return result
 
 
 class CompanyHandoffAPIContract(unittest.TestCase):
@@ -85,6 +93,34 @@ class CompanyHandoffAPIContract(unittest.TestCase):
         self.assertEqual(found, 200)
         self.assertEqual(current["phase"], "planned")
         self.assertEqual(self.service.created, 1)
+
+
+    def test_company_owner_preflight_and_build_approval_contract(self):
+        status, info = self.call("GET", "/api/v1/status")
+        self.assertEqual(status, 200)
+        csrf = info["csrf"]
+        _, mission = self.call("POST", "/api/v1/missions", csrf=csrf, body={
+            "goal": "採用ホームページ", "project_slug": "company-site", "max_cycles": 4,
+        })
+        path = "/api/v1/missions/" + mission["mission_id"] + "/run"
+        unauthorized, _ = self.call("POST", path, body={"approved_build": True})
+        self.assertEqual(unauthorized, 403)
+        self.assertEqual(self.service.calls, [])
+        inspected, preflight = self.call("POST", path, csrf=csrf,
+                                         body={"approved_build": False})
+        self.assertEqual(inspected, 202)
+        self.assertEqual(preflight["status"], "approval_required")
+        self.assertTrue(preflight["requires_approval"])
+        approved, started = self.call("POST", path, csrf=csrf,
+                                      body={"approved_build": True})
+        self.assertEqual(approved, 202)
+        self.assertEqual(started["status"], "running")
+        self.assertFalse(started["requires_approval"])
+        self.assertEqual(
+            self.service.calls,
+            [("run_mission", mission["mission_id"], False),
+             ("run_mission", mission["mission_id"], True)],
+        )
 
 
 if __name__ == "__main__":
