@@ -216,5 +216,79 @@ class BuildJobManagerTests(unittest.TestCase):
             manager._executor.shutdown(wait=True)
 
 
+    def test_second_instance_cannot_overwrite_history_saved_by_first(self):
+        with tempfile.TemporaryDirectory() as td:
+            history = Path(td) / "jobs.json"
+            first = BuildJobManager(history_path=history)
+            second = BuildJobManager(history_path=history)
+
+            job = first.submit("first", lambda progress: {"ok": True})
+            first._executor.shutdown(wait=True)
+            self.assertEqual(first.get(job.job_id).status, "completed")
+            existing = history.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "changed by another instance"):
+                second.submit("second", lambda progress: {"ok": True})
+
+            self.assertEqual(history.read_bytes(), existing)
+            self.assertFalse(second.watchdog_status()["persistence_ok"])
+            self.assertEqual(
+                second.watchdog_status()["persistence_issue"],
+                "build_history_modified_by_another_instance",
+            )
+            self.assertEqual(first.get(job.job_id).status, "completed")
+
+    def test_simultaneous_instances_cannot_lose_each_others_jobs(self):
+        with tempfile.TemporaryDirectory() as td:
+            history = Path(td) / "jobs.json"
+            first = BuildJobManager(history_path=history)
+            second = BuildJobManager(history_path=history)
+            barrier = threading.Barrier(3)
+            accepted = []
+            rejected = []
+
+            def submit(manager, name):
+                barrier.wait()
+                try:
+                    row = manager.submit(name, lambda progress: {"ok": True})
+                    accepted.append(row.job_id)
+                except RuntimeError:
+                    rejected.append(name)
+
+            t1 = threading.Thread(target=submit, args=(first, "first"))
+            t2 = threading.Thread(target=submit, args=(second, "second"))
+            t1.start()
+            t2.start()
+            barrier.wait()
+            t1.join(timeout=10)
+            t2.join(timeout=10)
+            first._executor.shutdown(wait=True)
+            second._executor.shutdown(wait=True)
+            self.assertFalse(t1.is_alive())
+            self.assertFalse(t2.is_alive())
+            self.assertEqual(len(accepted), 1)
+            self.assertEqual(len(rejected), 1)
+            saved = json.loads(history.read_text(encoding="utf-8"))
+            self.assertEqual(
+                [j["job_id"] for j in saved["jobs"]], accepted,
+            )
+            self.assertTrue((history.with_suffix(".json.lock")).is_file())
+
+    def test_out_of_band_valid_json_change_is_detected_not_destroyed(self):
+        with tempfile.TemporaryDirectory() as td:
+            history = Path(td) / "jobs.json"
+            manager = BuildJobManager(history_path=history)
+            first = manager.submit("first", lambda progress: {"ok": True})
+            manager._executor.shutdown(wait=True)
+            self.assertEqual(manager.get(first.job_id).status, "completed")
+            obj = json.loads(history.read_text(encoding="utf-8"))
+            obj["external_marker"] = {"preserve": True}
+            history.write_text(json.dumps(obj), encoding="utf-8")
+            before = history.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "changed by another instance"):
+                manager.submit("second", lambda progress: {"ok": True})
+            self.assertEqual(history.read_bytes(), before)
+            self.assertTrue(json.loads(history.read_text())["external_marker"]["preserve"])
+
+
 if __name__ == "__main__":
     unittest.main()
