@@ -22,6 +22,32 @@ CRITICAL_SOURCES = (
     "src/core/long_run_soak.py",
 )
 
+# A future/malformed or incomplete Evidence manifest must not be treated as
+# proof merely because it carries a verified=true flag and one valid hash.
+ATTESTATION_CONTRACTS = {
+    "evidence/multi_mission_e2e_ci.json": {
+        "kind": "multi_mission_end_to_end",
+        "required_sources": {
+            "src/core/mission_control.py",
+            "src/core/strategic_goals.py",
+            "src/core/multi_mission_e2e.py",
+        },
+    },
+    "evidence/cross_mode_e2e_ci.json": {
+        "kind": "cross_mode_real_app_e2e",
+        "required_sources": {
+            "src/core/planner.py",
+            "src/core/generator.py",
+            "src/core/social_generator.py",
+            "src/core/test_runner.py",
+            "src/core/design_ai.py",
+            "src/core/capability.py",
+            "src/core/generation_pipeline.py",
+            "src/core/cross_mode_e2e.py",
+        },
+    },
+}
+
 
 def blob_sha(data: bytes) -> str:
     return sha1(f"blob {len(data)}".encode("ascii") + bytes([0]) + data).hexdigest()
@@ -47,7 +73,16 @@ def inspect(root: Path = ROOT) -> dict[str, Any]:
             issues.append(f"attestation_unreadable:{rel}")
             continue
         blobs = raw.get("source_blobs") if isinstance(raw, dict) else None
-        if not isinstance(raw, dict) or raw.get("verified") is not True or not isinstance(blobs, dict) or not blobs:
+        contract = ATTESTATION_CONTRACTS[rel]
+        if (
+            not isinstance(raw, dict)
+            or raw.get("schema_version") != 1
+            or raw.get("kind") != contract["kind"]
+            or raw.get("verified") is not True
+            or not isinstance(blobs, dict)
+            or not contract["required_sources"].issubset(blobs)
+            or len(blobs) > 128
+        ):
             checks[f"attestation:{rel}"] = False
             issues.append(f"attestation_unverified:{rel}")
             continue
@@ -59,6 +94,8 @@ def inspect(root: Path = ROOT) -> dict[str, Any]:
                 or not source.startswith("src/")
                 or any(part in {"", ".", ".."} for part in Path(source).parts)
                 or not isinstance(expected, str)
+                or len(expected) != 40
+                or any(ch not in "0123456789abcdef" for ch in expected)
             ):
                 valid = False
                 break
