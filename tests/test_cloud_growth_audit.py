@@ -70,12 +70,9 @@ class CloudGrowthAuditTests(unittest.TestCase):
             root = Path(tmp)
             self.make_checkout(root)
             evidence = root / ATTESTATIONS[0]
-            evidence.write_text(
-                json.dumps({"verified": True, "source_blobs": {
-                    "src/../../private.txt": "0" * 40
-                }}),
-                encoding="utf-8",
-            )
+            raw = json.loads(evidence.read_text(encoding="utf-8"))
+            raw["source_blobs"]["src/../../private.txt"] = "0" * 40
+            evidence.write_text(json.dumps(raw), encoding="utf-8")
             report = inspect(root)
             self.assertFalse(report["all_source_checks_passed"])
             self.assertIn("attestation_stale_or_invalid:" + ATTESTATIONS[0], report["issues"])
