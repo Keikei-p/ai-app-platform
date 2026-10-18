@@ -3,7 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.tools.cloud_growth_audit import ATTESTATIONS, CRITICAL_SOURCES, blob_sha, inspect
+from src.tools.cloud_growth_audit import (
+    ATTESTATIONS, ATTESTATION_CONTRACTS, CRITICAL_SOURCES, blob_sha, inspect,
+)
 
 
 class CloudGrowthAuditTests(unittest.TestCase):
@@ -13,14 +15,21 @@ class CloudGrowthAuditTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"# known source\n")
         for name in ATTESTATIONS:
+            contract = ATTESTATION_CONTRACTS[name]
+            sources = {}
+            for source in contract["required_sources"]:
+                file = root / source
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(b"# known source\n")
+                sources[source] = blob_sha(file.read_bytes())
             path = root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
                 json.dumps({
+                    "schema_version": 1,
+                    "kind": contract["kind"],
                     "verified": True,
-                    "source_blobs": {
-                        CRITICAL_SOURCES[0]: blob_sha(b"# known source\n")
-                    },
+                    "source_blobs": sources,
                 }),
                 encoding="utf-8",
             )
@@ -70,6 +79,40 @@ class CloudGrowthAuditTests(unittest.TestCase):
             report = inspect(root)
             self.assertFalse(report["all_source_checks_passed"])
             self.assertIn("attestation_stale_or_invalid:" + ATTESTATIONS[0], report["issues"])
+
+    def test_incomplete_attestation_cannot_claim_verified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.make_checkout(root)
+            evidence = root / ATTESTATIONS[0]
+            raw = json.loads(evidence.read_text(encoding="utf-8"))
+            raw["source_blobs"] = {
+                CRITICAL_SOURCES[0]: blob_sha((root / CRITICAL_SOURCES[0]).read_bytes())
+            }
+            evidence.write_text(json.dumps(raw), encoding="utf-8")
+            report = inspect(root)
+            self.assertFalse(report["all_source_checks_passed"])
+            self.assertIn("attestation_unverified:" + ATTESTATIONS[0], report["issues"])
+
+    def test_wrong_kind_future_schema_and_invalid_hash_fail_closed(self):
+        for fault in ("kind", "version", "hash"):
+            with self.subTest(fault=fault):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    self.make_checkout(root)
+                    evidence = root / ATTESTATIONS[1]
+                    raw = json.loads(evidence.read_text(encoding="utf-8"))
+                    if fault == "kind":
+                        raw["kind"] = "unrelated_evidence"
+                    elif fault == "version":
+                        raw["schema_version"] = 999
+                    else:
+                        source = next(iter(raw["source_blobs"]))
+                        raw["source_blobs"][source] = "not-a-git-blob-sha"
+                    evidence.write_text(json.dumps(raw), encoding="utf-8")
+                    report = inspect(root)
+                    self.assertFalse(report["all_source_checks_passed"])
+                    self.assertTrue(any(ATTESTATIONS[1] in issue for issue in report["issues"]))
 
     def test_missing_mission_file_fails_without_modifying_checkout(self):
         with tempfile.TemporaryDirectory() as tmp:
