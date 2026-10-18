@@ -6,7 +6,7 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 
 url = "http://127.0.0.1:8766/"
 
-If IsAivyRunning(url & "api/v1/status") Then
+If IsAivyRunning(url & "healthz") Then
     shell.Run url, 1, False
     WScript.Quit 0
 End If
@@ -33,17 +33,23 @@ If Not fso.FileExists(repo & "\AIVY.bat") Then
     WScript.Quit 1
 End If
 
-command = "cmd.exe /c cd /d """ & repo & """ && call AIVY.bat web"
+command = "cmd.exe /d /c cd /d """ & repo & """ && call AIVY.bat web"
 shell.Run command, 0, False
 
 Function IsAivyRunning(statusUrl)
     On Error Resume Next
     Dim http
     Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
-    http.SetTimeouts 500, 500, 700, 700
+    ' The lightweight healthz endpoint responds without calculating full status.
+    ' Avoid launching a second Ivy process when a busy status API times out.
+    http.SetTimeouts 600, 600, 1200, 1200
     http.Open "GET", statusUrl, False
     http.Send
     IsAivyRunning = (Err.Number = 0 And http.Status = 200)
+    If IsAivyRunning Then
+        IsAivyRunning = (InStr(1, http.ResponseText, """service""", vbTextCompare) > 0 And _
+                         InStr(1, http.ResponseText, """aivy""", vbTextCompare) > 0)
+    End If
     Err.Clear
     Set http = Nothing
     On Error GoTo 0
