@@ -295,53 +295,54 @@ class BuildJobManager:
     def _load_history(self) -> None:
         assert self.history_path is not None
         assert self.backup_path is not None
+        interrupted = False
         try:
             with self._storage_guard():
-            primary = self._read_payload(self.history_path)
-            if primary is None:
-                backup = self._read_payload(self.backup_path)
-                if backup is not None:
-                    # Restore a verified-readable snapshot without rotating corrupt
-                    # primary data into its only known-good backup.
-                    self._atomic_write(self.history_path, backup)
-                    primary = backup
-                elif self.history_path.exists() or self.backup_path.exists():
-                    self._persistence_issue = "build_history_unreadable"
+                primary = self._read_payload(self.history_path)
+                if primary is None:
+                    backup = self._read_payload(self.backup_path)
+                    if backup is not None:
+                        # A verified backup is the only safe recovery source.
+                        # Preserve its bytes instead of rotating the corrupt
+                        # primary over the backup.
+                        self._atomic_write(self.history_path, backup)
+                        primary = backup
+                    elif self.history_path.exists() or self.backup_path.exists():
+                        self._persistence_issue = "build_history_unreadable"
+                        return
+                if primary is None:
+                    self._history_signature = self._history_fingerprint()
                     return
-            if primary is None:
-                return
-            if self.backup_path.exists() and self._read_payload(self.backup_path) is None:
-                self._persistence_issue = "build_history_backup_unreadable"
-            interrupted = False
-            for row in primary["jobs"]:
-                try:
-                    restored = BuildJob(
-                        job_id=row["job_id"],
-                        project_slug=row["project_slug"],
-                        status=row["status"],
-                        stage=row["stage"],
-                        message=row["message"],
-                        created_at=row["created_at"],
-                        updated_at=row["updated_at"],
-                        result=row.get("result") if isinstance(row.get("result"), dict) else None,
-                        error=None,
-                    )
-                    if restored.status in {"queued", "running"}:
-                        restored.status = "failed"
-                        restored.stage = "interrupted"
-                        restored.message = (
-                            "Aivy restarted before build completion; repeat preflight "
-                            "and obtain new build approval."
+                if self.backup_path.exists() and self._read_payload(self.backup_path) is None:
+                    self._persistence_issue = "build_history_backup_unreadable"
+                for row in primary["jobs"]:
+                    try:
+                        restored = BuildJob(
+                            job_id=row["job_id"],
+                            project_slug=row["project_slug"],
+                            status=row["status"],
+                            stage=row["stage"],
+                            message=row["message"],
+                            created_at=row["created_at"],
+                            updated_at=row["updated_at"],
+                            result=row.get("result") if isinstance(row.get("result"), dict) else None,
+                            error=None,
                         )
-                        restored.result = None
-                        restored.updated_at = _now()
-                        interrupted = True
-                    self._jobs[restored.job_id] = restored
-                except (KeyError, ValueError, TypeError):
-                    self._persistence_issue = "build_history_unreadable"
-                    return
-            self._prune_locked()
-
+                        if restored.status in {"queued", "running"}:
+                            restored.status = "failed"
+                            restored.stage = "interrupted"
+                            restored.message = (
+                                "Aivy restarted before build completion; repeat preflight "
+                                "and obtain new build approval."
+                            )
+                            restored.result = None
+                            restored.updated_at = _now()
+                            interrupted = True
+                        self._jobs[restored.job_id] = restored
+                    except (KeyError, ValueError, TypeError):
+                        self._persistence_issue = "build_history_unreadable"
+                        return
+                self._prune_locked()
                 self._history_signature = self._history_fingerprint()
         except (OSError, RuntimeError):
             self._persistence_issue = "build_history_lock_or_read_failed"
