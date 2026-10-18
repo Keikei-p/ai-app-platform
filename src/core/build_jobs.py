@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable
 import json
+import os
+import time
 import uuid
 
 from .redaction import redact_sensitive
@@ -71,6 +75,7 @@ class BuildJobManager:
         )
         self.stall_seconds = max(60, int(stall_seconds))
         self._persistence_issue: str | None = None
+        self._history_signature: str | None = None
         if self.history_path is not None:
             self.history_path.parent.mkdir(parents=True, exist_ok=True)
             self._load_history()
@@ -235,6 +240,52 @@ class BuildJobManager:
             return None
         return raw
 
+    def _history_fingerprint(self) -> str | None:
+        """Detect changes by other instances without recording any user data."""
+        if self.history_path is None or not self.history_path.exists():
+            return None
+        return sha256(self.history_path.read_bytes()).hexdigest()
+
+    @contextmanager
+    def _storage_guard(self):
+        """Use an OS-managed lock; it is released if the process crashes.
+
+        This serializes the compare-and-replace transaction across independent
+        Ivy instances. The sidecar never contains credentials or job content.
+        """
+        if self.history_path is None:
+            yield
+            return
+        lock_path = self.history_path.with_suffix(self.history_path.suffix + ".lock")
+        with lock_path.open("a+b") as handle:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"1")
+                handle.flush()
+            deadline = time.monotonic() + 3.0
+            while True:
+                try:
+                    handle.seek(0)
+                    if os.name == "nt":
+                        import msvcrt
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except (OSError, BlockingIOError):
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("Build history lock is busy; no data overwritten")
+                    time.sleep(0.025)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
     @staticmethod
     def _atomic_write(path: Path, raw: dict[str, Any]) -> None:
         tmp = path.with_suffix(path.suffix + ".tmp")
@@ -244,50 +295,57 @@ class BuildJobManager:
     def _load_history(self) -> None:
         assert self.history_path is not None
         assert self.backup_path is not None
-        primary = self._read_payload(self.history_path)
-        if primary is None:
-            backup = self._read_payload(self.backup_path)
-            if backup is not None:
-                # Restore a verified-readable snapshot without rotating corrupt
-                # primary data into its only known-good backup.
-                self._atomic_write(self.history_path, backup)
-                primary = backup
-            elif self.history_path.exists() or self.backup_path.exists():
-                self._persistence_issue = "build_history_unreadable"
+        try:
+            with self._storage_guard():
+            primary = self._read_payload(self.history_path)
+            if primary is None:
+                backup = self._read_payload(self.backup_path)
+                if backup is not None:
+                    # Restore a verified-readable snapshot without rotating corrupt
+                    # primary data into its only known-good backup.
+                    self._atomic_write(self.history_path, backup)
+                    primary = backup
+                elif self.history_path.exists() or self.backup_path.exists():
+                    self._persistence_issue = "build_history_unreadable"
+                    return
+            if primary is None:
                 return
-        if primary is None:
-            return
-        if self.backup_path.exists() and self._read_payload(self.backup_path) is None:
-            self._persistence_issue = "build_history_backup_unreadable"
-        interrupted = False
-        for row in primary["jobs"]:
-            try:
-                restored = BuildJob(
-                    job_id=row["job_id"],
-                    project_slug=row["project_slug"],
-                    status=row["status"],
-                    stage=row["stage"],
-                    message=row["message"],
-                    created_at=row["created_at"],
-                    updated_at=row["updated_at"],
-                    result=row.get("result") if isinstance(row.get("result"), dict) else None,
-                    error=None,
-                )
-                if restored.status in {"queued", "running"}:
-                    restored.status = "failed"
-                    restored.stage = "interrupted"
-                    restored.message = (
-                        "Aivy restarted before build completion; repeat preflight "
-                        "and obtain new build approval."
+            if self.backup_path.exists() and self._read_payload(self.backup_path) is None:
+                self._persistence_issue = "build_history_backup_unreadable"
+            interrupted = False
+            for row in primary["jobs"]:
+                try:
+                    restored = BuildJob(
+                        job_id=row["job_id"],
+                        project_slug=row["project_slug"],
+                        status=row["status"],
+                        stage=row["stage"],
+                        message=row["message"],
+                        created_at=row["created_at"],
+                        updated_at=row["updated_at"],
+                        result=row.get("result") if isinstance(row.get("result"), dict) else None,
+                        error=None,
                     )
-                    restored.result = None
-                    restored.updated_at = _now()
-                    interrupted = True
-                self._jobs[restored.job_id] = restored
-            except (KeyError, ValueError, TypeError):
-                self._persistence_issue = "build_history_unreadable"
-                return
-        self._prune_locked()
+                    if restored.status in {"queued", "running"}:
+                        restored.status = "failed"
+                        restored.stage = "interrupted"
+                        restored.message = (
+                            "Aivy restarted before build completion; repeat preflight "
+                            "and obtain new build approval."
+                        )
+                        restored.result = None
+                        restored.updated_at = _now()
+                        interrupted = True
+                    self._jobs[restored.job_id] = restored
+                except (KeyError, ValueError, TypeError):
+                    self._persistence_issue = "build_history_unreadable"
+                    return
+            self._prune_locked()
+
+                self._history_signature = self._history_fingerprint()
+        except (OSError, RuntimeError):
+            self._persistence_issue = "build_history_lock_or_read_failed"
+            return
         if interrupted and self._persistence_issue is None:
             try:
                 self._persist_locked()
@@ -297,9 +355,19 @@ class BuildJobManager:
     def _persist_locked(self) -> None:
         if self.history_path is None:
             return
-        assert self.backup_path is not None
         if self._persistence_issue:
             raise RuntimeError("Build history requires recovery.")
+        with self._storage_guard():
+            self._persist_under_guard()
+
+    def _persist_under_guard(self) -> None:
+        assert self.history_path is not None
+        assert self.backup_path is not None
+        # Atomic check under an OS file lock. Another instance may have saved
+        # a newer history since this manager loaded its last checkpoint.
+        if self._history_fingerprint() != self._history_signature:
+            self._persistence_issue = "build_history_modified_by_another_instance"
+            raise RuntimeError("Build history changed by another instance; refusing overwrite")
         current = self._read_payload(self.history_path)
         if current is None and (self.history_path.exists() or self.backup_path.exists()):
             raise RuntimeError("Build history is unreadable; refusing to overwrite.")
@@ -327,3 +395,4 @@ class BuildJobManager:
         if current is not None:
             self._atomic_write(self.backup_path, current)
         self._atomic_write(self.history_path, payload)
+        self._history_signature = self._history_fingerprint()
