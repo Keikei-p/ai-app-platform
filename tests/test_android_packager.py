@@ -103,6 +103,27 @@ class AndroidPackagerTests(unittest.TestCase):
             self.assertIn("verification failed", result.detail.lower())
             self.assertFalse((root / "artifacts/android/android-demo-debug.apk").exists())
 
+    def test_default_runner_hides_npx_and_gradle_console_on_windows(self):
+        import subprocess
+
+        def check_run(argv, **kwargs):
+            self.assertEqual(argv, ["npx.cmd", "expo", "prebuild", "--platform", "android"])
+            self.assertEqual(kwargs["creationflags"], 0x08000000)
+            self.assertIs(kwargs["shell"], False)
+            self.assertEqual(kwargs["timeout"], 30)
+            self.assertTrue(kwargs["capture_output"])
+            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+        with patch("src.core.android_packager.quiet_process_options",
+                   return_value={"creationflags": 0x08000000}):
+            with patch("src.core.android_packager.subprocess.run",
+                       side_effect=check_run) as child:
+                AndroidPackager._run(
+                    ["npx.cmd", "expo", "prebuild", "--platform", "android"],
+                    Path("."), 30,
+                )
+                child.assert_called_once()
+
     def test_production_aab_is_not_part_of_debug_builder(self):
         source = Path(__file__).parents[1] / "src/core/android_packager.py"
         text = source.read_text(encoding="utf-8").lower()
