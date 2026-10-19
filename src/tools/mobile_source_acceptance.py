@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from src.core.process_launch import quiet_process_options
+
 from src.core.app_spec import AppSpec
 from src.core.mobile_generator import MobileGenerator
 
@@ -18,6 +20,7 @@ def run(cmd: list[str], cwd: Path, timeout: int = 420) -> None:
         timeout=timeout,
         check=False,
         shell=False,
+        **quiet_process_options(),
     )
     if completed.returncode != 0:
         output = (completed.stdout or "") + "\n" + (completed.stderr or "")
