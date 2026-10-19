@@ -7,6 +7,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from src.core.process_launch import quiet_process_options
+
 
 def _run_persistence_test() -> None:
     with tempfile.TemporaryDirectory(prefix="ai-app-platform-accept-") as td:
@@ -22,6 +24,7 @@ print(slug)
         first = subprocess.run(
             [sys.executable, "-c", create_code],
             cwd=Path.cwd(), env=env, text=True, capture_output=True, check=True,
+            shell=False, **quiet_process_options(),
         )
         slug = first.stdout.strip().splitlines()[-1]
         verify_code = rf'''
@@ -40,6 +43,7 @@ print("PERSISTENCE_OK")
         second = subprocess.run(
             [sys.executable, "-c", verify_code],
             cwd=Path.cwd(), env=env, text=True, capture_output=True, check=True,
+            shell=False, **quiet_process_options(),
         )
         if "PERSISTENCE_OK" not in second.stdout:
             raise RuntimeError("persistence acceptance test did not confirm restart persistence")
