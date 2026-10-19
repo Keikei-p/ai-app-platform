@@ -12,6 +12,7 @@ import subprocess
 from .app_spec import AppSpec
 from .database import log_event
 from .artifact_verifier import ArtifactVerifier
+from .process_launch import quiet_process_options
 
 
 @dataclass(frozen=True)
@@ -175,6 +176,7 @@ class AndroidPackager:
             timeout=timeout,
             check=False,
             shell=False,
+            **quiet_process_options(),
         )
         if completed.returncode != 0:
             output = ((completed.stdout or "") + "\n" + (completed.stderr or ""))[-8000:]
