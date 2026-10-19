@@ -13,6 +13,7 @@ import webbrowser
 from .platform_service import PlatformService
 from .config import ROOT_DIR
 from .remote_access import remote_bind_policy
+from .company_bridge import CompanyBridge
 
 
 MAX_BODY = 1024 * 1024
@@ -31,6 +32,7 @@ class PlatformAPI:
         self.service = service or PlatformService()
         self.csrf = secrets.token_urlsafe(24)
         self.remote_mode = bool(remote_mode)
+        self.company_bridge = CompanyBridge(self.service)
 
     def handler_class(self):
         api = self
@@ -126,6 +128,22 @@ class PlatformAPI:
                             "service": "aivy",
                             "remote_mode": api.remote_mode,
                         })
+                        return
+                    if path.startswith("/api/v1/company/"):
+                        if not api.company_bridge.authorized(
+                            self.client_address[0],
+                            self.headers.get(CompanyBridge.header_name(), ""),
+                            remote_mode=api.remote_mode,
+                        ):
+                            self._json(403, {"error": "company_bridge_not_authorized"})
+                            return
+                        if path == "/api/v1/company/status":
+                            try:
+                                self._json(200, api.company_bridge.status())
+                            except Exception:
+                                self._json(503, {"error": "company_bridge_status_unavailable"})
+                            return
+                        self._json(404, {"error": "not_found"})
                         return
                     if api.remote_mode and path.startswith("/api/") and not self._bearer_allowed():
                         self._json(401, {"error": "bearer_token_required"})
@@ -331,6 +349,30 @@ class PlatformAPI:
 
             def do_POST(self):
                 path = urlparse(self.path).path.rstrip("/")
+                if path.startswith("/api/v1/company/"):
+                    if not api.company_bridge.authorized(
+                        self.client_address[0],
+                        self.headers.get(CompanyBridge.header_name(), ""),
+                        remote_mode=api.remote_mode,
+                    ):
+                        self._json(403, {"error": "company_bridge_not_authorized"})
+                        return
+                    if path != "/api/v1/company/missions":
+                        self._json(404, {"error": "not_found"})
+                        return
+                    try:
+                        row = api.company_bridge.enqueue_mission(self._body())
+                    except ValueError:
+                        self._json(400, {"error": "invalid_company_mission_request"})
+                        return
+                    except FileNotFoundError:
+                        self._json(404, {"error": "project_not_found"})
+                        return
+                    except Exception:
+                        self._json(503, {"error": "company_mission_intake_unavailable"})
+                        return
+                    self._json(201, row)
+                    return
                 if not self._mutating_allowed():
                     self._json(403, {"error": "mutation_not_authorized"})
                     return
