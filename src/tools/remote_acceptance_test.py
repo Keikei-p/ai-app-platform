@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 
 from src.core.mobile_controller import MOBILE_CONTROLLER_HTML
+from src.core.process_launch import quiet_process_options
 from src.core.remote import RemoteCommand, sign_command
 from src.core.remote_devices import RemoteDeviceStore
 from src.core.remote_server import RemoteServerController
@@ -44,7 +45,10 @@ def _check_mobile_hmac() -> None:
     canonical = '{"action":"status","command_id":"abc","expires_at":200,"issued_at":100,"payload":{},"project_slug":null}'
     expected = hmac.new(secret, canonical.encode("utf-8"), hashlib.sha256).hexdigest()
     code = js + f"\nconsole.log(hmacHexSync('{secret_b64}', {json.dumps(canonical)}));\n"
-    proc = subprocess.run(["node", "-e", code], capture_output=True, text=True, timeout=8)
+    proc = subprocess.run(
+        ["node", "-e", code], capture_output=True, text=True, timeout=8,
+        check=False, shell=False, **quiet_process_options(),
+    )
     if proc.returncode != 0:
         raise RuntimeError("mobile JS failed: " + proc.stderr[-500:])
     actual = proc.stdout.strip().splitlines()[-1]
