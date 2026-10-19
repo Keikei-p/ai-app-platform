@@ -798,15 +798,28 @@ def serve(host: str = "127.0.0.1", port: int = 8766, *, open_browser: bool = Fal
     policy = remote_bind_policy(host)
     if not policy["allowed"]:
         raise RuntimeError(str(policy["reason"]))
-    api = PlatformAPI(remote_mode=not bool(policy["loopback"]))
-    server = ThreadingHTTPServer((host, port), api.handler_class())
-    url = f"http://{host}:{port}/"
-    print(f"Aivy Web: {url}", flush=True)
-    if open_browser:
-        opener = threading.Timer(0.35, webbrowser.open, args=(url,))
-        opener.daemon = True
-        opener.start()
+    # Reserve the listening socket BEFORE constructing PlatformService.
+    # Service initialization starts monitors and can touch persisted Mission
+    # state. A second launcher must not initialize those workers when the
+    # first server already owns the port.
+    server = ThreadingHTTPServer((host, port), BaseHTTPRequestHandler, bind_and_activate=False)
     try:
+        try:
+            server.server_bind()
+            server.server_activate()
+        except OSError as exc:
+            raise RuntimeError(
+                f"Ivy Server could not bind {host}:{port}; an existing instance "
+                "or another application may already own the port."
+            ) from exc
+        api = PlatformAPI(remote_mode=not bool(policy["loopback"]))
+        server.RequestHandlerClass = api.handler_class()
+        url = f"http://{host}:{port}/"
+        print(f"Aivy Web: {url}", flush=True)
+        if open_browser:
+            opener = threading.Timer(0.35, webbrowser.open, args=(url,))
+            opener.daemon = True
+            opener.start()
         server.serve_forever()
     finally:
         server.server_close()
