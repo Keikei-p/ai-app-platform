@@ -8,6 +8,7 @@ from pathlib import Path
 
 from src.core.app_spec import AppSpec
 from src.core.windows_packager import WindowsPackager
+from src.core.process_launch import quiet_process_options
 
 
 def main() -> int:
@@ -57,6 +58,8 @@ def main() -> int:
         env=env,
         timeout=45,
         check=False,
+        shell=False,
+        **quiet_process_options(),
     )
     if completed.returncode != 0:
         raise RuntimeError(f"Generated EXE self-test failed: exit={completed.returncode}")
