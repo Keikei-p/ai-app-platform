@@ -1,5 +1,6 @@
 import { authorizeOwner } from "./owner-auth.mjs";
 import { compileStaticPreview, GENERATOR_KIND } from "./static-preview.mjs";
+import { chooseTemplate, compileInteractiveTemplate } from "./interactive-template.mjs";
 
 const LIMIT_PER_DAY = 10;
 const REQUEST_ACTION = /^\/api\/v1\/requests\/([a-f0-9-]{36})\/(build-preview|preview|download|cancel)$/i;
@@ -92,9 +93,10 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
           "cache-control": "private, no-store",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
-          "content-security-policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; " +
-            "script-src 'none'; connect-src 'none'; form-action 'none'; " +
-            "base-uri 'none'; frame-ancestors 'self'",
+          "content-security-policy": "sandbox" + (artifact.html.startsWith("<!doctype html>\n<!-- ivy-trusted-interactive-template:") ? " allow-scripts" : "") +
+            "; default-src 'none'; style-src 'unsafe-inline'; " +
+            (artifact.html.startsWith("<!doctype html>\n<!-- ivy-trusted-interactive-template:") ? "script-src 'unsafe-inline'" : "script-src 'none'") +
+            "; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
         });
         if (operation === "download")
           headers.set("content-disposition", 'attachment; filename="ivy-static-preview.html"');
@@ -122,7 +124,10 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
           return reply({ok:true,reused:true,request_id:id,status:"template_ready",generator:GENERATOR_KIND});
         if (record.status !== "awaiting_hosted_worker")
           return reply({ok:false,error:"request_not_pending"},409);
-        const {html,checks,generator} = compileStaticPreview(record);
+        const selected = chooseTemplate(record.prompt, body.template || "auto");
+        const {html,checks,generator,template_kind} = selected === "landing"
+          ? {...compileStaticPreview(record),template_kind:"landing"}
+          : compileInteractiveTemplate(record,selected);
         // One atomic D1 batch: preview + status transition. The SQL WHERE
         // clauses gate cancelled requests, another worker, and emergency pause.
         const [created,marked] = await db.batch([
@@ -150,7 +155,7 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
           return reply({ok:false,error:"paused_or_request_changed"},409);
         }
         return reply({ok:true,reused:false,request_id:id,status:"template_ready",
-          generator,checks,ai_generated:false,tests:"template_integrity_only"},201);
+          generator,template_kind,checks,ai_generated:false,tests:"template_integrity_only"},201);
       }
       return reply({ok:false,error:"method_not_allowed"},405);
     }
@@ -214,7 +219,7 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
     if (error instanceof SyntaxError || [
       "invalid_origin","invalid_body","invalid_prompt","invalid_mode",
       "invalid_key","request_too_large","unsupported_preview_request",
-      "preview_validation_failed"
+      "preview_validation_failed","invalid_template","invalid_template_request","template_validation_failed"
     ].includes(error?.message)) return reply({ ok: false, error: "invalid_request" }, 400);
     if (error?.message && /UNIQUE constraint failed/.test(error.message))
       return reply({ ok:false, error:"duplicate_submission_retry_with_same_id" }, 409);
