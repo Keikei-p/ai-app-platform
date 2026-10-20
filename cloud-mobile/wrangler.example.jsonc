@@ -12,7 +12,10 @@
     "AI_DESIGN_ENABLED": "false",
     "AI_BUDGET_OWNER_APPROVED": "false"
   },
-  // AI is disabled by default. Only add the line below AFTER explicit OWNER\n  // review of Cloudflare Workers AI pricing and daily quotas.\n  // "ai": {"binding":"AI"},\n  "d1_databases": [
+  // AI remains disabled until OWNER approves the provider and cost policy.
+  // Add an AI binding manually in private wrangler.jsonc only after review.
+  // Example: "ai": {"binding":"AI"},
+  "d1_databases": [
     { "binding": "DB", "database_name": "ivy-mobile-intake-staging",
       "database_id": "REPLACE_WITH_NEW_STAGING_DB_ID", "migrations_dir": "./migrations" }
   ]
