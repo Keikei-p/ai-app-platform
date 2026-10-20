@@ -92,7 +92,7 @@ class IvyAutoUpdateBootstrapTests(unittest.TestCase):
                 commands.append(args)
                 if "status" in args:
                     return ok("")
-                if "show-current" in args:
+                if "--show-current" in args:
                     return ok("develop\n")
                 return ok()
 
@@ -129,7 +129,7 @@ class IvyAutoUpdateBootstrapTests(unittest.TestCase):
                 calls.append(args)
                 if "status" in args:
                     return ok("")
-                if "show-current" in args:
+                if "--show-current" in args:
                     return ok("develop\n")
                 if "fetch" in args:
                     return fail()
