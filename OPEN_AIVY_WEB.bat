@@ -11,6 +11,7 @@ echo.
 echo The first setup converts a ZIP copy into a safe Git installation.
 echo Existing projects, chats and database are NOT replaced.
 echo Later launches from AIVY_WEB_SILENT.vbs update automatically.
+rem AIVY_UPSTREAM_REPO can be set by the owner; Python validates it before clone.
 echo.
 
 where git >nul 2>nul
