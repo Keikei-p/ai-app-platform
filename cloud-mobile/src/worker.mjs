@@ -1,9 +1,10 @@
 import { authorizeOwner } from "./owner-auth.mjs";
 import { compileStaticPreview, GENERATOR_KIND } from "./static-preview.mjs";
 import { chooseTemplate, compileInteractiveTemplate } from "./interactive-template.mjs";
+import { createAiLandingText } from "./ai-landing.mjs";
 
 const LIMIT_PER_DAY = 10;
-const REQUEST_ACTION = /^\/api\/v1\/requests\/([a-f0-9-]{36})\/(build-preview|preview|download|cancel)$/i;
+const REQUEST_ACTION = /^\/api\/v1\/requests\/([a-f0-9-]{36})\/(build-preview|preview|download|cancel|ai-landing)$/i;
 const HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "private, no-store",
@@ -102,6 +103,64 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
           headers.set("content-disposition", 'attachment; filename="ivy-static-preview.html"');
         return new Response(artifact.html, {status:200,headers});
       }
+      if (request.method === "POST" && operation === "ai-landing") {
+        sameOriginJson(request);
+        const body = await readBody(request);
+        if (body?.confirm !== "use_cloudflare_ai_once")
+          return reply({ok:false,error:"explicit_ai_cost_approval_required"},400);
+        if (env.AI_DESIGN_ENABLED !== "true" ||
+            env.AI_BUDGET_OWNER_APPROVED !== "true" ||
+            typeof env.AI?.run !== "function")
+          return reply({ok:false,error:"ai_not_configured_or_cost_not_approved"},403);
+        if (record.mode !== "web" || record.status !== "awaiting_hosted_worker")
+          return reply({ok:false,error:"request_not_pending"},409);
+        // One atomic reservation per request, and at most ONE AI call per
+        // OWNER per UTC day. Reserved/failed attempts count too. No retries.
+        const reserved = await db.prepare(
+          "INSERT OR IGNORE INTO ivy_ai_attempts (request_id,owner_email,status,created_at) " +
+          "SELECT id,owner_email,'reserved',? FROM ivy_requests " +
+          "WHERE id=? AND owner_email=? AND mode='web' AND status='awaiting_hosted_worker' " +
+          "AND EXISTS(SELECT 1 FROM ivy_control WHERE id=1 AND paused=0) " +
+          "AND (SELECT COUNT(*) FROM ivy_ai_attempts WHERE owner_email=? AND created_at>=?)<1"
+        ).bind(Math.floor(Date.now()/1000),id,owner.email,owner.email,utcDay()).run();
+        if(!reserved.meta?.changes)
+          return reply({ok:false,error:"ai_daily_limit_or_paused_or_already_attempted"},429);
+        let generated;
+        try {
+          // AI only generates text in JSON; reviewed source creates HTML.
+          // The request may contain private information: OWNER explicitly
+          // opts in before any user content is sent to Cloudflare Workers AI.
+          generated = await createAiLandingText(env.AI,record.prompt);
+        } catch {
+          await db.prepare("UPDATE ivy_ai_attempts SET status='failed' WHERE request_id=? AND owner_email=?")
+            .bind(id,owner.email).run();
+          return reply({ok:false,error:"ai_failed_no_automatic_retry"},503);
+        }
+        const [saved,marked,completed]=await db.batch([
+          db.prepare(
+            "INSERT OR IGNORE INTO ivy_static_previews " +
+            "(request_id,owner_email,generator,html,checks_json,created_at) " +
+            "SELECT id,owner_email,?,?,?,? FROM ivy_requests " +
+            "WHERE id=? AND owner_email=? AND status='awaiting_hosted_worker' AND mode='web' " +
+            "AND EXISTS(SELECT 1 FROM ivy_control WHERE id=1 AND paused=0)"
+          ).bind(generated.generator,generated.html,JSON.stringify(generated.checks),
+            Math.floor(Date.now()/1000),id,owner.email),
+          db.prepare(
+            "UPDATE ivy_requests SET status='template_ready' " +
+            "WHERE id=? AND owner_email=? AND status='awaiting_hosted_worker' " +
+            "AND EXISTS(SELECT 1 FROM ivy_static_previews WHERE " +
+            "ivy_static_previews.request_id=ivy_requests.id)"
+          ).bind(id,owner.email),
+          db.prepare(
+            "UPDATE ivy_ai_attempts SET status='succeeded' WHERE request_id=? AND owner_email=?"
+          ).bind(id,owner.email)
+        ]);
+        if(!marked.meta?.changes)
+          return reply({ok:false,error:"result_not_committed_or_paused"},409);
+        return reply({ok:true,request_id:id,status:"template_ready",template_kind:"ai_landing",
+          ai_assisted:true,ai_generated_code:false,tests:"safe_schema_and_html_only",
+          billed_by_provider_possible:true},201);
+      }
       if (request.method === "POST" && operation === "cancel") {
         sameOriginJson(request);
         const body = await readBody(request);
@@ -169,6 +228,8 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
         ok: true, mode: "cloud_intake_with_static_preview", hosted_worker_connected: false,
         generation_enabled: false, ai_generation_enabled: false,
         static_preview_enabled: true, publishing_enabled: false,
+        ai_landing_enabled: env.AI_DESIGN_ENABLED === "true" && env.AI_BUDGET_OWNER_APPROVED === "true" && typeof env.AI?.run === "function",
+        ai_daily_limit: 1,
         paused: control?.paused !== 0, resume_enabled: env.ENABLE_OWNER_RESUME === "true",
         requests_today: Number(totals?.today || 0), daily_limit: LIMIT_PER_DAY,
         note: "Web依頼の固定HTMLテンプレート生成・プレビューに対応。AIコード生成、ビルド、公開は未接続です。",
