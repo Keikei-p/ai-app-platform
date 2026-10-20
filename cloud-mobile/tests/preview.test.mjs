@@ -17,7 +17,7 @@ const post=(path,body,origin="https://ivy.example")=>new Request(url(path),{
 
 function harness(mode="web", prompt="魅力的な予約サイトを作って") {
   const row={id,owner_email:OWNER,mode,prompt,status:"awaiting_hosted_worker"};
-  const state={rows:[row],artifacts:new Map(),paused:0};
+  const state={rows:[row],artifacts:new Map(),paused:0,aiAttempts:new Map()};
   const DB={
     prepare(sql){
       const b={values:[],bind(...values){this.values=values;return this;},
@@ -42,6 +42,23 @@ function harness(mode="web", prompt="魅力的な予約サイトを作って") {
         },
         async all(){return {results:state.rows}},
         async run(){
+          if(sql.startsWith("INSERT OR IGNORE INTO ivy_ai_attempts")){
+            const [created,requestId,email,quotaEmail,since]=this.values;
+            const found=state.rows.find(x=>x.id===requestId&&x.owner_email===email);
+            if(!found||found.mode!=="web"||found.status!=="awaiting_hosted_worker"||
+              state.paused||state.aiAttempts.has(requestId)||
+              [...state.aiAttempts.values()].some(x=>x.owner_email===quotaEmail&&x.created_at>=since))
+              return {meta:{changes:0}};
+            state.aiAttempts.set(requestId,{status:"reserved",owner_email:email,created_at:created});
+            return {meta:{changes:1}};
+          }
+          if(sql.startsWith("UPDATE ivy_ai_attempts")){
+            const [requestId,email]=this.values;
+            const attempt=state.aiAttempts.get(requestId);
+            if(!attempt||attempt.owner_email!==email)return {meta:{changes:0}};
+            attempt.status=sql.includes("status='failed'")?"failed":"succeeded";
+            return {meta:{changes:1}};
+          }
           if(sql.startsWith("INSERT OR IGNORE INTO ivy_static_previews")){
             const [generator,html,checks,created,requestId,email]=this.values;
             const r=state.rows.find(x=>x.id===requestId&&x.owner_email===email);
@@ -217,6 +234,68 @@ test("OWNER-only resume is explicitly gated and never resumes without configurat
   r=await handleRequest(post(path,{confirm:"resume_intake_after_access_review"},
     "https://attacker.example"),env,asOwner);
   assert.equal(r.status,400);
+});
+
+test("AI copywriting is opt-in, one-use, OWNER-only and never executes AI code",async()=>{
+  const {env,state}=harness("web","モダンな美容室サイト");
+  const path="/api/v1/requests/"+id;
+  let aiCalls=0;
+  env.AI={run:async(model,options)=>{
+    aiCalls++;
+    assert.equal(model,"@cf/meta/llama-3.1-8b-instruct-fp8");
+    assert.equal(options.messages[1].content,"モダンな美容室サイト");
+    assert.ok(options.max_tokens<=420);
+    return {response:JSON.stringify({
+      title:"美容室のご案内",subtitle:"美しい髪をあなたに",
+      sections:[{heading:"予約",body:"お気軽にお問い合わせください"}]
+    })};
+  }};
+  let request=post(path+"/ai-landing",{confirm:"use_cloudflare_ai_once"});
+  let response=await handleRequest(request,env,asOwner);
+  assert.equal(response.status,403);
+  assert.equal(aiCalls,0);
+  env.AI_DESIGN_ENABLED="true";
+  env.AI_BUDGET_OWNER_APPROVED="true";
+  response=await handleRequest(post(path+"/ai-landing",{confirm:"no"}),env,asOwner);
+  assert.equal(response.status,400);
+  response=await handleRequest(post(path+"/ai-landing",{confirm:"use_cloudflare_ai_once"},
+    "https://attacker.example"),env,asOwner);
+  assert.equal(response.status,400);
+  response=await handleRequest(post(path+"/ai-landing",{confirm:"use_cloudflare_ai_once"}),env,asOther);
+  assert.equal(response.status,404);
+  assert.equal(aiCalls,0);
+  response=await handleRequest(post(path+"/ai-landing",{confirm:"use_cloudflare_ai_once"}),env,asOwner);
+  assert.equal(response.status,201);
+  const result=await response.json();
+  assert.equal(result.ai_assisted,true);
+  assert.equal(result.ai_generated_code,false);
+  assert.equal(result.billed_by_provider_possible,true);
+  assert.equal(state.artifacts.size,1);
+  assert.equal(state.aiAttempts.get(id).status,"succeeded");
+  assert.equal(state.rows[0].status,"template_ready");
+  assert.equal(aiCalls,1);
+  const preview=await handleRequest(get(path+"/preview"),env,asOwner);
+  assert.equal(preview.status,200);
+  assert.match(preview.headers.get("content-security-policy"),/script-src 'none'/);
+  assert.match(await preview.text(),/美容室のご案内/);
+  response=await handleRequest(post(path+"/ai-landing",{confirm:"use_cloudflare_ai_once"}),env,asOwner);
+  assert.equal(response.status,409);
+  assert.equal(aiCalls,1);
+});
+
+test("invalid AI output consumes daily quota and is not retried",async()=>{
+  const {env,state}=harness();
+  env.AI_DESIGN_ENABLED="true";env.AI_BUDGET_OWNER_APPROVED="true";
+  env.AI={run:async()=>({response:'<script>alert(1)</script>'})};
+  const path="/api/v1/requests/"+id+"/ai-landing";
+  const response=await handleRequest(post(path,{confirm:"use_cloudflare_ai_once"}),env,asOwner);
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).error,"ai_failed_no_automatic_retry");
+  assert.equal(state.aiAttempts.get(id).status,"failed");
+  assert.equal(state.artifacts.size,0);
+  const retry=await handleRequest(post(path,{confirm:"use_cloudflare_ai_once"}),env,asOwner);
+  assert.equal(retry.status,429);
+  assert.equal(state.rows[0].status,"awaiting_hosted_worker");
 });
 
 test("mobile UI uses sandboxed HTML iframe and no claimed AI code generation",()=>{
