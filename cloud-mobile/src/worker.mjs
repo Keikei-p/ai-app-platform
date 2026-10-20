@@ -169,8 +169,8 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
         ok: true, mode: "cloud_intake_with_static_preview", hosted_worker_connected: false,
         generation_enabled: false, ai_generation_enabled: false,
         static_preview_enabled: true, publishing_enabled: false,
-        paused: control?.paused !== 0, requests_today: Number(totals?.today || 0),
-        daily_limit: LIMIT_PER_DAY,
+        paused: control?.paused !== 0, resume_enabled: env.ENABLE_OWNER_RESUME === "true",
+        requests_today: Number(totals?.today || 0), daily_limit: LIMIT_PER_DAY,
         note: "Web依頼の固定HTMLテンプレート生成・プレビューに対応。AIコード生成、ビルド、公開は未接続です。",
       });
     }
@@ -204,6 +204,18 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
       if (!added.meta?.changes) return reply({ ok: false, error: "daily_limit_or_paused" }, 429);
       return reply({ ok: true, saved: true, reused: false, request_id: id,
         status: "awaiting_hosted_worker" }, 202);
+    }
+    if (request.method === "POST" && pathname === "/api/v1/resume") {
+      sameOriginJson(request);
+      const body = await readBody(request);
+      if (env.ENABLE_OWNER_RESUME !== "true")
+        return reply({ok:false,error:"owner_resume_not_enabled"},403);
+      if (!body || typeof body !== "object" || Array.isArray(body) ||
+          body.confirm !== "resume_intake_after_access_review")
+        return reply({ok:false,error:"explicit_approval_required"},400);
+      await db.prepare("UPDATE ivy_control SET paused=0,updated_at=? WHERE id=1")
+        .bind(Math.floor(Date.now()/1000)).run();
+      return reply({ok:true,paused:false});
     }
     if (request.method === "POST" && pathname === "/api/v1/stop") {
       sameOriginJson(request);
