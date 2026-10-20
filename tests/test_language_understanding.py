@@ -57,6 +57,42 @@ class LanguageUnderstandingTests(unittest.TestCase):
         self.assertEqual(row.mode, "ivy_lab")
         self.assertGreaterEqual(row.confidence, 0.8)
 
+    def test_app_crud_feature_does_not_trigger_live_deletion_gate(self):
+        prompt = (
+            "スマホとPCで使えるToDo管理Webアプリを作って。"
+            "タスクの追加・編集・削除・完了切り替えができるようにして。"
+            "デザインはシンプルで高級感のあるものにしてほしい。"
+            "設計からコード生成、テスト、プレビューまで進めて。"
+        )
+        row = self.engine.interpret(prompt)
+        self.assertEqual(row.mode, "app")
+        self.assertFalse(row.dangerous)
+        self.assertFalse(row.needs_confirmation)
+
+    def test_explicit_delete_feature_is_not_a_delete_command(self):
+        for prompt in (
+            "メモアプリに削除ボタンを実装して",
+            "ToDoアプリを作りたい。タスクの削除機能がほしい",
+            "Webアプリのタスクを削除できるようにして",
+            "さっきのアプリにタスク削除機能を追加して",
+        ):
+            with self.subTest(prompt=prompt):
+                self.assertFalse(self.engine.interpret(prompt).needs_confirmation)
+
+    def test_real_deletions_and_other_sensitive_operations_keep_gate(self):
+        for prompt in (
+            "既存の顧客データを削除して",
+            "アプリを作って、実際の顧客データを削除して",
+            "このアプリに削除ボタンを作って、今の本番DBを削除して",
+            "アプリの本番DB削除機能を作って",
+            "アプリで課金機能を作って",
+            "アプリで秘密鍵の削除機能を作って",
+        ):
+            with self.subTest(prompt=prompt):
+                row = self.engine.interpret(prompt)
+                self.assertTrue(row.dangerous)
+                self.assertTrue(row.needs_confirmation)
+
     def test_risky_corrected_instruction_requires_confirmation(self):
         row = self.engine.interpret("ファイやベースの本番DBを削除して")
         self.assertTrue(row.dangerous)
