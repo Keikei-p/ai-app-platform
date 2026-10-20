@@ -7,9 +7,12 @@
   "vars": {
     "ACCESS_AUD": "REPLACE_WITH_CLOUDFLARE_ACCESS_AUD",
     "TEAM_DOMAIN": "https://REPLACE-ME.cloudflareaccess.com",
-    "OWNER_EMAIL": "replace-with-owner@example.com"
+    "OWNER_EMAIL": "replace-with-owner@example.com",
+    "ENABLE_OWNER_RESUME": "false",
+    "AI_DESIGN_ENABLED": "false",
+    "AI_BUDGET_OWNER_APPROVED": "false"
   },
-  "d1_databases": [
+  // AI is disabled by default. Only add the line below AFTER explicit OWNER\n  // review of Cloudflare Workers AI pricing and daily quotas.\n  // "ai": {"binding":"AI"},\n  "d1_databases": [
     { "binding": "DB", "database_name": "ivy-mobile-intake-staging",
       "database_id": "REPLACE_WITH_NEW_STAGING_DB_ID", "migrations_dir": "./migrations" }
   ]
