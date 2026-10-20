@@ -9,7 +9,9 @@ async function api(path, options = {}) {
   return data;
 }
 function explainStatus(status) {
-  return status === "awaiting_hosted_worker" ? "保存済み・生成エンジン接続待ち" :
+  return status === "awaiting_hosted_worker" ? "保存済み・AI実行未接続" :
+    status === "template_ready" ? "静的HTMLテンプレート完成（AI生成ではない）" :
+    status === "cancelled" ? "依頼を中止" :
     status === "review_ready" ? "結果確認待ち" : "状態未確認";
 }
 function showRequests(items) {
@@ -27,7 +29,63 @@ function showRequests(items) {
     const date = new Date(Number(item.created_at) * 1000);
     stamp.textContent = Number.isFinite(date.getTime()) ? date.toLocaleString("ja-JP") : "日時未確認";
     const body = document.createElement("p"); body.textContent = String(item.prompt || "");
-    card.append(head,stamp,body); root.append(card);
+    card.append(head,stamp,body);
+    const actions = document.createElement("div");
+    actions.className="entry-actions";
+    if (item.status === "awaiting_hosted_worker") {
+      if (item.mode === "web") {
+        const generate = document.createElement("button");
+        generate.type="button"; generate.className="quiet";
+        generate.textContent="固定HTMLプレビューを生成";
+        generate.onclick=async()=>{
+          if(!confirm("AI生成ではなく、安全な固定HTMLテンプレートをクラウドで作成します。続けますか？"))return;
+          generate.disabled=true;
+          try{
+            await api("/api/v1/requests/"+encodeURIComponent(item.id)+"/build-preview",{
+              method:"POST",headers:{"content-type":"application/json"},
+              body:JSON.stringify({confirm:"generate_static_template"})
+            });
+            text("message","HTMLテンプレートを保存しました。AI生成・ビルド・公開は行っていません。");
+            await refresh();
+          }catch(e){ text("message","テンプレートを生成できませんでした: "+e.message); }
+          finally{generate.disabled=false;}
+        };
+        actions.append(generate);
+      }
+      const cancel = document.createElement("button");
+      cancel.type="button";cancel.className="quiet";cancel.textContent="依頼を中止";
+      cancel.onclick=async()=>{
+        if(!confirm("この未実行依頼を中止しますか？"))return;
+        cancel.disabled=true;
+        try {
+          await api("/api/v1/requests/"+encodeURIComponent(item.id)+"/cancel",{
+            method:"POST",headers:{"content-type":"application/json"},
+            body:JSON.stringify({confirm:"cancel_pending"})
+          });
+          await refresh();
+        }catch(e){text("message","中止できませんでした: "+e.message);}
+        finally{cancel.disabled=false;}
+      };
+      actions.append(cancel);
+    }
+    if (item.status === "template_ready") {
+      const view = document.createElement("button");view.type="button";
+      view.className="quiet";view.textContent="HTMLプレビュー";
+      view.onclick=()=>{
+        const frame=$("previewFrame");
+        frame.src="/api/v1/requests/"+encodeURIComponent(item.id)+"/preview";
+        $("previewSection").hidden=false;
+        $("previewSection").scrollIntoView({behavior:"smooth"});
+      };
+      const download = document.createElement("a");
+      download.className="download-link";
+      download.href="/api/v1/requests/"+encodeURIComponent(item.id)+"/download";
+      download.textContent="HTMLをダウンロード";
+      download.setAttribute("download","ivy-static-preview.html");
+      actions.append(view,download);
+    }
+    if (actions.childNodes.length) card.append(actions);
+    root.append(card);
   }
 }
 async function refresh() {
@@ -81,6 +139,10 @@ $("stop").addEventListener("click",async()=>{
     await refresh();
   }catch{text("stopResult","停止結果を確認できません。接続を確認してください。")}
   finally{$("stop").disabled=false;}
+});
+$("closePreview").addEventListener("click",()=>{
+  $("previewFrame").removeAttribute("src");
+  $("previewSection").hidden=true;
 });
 void refresh();
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)void refresh()});
