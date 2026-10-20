@@ -4,6 +4,10 @@ Option Explicit
 ' Full source tests remain available through CHECK.bat.
 Dim shell, fso, repo, command, exitCode
 Set shell = CreateObject("WScript.Shell")
+' A safe syntax check must never create or remove startup shortcuts.
+If shell.ExpandEnvironmentStrings("%AIVY_VBS_SYNTAX_CHECK%") = "1" Then
+    WScript.Quit 0
+End If
 Set fso = CreateObject("Scripting.FileSystemObject")
 
 ' Prefer the already-running interactive GUI. Updating source while it is
@@ -17,7 +21,7 @@ On Error GoTo 0
 
 repo = fso.GetParentFolderName(WScript.ScriptFullName)
 If Not fso.FileExists(repo & "\AIVY.bat") Then
-    MsgBox "Aivyの起動ファイルが見つかりません。インストール先で開いてください。", _
+    MsgBox "Aivy launcher is missing. Open the installed folder first.", _
         vbExclamation, "Aivy Desktop"
     WScript.Quit 1
 End If
@@ -27,8 +31,8 @@ End If
 command = "cmd.exe /d /c cd /d """ & repo & """ && call AIVY.bat"
 exitCode = shell.Run(command, 0, True)
 If exitCode <> 0 Then
-    MsgBox "Aivyを起動できませんでした。CHECK.bat または DIAGNOSTICS.bat で原因を確認してください。" & vbCrLf & _
-        "既存のプロジェクトと保存データは削除していません。", _
+    MsgBox "Aivy could not start. Run CHECK.bat or DIAGNOSTICS.bat for details." & vbCrLf & _
+        "Existing projects and user data were not deleted.", _
         vbExclamation, "Aivy Desktop"
 End If
 WScript.Quit exitCode
