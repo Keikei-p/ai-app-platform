@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check src/worker.mjs && node --check src/owner-auth.mjs && node --check src/static-preview.mjs && node --check src/interactive-template.mjs && node --check web/app.mjs",
+    "check": "node --check src/worker.mjs && node --check src/owner-auth.mjs && node --check src/static-preview.mjs && node --check src/interactive-template.mjs && node --check src/ai-landing.mjs && node --check web/app.mjs",
     "predeploy": "npm run check && npm test",
     "dev": "wrangler dev --config wrangler.jsonc"
   },
