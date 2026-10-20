@@ -22,6 +22,9 @@ function runTemplate(kind){
     getElementById(id){if(!map.has(id))map.set(id,new El(id));return map.get(id);},
     createElement(tag){return new El(tag);}
   };
+  // Real <select> elements have the first option selected by default.
+  document.getElementById("filter").value="all";
+  document.getElementById("priority").value="normal";
   const localStorage={
     getItem(key){return storage.get(key)||null;},
     setItem(key,v){storage.set(key,String(v));},
@@ -106,6 +109,8 @@ test("opaque-origin preview with blocked storage still handles form and export",
     getElementById(id){if(!map.has(id))map.set(id,new El(id));return map.get(id);},
     createElement(tag){return new El(tag);}
   };
+  document.getElementById("filter").value="all";
+  document.getElementById("priority").value="normal";
   const localStorage={
     getItem(){throw Error("SecurityError");},
     setItem(){throw Error("SecurityError");}
