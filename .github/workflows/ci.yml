@@ -20,6 +20,16 @@ jobs:
           python-version: '3.13'
       - name: Compile
         run: python -m compileall -q src tests
+      - name: Windows Script Host parse smoke (no Ivy startup)
+        shell: pwsh
+        run: |
+          $env:AIVY_VBS_SYNTAX_CHECK = '1'
+          foreach ($file in @('AIVY_WEB_SILENT.vbs', 'AIVY_DESKTOP_SILENT.vbs', 'ENABLE_AIVY_AUTOSTART.vbs', 'DISABLE_AIVY_AUTOSTART.vbs')) {
+            & "$env:WINDIR\System32\cscript.exe" //B //Nologo $file
+            if ($LASTEXITCODE -ne 0) {
+              throw "Windows Script Host compilation failed: $file (exit code $LASTEXITCODE)"
+            }
+          }
       - name: Security self-check
         run: python -m src.tools.security_selfcheck
       - name: Unit and regression tests
