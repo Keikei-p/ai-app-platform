@@ -173,6 +173,24 @@ class IvyAutoUpdateBootstrapTests(unittest.TestCase):
                 updater.choose_install_dir(home)
             self.assertEqual((first / "old.txt").read_text(), "keep")
 
+    def test_running_web_port_skips_in_place_update_on_cli(self):
+        with patch.object(updater.socket, "create_connection") as connect:
+            self.assertTrue(updater.ivy_web_port_is_running())
+            self.assertEqual(connect.call_args.args[0], ("127.0.0.1", 8766))
+        with patch.object(updater.socket, "create_connection", side_effect=OSError):
+            self.assertFalse(updater.ivy_web_port_is_running())
+
+        with TemporaryDirectory() as base:
+            dest = Path(base) / "Aivy-Latest"
+            (dest / ".git").mkdir(parents=True)
+            with patch.object(updater.Path, "home", return_value=Path(base)):
+                with patch.object(updater, "ivy_web_port_is_running", return_value=True):
+                    with patch.object(updater, "_git") as git:
+                        result = updater.main(["--source-folder", base, "--repository-url",
+                                              "https://github.com/example/aivy.git"])
+            self.assertEqual(result, 0)
+            git.assert_not_called()
+
     def test_batch_and_vbs_use_git_install_not_zip_instance(self):
         root = Path(__file__).resolve().parents[1]
         bat = (root / "OPEN_AIVY_WEB.bat").read_text(encoding="utf-8").lower()
