@@ -112,8 +112,8 @@ class LanguageUnderstandingEngine:
     # deletion requests and all other high-risk terms retain their gates.
     _FEATURE_DELETE = re.compile(
         r"削除(?:機能|ボタン|操作|画面|ができる|できる|可能)"
-        r"|(?:追加|登録|作成|編集|更新)[・/／、,\\sと]+"
-        r"(?:編集[・/／、,\\sと]+)?削除(?=[・/／、,\\sと]|できる|可能|機能|$)"
+        r"|(?:追加|登録|作成|編集|更新)[・/／、,\sと]+"
+        r"(?:編集[・/／、,\sと]+)?削除(?=[・/／、,\sと]|できる|可能|機能|$)"
     )
     _DIRECT_DELETE = re.compile(
         r"削除(?:して|しろ|してください|してから|した後|を実行|を開始|しといて)"
