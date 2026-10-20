@@ -1,111 +1,59 @@
 @echo off
-setlocal EnableExtensions EnableDelayedExpansion
-title Aivy Web - One Click
-set "REPO=%AIVY_UPSTREAM_REPO%"
-set "DEST=%USERPROFILE%\Aivy-Latest"
-set "CHANNEL=develop"
+setlocal EnableExtensions DisableDelayedExpansion
+cd /d "%~dp0"
+title Ivy Web - Auto Update Setup
 
 echo.
-echo ==========================================
-echo   Aivy Web - One Click
-echo ==========================================
+echo ============================================
+echo  Ivy Web - One-time setup / auto updates
+echo ============================================
 echo.
-echo Aivy will be installed or updated safely.
-echo Install folder:
-echo   %DEST%
+echo The first setup converts a ZIP copy into a safe Git installation.
+echo Existing projects, chats and database are NOT replaced.
+echo Later launches from AIVY_WEB_SILENT.vbs update automatically.
 echo.
 
 where git >nul 2>nul
 if errorlevel 1 goto :git_missing
 
-rem Git checkouts can discover their own upstream without requiring a console.
-if not defined REPO if exist "%~dp0.git" for /f "delims=" %%I in ('git -C "%~dp0" remote get-url origin 2^>nul') do set "REPO=%%I"
+set "PY="
+python -c "import sys;raise SystemExit(sys.version_info < (3,11))" >nul 2>nul
+if not errorlevel 1 set "PY=python"
+if defined PY goto :install
+py -3 -c "import sys;raise SystemExit(sys.version_info < (3,11))" >nul 2>nul
+if not errorlevel 1 set "PY=py -3"
+if not defined PY goto :python_missing
 
-if exist "%DEST%\.git" (
-    if not defined REPO for /f "delims=" %%I in ('git -C "%DEST%" remote get-url origin 2^>nul') do set "REPO=%%I"
-    goto :update
-)
-if not defined REPO goto :repo_missing
-if exist "%DEST%" goto :choose_new_folder
-
-echo [1/3] Installing latest Aivy...
-git clone --branch "%CHANNEL%" "%REPO%" "%DEST%"
+:install
+%PY% -m src.tools.ivy_bootstrap --source-folder "%~dp0"
 if errorlevel 1 goto :failed
-goto :start
 
-:choose_new_folder
+set "DEST=%USERPROFILE%\Aivy-Latest"
+if exist "%DEST%\.git\" goto :launch
 set "DEST=%USERPROFILE%\Aivy-Latest-Git"
-if exist "%DEST%\.git" goto :update
-if exist "%DEST%" goto :folder_problem
-echo [1/3] Installing latest Aivy in a clean folder...
-git clone --branch "%CHANNEL%" "%REPO%" "%DEST%"
-if errorlevel 1 goto :failed
-goto :start
+if not exist "%DEST%\.git\" goto :failed
 
-:update
-echo [1/3] Checking for the latest Aivy...
-set "DIRTY="
-for /f "delims=" %%I in ('git -C "%DEST%" status --porcelain --untracked-files=all 2^>nul') do set "DIRTY=1"
-if defined DIRTY goto :dirty
-
-git -C "%DEST%" fetch --prune origin "+refs/heads/%CHANNEL%:refs/remotes/origin/%CHANNEL%"
-if errorlevel 1 goto :safe_update_failed
-git -C "%DEST%" checkout "%CHANNEL%"
-if errorlevel 1 goto :safe_update_failed
-git -C "%DEST%" merge --ff-only "origin/%CHANNEL%"
-if errorlevel 1 goto :safe_update_failed
-goto :start
-
-:dirty
+:launch
+if not exist "%DEST%\AIVY_WEB_SILENT.vbs" goto :failed
 echo.
-echo Local code changes were found, so Aivy will not overwrite them.
-echo The currently installed copy will be opened.
-goto :start
-
-:safe_update_failed
-echo.
-echo The latest version could not be applied safely.
-echo No files were force-deleted. The current copy will be opened.
-goto :start
-
-:start
-echo [2/3] Preparing Aivy Web...
-if not exist "%DEST%\AIVY_WEB.bat" goto :failed
-echo [3/3] Opening Aivy Web...
-cd /d "%DEST%"
-call AIVY_WEB.bat
-exit /b %errorlevel%
-
-:repo_missing
-echo.
-echo No update source is configured.
-echo For a buyer/OEM installation, use the delivered Ivy package.
-echo For a Git-based installation, set AIVY_UPSTREAM_REPO to your own repository URL.
-echo No user data was changed.
-pause
-exit /b 1
+echo [OK] Starting the installed Ivy Web...
+echo       Next time, just double-click AIVY_WEB_SILENT.vbs
+echo       in %DEST%
+start "" "%WINDIR%\System32\wscript.exe" "%DEST%\AIVY_WEB_SILENT.vbs"
+exit /b 0
 
 :git_missing
-echo.
-echo Git is not installed or Windows cannot find it.
-echo Aivy was not changed.
-echo.
-echo Install Git for Windows once, then double-click this file again.
-echo Opening the official Git for Windows download page...
-start "" "https://git-scm.com/download/win"
-pause
-exit /b 1
+echo Git for Windows is required for safe automatic updates.
+echo Install Git from https://git-scm.com/download/win
+goto :failed
 
-:folder_problem
-echo.
-echo Aivy could not find a safe empty installation folder.
-echo Nothing was deleted.
-pause
-exit /b 1
+:python_missing
+echo Python 3.11 or later was not found.
+echo Run SETUP.bat or install Python and retry.
+goto :failed
 
 :failed
 echo.
-echo Aivy installation or startup failed.
-echo Nothing was force-deleted.
+echo Ivy was not installed or started. Existing project data was not deleted.
 pause
 exit /b 1
