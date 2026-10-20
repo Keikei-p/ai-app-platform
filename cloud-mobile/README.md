@@ -1,5 +1,7 @@
 # Ivy Mobile Studio — PC-independent intake + safe HTML preview (staging only)
 
+**最短の日本語手順:** [OWNER_STAGE_SETUP_JA.md](OWNER_STAGE_SETUP_JA.md)（非公開ステージングの初回設定）
+
 This module is an **additive, mobile-first Cloudflare Workers + D1 PWA**.
 The desktop Ivy/Tkinter and its existing local API remain unchanged.
 
@@ -32,9 +34,11 @@ The desktop Ivy/Tkinter and its existing local API remain unchanged.
 5. Set `TEAM_DOMAIN` (your `https://team.cloudflareaccess.com` URL), `ACCESS_AUD` (Access application AUD), and `OWNER_EMAIL`; these must match exactly.
 6. Run `npm run check && npm test`.
 7. Run `npx wrangler d1 migrations apply ivy-mobile-intake-staging --remote --config wrangler.jsonc` after reviewing **0001, 0002 and 0003** SQL. This is staging only.
-8. Deploy to **a new staging Worker name**, never overwrite Ivy or AI Company production: `npx wrangler deploy --config wrangler.jsonc`.
-9. Confirm Access denies unsigned/API requests; log in as OWNER; verify status, save, duplicate retry, history, static preview generation, sandbox isolation, HTML download, cancellation and emergency stop on smartphone.
-10. Initial D1 state is `paused=1` (fail closed). To enable intake **after testing Access**, deliberately update the staging control row to `paused=0`. Do not enable inference; none is implemented.
+8. **Keep `workers_dev=false`** in private staging config. Deploy to a **new Worker name** (never overwrite production): `npx wrangler deploy --config wrangler.jsonc`.
+9. Before exposing any URL, enable Cloudflare **Worker-level Access** on the new Worker for **both production and preview domains**, OWNER email only. Verify policy carefully. The internal Static Assets router may not forward `ctx.access` to user Worker; signed JWT fallback in `owner-auth.mjs` is essential.
+10. Only after Access is attached, change `workers_dev` to `true` and deploy the same staging Worker again. Verify anonymous users are denied, then test OWNER login and status on a phone.
+11. D1 starts at `paused=1` (fail closed). After reviewing Access, optionally enable `ENABLE_OWNER_RESUME=true` in private staging config and redeploy, then use the OWNER-only PWA button to resume intake. Leave AI disabled.
+12. Verify duplicate requests, template output, sandbox preview, downloads, cancellation, stop/resume, iOS and Android use, and real PC-OFF remote operation.
 
 Never commit a real owner email, audience, tokens, secrets, raw runtime database, or private prompts. No Cloudflare tokens are needed inside app source; use platform-protected deployment credentials. Respect Cloudflare/GitHub free-tier limits.
 
