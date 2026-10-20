@@ -16,6 +16,24 @@ home = shell.ExpandEnvironmentStrings("%USERPROFILE%")
 ' original developer's path or overwrite anything in the user workspace.
 repo = fso.GetParentFolderName(WScript.ScriptFullName)
 
+' GitHub ZIP downloads have no .git origin, so they cannot self-update.
+' Prefer the one-time Git installation if the shortcut lives in a ZIP copy.
+If Not fso.FolderExists(repo & "\.git") Then
+    If fso.FolderExists(home & "\Aivy-Latest\.git") Then
+        repo = home & "\Aivy-Latest"
+    ElseIf fso.FolderExists(home & "\Aivy-Latest-Git\.git") Then
+        repo = home & "\Aivy-Latest-Git"
+    ElseIf fso.FolderExists(home & "\AI-App-Platform-Git\.git") Then
+        repo = home & "\AI-App-Platform-Git"
+    Else
+        MsgBox "このIvyはZIP版なので自動更新できません。" & vbCrLf & _
+               "最初に OPEN_AIVY_WEB.bat を1回だけ実行し、" & vbCrLf & _
+               "GitHubのリポジトリURLを登録してください。", _
+               vbInformation, "Ivy Auto Update"
+        WScript.Quit 1
+    End If
+End If
+
 If Not fso.FileExists(repo & "\AIVY.bat") Then
     repo = home & "\AI-App-Platform-Git"
 End If
