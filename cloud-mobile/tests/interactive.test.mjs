@@ -4,7 +4,7 @@ import vm from "node:vm";
 import {compileInteractiveTemplate,chooseTemplate} from "../src/interactive-template.mjs";
 
 class El {
-  constructor(tag="div"){this.tag=tag;this.children=[];this.value="";this.textContent="";this.style={};this.className="";}
+  constructor(tag="div"){this.tag=tag;this.children=[];this.value="";this.textContent="";this.style={};this.className="";this.classList={add(){},remove(){}};}
   append(...nodes){this.children.push(...nodes);}
   replaceChildren(...nodes){this.children=nodes;}
   focus(){}
