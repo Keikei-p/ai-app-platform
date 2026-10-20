@@ -15,11 +15,12 @@ import os
 from pathlib import Path
 import re
 import shutil
-import socket
 import subprocess
 import sys
 from typing import Callable
 from urllib.parse import urlsplit
+from urllib.error import HTTPError, URLError
+from urllib.request import ProxyHandler, build_opener
 
 
 CHANNEL = "develop"
@@ -187,16 +188,23 @@ def install_or_update(
 
 
 def ivy_web_port_is_running() -> bool:
-    """Do not update installed source files while the web port is occupied.
+    """Conservatively avoid a source update while the Ivy HTTP port is busy.
 
-    This also covers an unknown listener: a separate failure to bind must not
-    cause an opportunistic upgrade of the currently running code.
+    Only an explicit refused connection is treated as an unused port. Other
+    failures (a slow listener, unexpected HTTP status) should defer an update.
+    HTTP proxies and redirects are not used for this loopback probe.
     """
     try:
-        with socket.create_connection(("127.0.0.1", 8766), timeout=0.7):
-            return True
-    except OSError:
-        return False
+        opener = build_opener(ProxyHandler({}))
+        with opener.open("http://127.0.0.1:8766/healthz", timeout=0.7) as response:
+            response.read(256)
+        return True
+    except HTTPError:
+        return True  # HTTP 4xx/5xx still proves a listener owns the port.
+    except URLError as exc:
+        return not isinstance(exc.reason, ConnectionRefusedError)
+    except (OSError, ValueError):
+        return True  # Unknown problem: fail closed instead of changing live code.
 
 
 def main(argv: list[str] | None = None) -> int:
