@@ -208,6 +208,62 @@ class IvyAutoUpdateBootstrapTests(unittest.TestCase):
             self.assertEqual(result, 0)
             git.assert_not_called()
 
+    def test_verified_ivy_web_probe_requires_real_healthy_aivy_response(self):
+        from unittest.mock import MagicMock
+        from urllib.error import URLError
+
+        client = MagicMock()
+        response = client.open.return_value.__enter__.return_value
+        response.status = 200
+        response.read.return_value = b'{"service":"aivy","status":"ok"}'
+        with patch.object(updater, "build_opener", return_value=client):
+            self.assertTrue(updater.ivy_web_server_is_healthy())
+            self.assertEqual(client.open.call_args.args[0], "http://127.0.0.1:8766/healthz")
+
+        for payload in (
+            b'{"service":"another-app","status":"ok"}',
+            b'{"service":"aivy","status":"error"}',
+            b'<html>different web server</html>',
+            b'x' * 1025,
+        ):
+            with self.subTest(payload=payload[:30]):
+                response.read.return_value = payload
+                with patch.object(updater, "build_opener", return_value=client):
+                    self.assertFalse(updater.ivy_web_server_is_healthy())
+
+        response.read.return_value = b'{"service":"aivy","status":"ok"}'
+        response.status = 302
+        with patch.object(updater, "build_opener", return_value=client):
+            self.assertFalse(updater.ivy_web_server_is_healthy())
+
+        client.open.side_effect = URLError(ConnectionRefusedError("refused"))
+        with patch.object(updater, "build_opener", return_value=client):
+            self.assertFalse(updater.ivy_web_server_is_healthy())
+
+    def test_probe_cli_checks_only_health_no_git_or_installer(self):
+        with patch.object(updater, "ivy_web_server_is_healthy", return_value=True):
+            with patch.object(updater, "install_or_update") as install:
+                self.assertEqual(updater.main(["--probe-web"]), 0)
+                install.assert_not_called()
+        with patch.object(updater, "ivy_web_server_is_healthy", return_value=False):
+            with patch.object(updater, "install_or_update") as install:
+                self.assertEqual(updater.main(["--probe-web"]), 1)
+                install.assert_not_called()
+
+    def test_outdated_launcher_reports_deferred_update_not_false_install_fail(self):
+        root = Path(__file__).resolve().parents[1]
+        bat = (root / "OPEN_AIVY_WEB.bat").read_text(encoding="utf-8").lower()
+        helper = (root / "src/tools/ivy_bootstrap.py").read_text(encoding="utf-8").lower()
+        self.assertIn(':outdated_launcher', bat)
+        self.assertIn('--probe-web', bat)
+        self.assertIn('http://127.0.0.1:8766/', bat)
+        self.assertIn('exit /b 0', bat.split(':outdated_launcher', 1)[1])
+        self.assertIn('update pending', bat)
+        self.assertIn('if outcome == "already_running"', helper)
+        self.assertIn('ivy_web_server_is_healthy', helper)
+        self.assertNotIn("reset --hard", bat + helper)
+        self.assertNotIn("clean -fd", bat + helper)
+
     def test_batch_and_vbs_use_git_install_not_zip_instance(self):
         root = Path(__file__).resolve().parents[1]
         bat = (root / "OPEN_AIVY_WEB.bat").read_text(encoding="utf-8").lower()
