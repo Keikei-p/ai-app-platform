@@ -1,6 +1,6 @@
 "use strict";
 const $ = id => document.getElementById(id);
-const state = { loading:false, sending:false, accepting:false, pendingKey:null };
+const state = { loading:false, sending:false, accepting:false, pendingKey:null, resumeAllowed:false };
 function text(id, value) { $(id).textContent = value; }
 async function api(path, options = {}) {
   const response = await fetch(path, { credentials:"same-origin", cache:"no-store", ...options });
@@ -43,7 +43,7 @@ function showRequests(items) {
           try{
             await api("/api/v1/requests/"+encodeURIComponent(item.id)+"/build-preview",{
               method:"POST",headers:{"content-type":"application/json"},
-              body:JSON.stringify({confirm:"generate_static_template"})
+              body:JSON.stringify({confirm:"generate_static_template",template:$("template").value})
             });
             text("message","HTMLテンプレートを保存しました。AI生成・ビルド・公開は行っていません。");
             await refresh();
@@ -70,7 +70,7 @@ function showRequests(items) {
     }
     if (item.status === "template_ready") {
       const view = document.createElement("button");view.type="button";
-      view.className="quiet";view.textContent="HTMLプレビュー";
+      view.className="quiet";view.textContent="Webアプリをプレビュー";
       view.onclick=()=>{
         const frame=$("previewFrame");
         frame.src="/api/v1/requests/"+encodeURIComponent(item.id)+"/preview";
@@ -84,6 +84,18 @@ function showRequests(items) {
       download.setAttribute("download","ivy-static-preview.html");
       actions.append(view,download);
     }
+    const revise=document.createElement("button");revise.type="button";revise.className="quiet";
+    revise.textContent="この依頼を修正して再作成";
+    revise.onclick=()=>{
+      $("prompt").value=String(item.prompt||"");
+      $("mode").value=item.mode;
+      $("template").value="auto";
+      state.pendingKey=null;
+      $("create").scrollIntoView({behavior:"smooth"});
+      $("prompt").focus();
+      text("message","元の依頼は保持します。文章を修正して、新しい依頼として保存できます。");
+    };
+    actions.append(revise);
     if (actions.childNodes.length) card.append(actions);
     root.append(card);
   }
@@ -96,6 +108,8 @@ async function refresh() {
       api("/api/v1/status"),api("/api/v1/requests")
     ]);
     state.accepting = !status.paused;
+    state.resumeAllowed = !!status.resume_enabled;
+    $("resume").hidden = !status.resume_enabled || !status.paused;
     text("connection","クラウドに接続しました");
     text("workerState", status.hosted_worker_connected ? "接続済み" : "未接続");
     text("dailyCount",String(status.requests_today)+" / "+String(status.daily_limit));
@@ -103,6 +117,7 @@ async function refresh() {
     showRequests(history.requests);
   } catch(e) {
     state.accepting=false;
+    $("resume").hidden=true;
     text("connection", e.message==="owner_login_required" ?
       "OWNER認証が必要です。Cloudflare Accessのログインを確認してください。" :
       "接続または設定に問題があります。");
@@ -115,7 +130,9 @@ $("requestForm").addEventListener("submit",async event => {
   event.preventDefault();
   if (state.sending || !state.accepting) return;
   const prompt=$("prompt").value.trim(),mode=$("mode").value;
+  const template=$("template").value,quick=mode==="web"&&$("quickGenerate").checked;
   if (!prompt) return;
+  if(quick&&!confirm("OWNER承認: 保存後に安全な既定Webアプリ/HTMLテンプレートを生成します。AIは使用しません。続けますか？"))return;
   if (!state.pendingKey) state.pendingKey=crypto.randomUUID().replaceAll("-","");
   state.sending=true; $("submit").disabled=true;
   try {
@@ -125,10 +142,40 @@ $("requestForm").addEventListener("submit",async event => {
     });
     text("message","依頼 #"+result.request_id.slice(0,8)+" を保存しました。AI生成はまだ開始していません。");
     state.pendingKey=null; $("prompt").value="";
+    if(quick){
+      try{
+        const generated=await api("/api/v1/requests/"+encodeURIComponent(result.request_id)+"/build-preview",{
+          method:"POST",headers:{"content-type":"application/json"},
+          body:JSON.stringify({confirm:"generate_static_template",template})
+        });
+        text("message","保存とテンプレート生成が完了しました（"+(generated.template_kind||"Web")+"）。プレビュー・ダウンロードを選べます。");
+      }catch(e){
+        text("message","依頼は保存済みですが、テンプレート生成は未完了です: "+e.message+"。履歴から再試行できます。");
+      }
+    }
     await refresh();
   } catch (e) {
     text("message","保存結果を確認できません（"+e.message+"）。入力は残しました。履歴を確認してから再試行してください。");
   } finally {state.sending=false;$("submit").disabled=!state.accepting;}
+});
+$("mode").addEventListener("change",()=>{
+  const web=$("mode").value==="web";
+  $("template").disabled=!web;
+  $("quickGenerate").disabled=!web;
+  if(!web)text("message","スマホアプリのクラウドビルドは未接続です。依頼の保存だけ行えます。");
+});
+$("resume").addEventListener("click",async()=>{
+  if(!state.resumeAllowed||!confirm("Cloudflare AccessのOWNER制限とD1設定を確認済みですか？ 新規受付を再開しますか？"))return;
+  $("resume").disabled=true;
+  try{
+    await api("/api/v1/resume",{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({confirm:"resume_intake_after_access_review"})
+    });
+    text("stopResult","OWNER承認により受付を再開しました。");
+    await refresh();
+  }catch(e){text("stopResult","再開できません: "+e.message);}
+  finally{$("resume").disabled=false;}
 });
 $("stop").addEventListener("click",async()=>{
   if(!confirm("新しい制作依頼の受付を停止しますか？ 保存済みの依頼は消えません。"))return;
