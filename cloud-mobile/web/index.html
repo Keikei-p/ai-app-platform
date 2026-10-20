@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="/styles.css"><title>Ivy — Mobile Studio</title>
 </head><body>
 <main>
-<header><div><p class="eyebrow">IVY · MOBILE STUDIO</p><h1>つくりたいものを、<br>ここから。</h1><p class="muted">スマホから制作依頼を保存し、進捗を確認するためのクラウド入口です。</p></div><span class="circle" aria-hidden="true">✦</span></header>
+<header><div><p class="eyebrow">IVY · MOBILE STUDIO</p><h1>つくりたいものを、<br>ここから。</h1><p class="muted">スマホから制作依頼を管理し、固定HTMLプレビューを確認できるクラウド入口です。</p></div><span class="circle" aria-hidden="true">✦</span></header>
 <section class="card" id="home" aria-labelledby="statusTitle">
 <div class="flex"><h2 id="statusTitle">接続と実行状態</h2><button type="button" class="quiet" id="reload">更新</button></div>
 <p id="connection" role="status">接続を確認中…</p><p id="modeMessage" class="note">クラウド生成機能の接続状態を取得しています。</p>
@@ -21,14 +21,19 @@
 <button id="submit" class="primary" type="submit" disabled>依頼内容を保存</button>
 <p id="message" role="status" aria-live="polite"></p>
 </form>
-<p class="note">現在は依頼の保存・閲覧のみ。アプリ生成や公開は、クラウド実行エンジンを接続するまでは実行しません。</p>
+<p class="note">Web制作依頼では固定HTMLテンプレートを生成・表示・保存できます。これはAIによるコード生成ではなく、アプリ実装・ビルド・公開は未接続です。スマホアプリ（APK/iOS）は生成しません。</p>
 </section>
 <section class="card" id="history" aria-labelledby="historyTitle">
 <div class="flex"><h2 id="historyTitle">依頼履歴</h2><span class="pill">直近30件</span></div>
 <div id="requests" aria-live="polite">読み込み中…</div></section>
+<section class="card" id="previewSection" hidden aria-labelledby="previewTitle">
+<div class="flex"><h2 id="previewTitle">静的HTMLプレビュー</h2><button type="button" id="closePreview" class="quiet">閉じる</button></div>
+<p class="note">固定テンプレートの表示検証用です。AI生成されたアプリや実機ビルドではありません。スクリプト・通信を禁止した隔離フレームで確認します。</p>
+<iframe id="previewFrame" title="Ivy static preview" sandbox="" loading="lazy" referrerpolicy="no-referrer"></iframe>
+</section>
 <section class="card" id="safety"><h2>安全管理</h2><p class="muted">誤操作やトラブルが起きたら、新しい依頼の受付を停止できます。既存の保存データは削除しません。</p>
 <button type="button" id="stop" class="danger">新規受付を停止する</button><p id="stopResult" role="status"></p></section>
-<footer>IVY · PC-OFF READY INTAKE · FREE-FIRST<br>保存成功とAI生成成功を混同しません</footer>
+<footer>IVY · PC-OFF READY INTAKE + STATIC PREVIEW · FREE-FIRST<br>保存成功とAI生成成功を混同しません</footer>
 </main>
 <nav class="dock" aria-label="画面内メニュー"><a href="#home">ホーム</a><a href="#create">依頼する</a><a href="#history">履歴</a><a href="#safety">安全管理</a></nav>
 <script type="module" src="/app.mjs"></script>
