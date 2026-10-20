@@ -35,13 +35,34 @@ set "DEST=%USERPROFILE%\Aivy-Latest-Git"
 if not exist "%DEST%\.git\" goto :failed
 
 :launch
-if not exist "%DEST%\AIVY_WEB_SILENT.vbs" goto :failed
+if not exist "%DEST%\AIVY_WEB_SILENT.vbs" goto :outdated_launcher
 echo.
-echo [OK] Starting the installed Ivy Web...
+echo [OK] Opening the installed Ivy Web...
 echo       Next time, just double-click AIVY_WEB_SILENT.vbs
 echo       in %DEST%
+echo       If the web server is already running, updates are deferred.
 start "" "%WINDIR%\System32\wscript.exe" "%DEST%\AIVY_WEB_SILENT.vbs"
 exit /b 0
+
+:outdated_launcher
+echo.
+echo [NOTICE] This Git installation is older and has no silent launcher yet.
+echo          Nothing was deleted, and no source files were overwritten.
+echo          Checking whether Ivy Web is already running...
+%PY% -m src.tools.ivy_bootstrap --probe-web
+if errorlevel 1 goto :need_cold_update
+echo [OK] Ivy Web is already running. Opening it in your browser.
+start "" "http://127.0.0.1:8766/"
+echo [UPDATE PENDING] Exit the running Ivy Web server, then
+echo                  run OPEN_AIVY_WEB.bat again to update the launcher.
+exit /b 0
+
+:need_cold_update
+echo [UPDATE PENDING] The silent launcher is missing.
+echo                  Close Ivy Web if it is running, then rerun this installer.
+echo                  Never delete the workspace or AppData folder.
+pause
+exit /b 1
 
 :git_missing
 echo Git for Windows is required for safe automatic updates.
