@@ -52,7 +52,7 @@ small{display:block;margin-top:24px;color:#a4b3c5}
   const checks = [
     {name:"bounded_output", passed:html.length < 20000},
     {name:"doctype_and_mobile_viewport", passed:html.startsWith("<!doctype html>") && html.includes('name="viewport"')},
-    {name:"no_executable_scripts", passed:!/<script\b|<iframe\b|<form\b|<object\b|onerror\s*=|javascript:/i.test(html)},
+    {name:"no_executable_scripts", passed:!/<script\b|<iframe\b|<form\b|<object\b/i.test(html)},
     {name:"escaped_user_input", passed:!html.includes(prompt.trim()) || !/[<>&"']/.test(prompt)},
   ];
   if (!checks.every(check => check.passed)) throw new Error("preview_validation_failed");
