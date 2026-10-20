@@ -48,7 +48,7 @@ test("OWNER Access JWT fallback validates real RS256 signature on Static Assets 
       {email:owner,role:"owner"});
     assert.equal(fetchCount,1);
     await assert.rejects(
-      ()=>authorizeOwner(request(awaitNoop(good)),{...configured,OWNER_EMAIL:"other@example.com"}),
+      ()=>authorizeOwner(request(good),{...configured,OWNER_EMAIL:"other@example.com"}),
       /access_denied/
     );
     await assert.rejects(
@@ -71,8 +71,6 @@ test("OWNER Access JWT fallback validates real RS256 signature on Static Assets 
       }),configured),/access_denied/);
   } finally {globalThis.fetch=originalFetch;}
 });
-const awaitNoop = async value => value;
-
 test("native ctx.access succeeds for verified OWNER and fails closed for wrong user",async()=>{
   const cfg={ACCESS_AUD:"ivy-stage",OWNER_EMAIL:"owner@example.com"};
   const ctx={access:{aud:"ivy-stage",getIdentity:async()=>({email:"OWNER@EXAMPLE.COM"})}};
