@@ -93,7 +93,7 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
           "cache-control": "private, no-store",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
-          "content-security-policy": "sandbox" + (artifact.html.startsWith("<!doctype html>\n<!-- ivy-trusted-interactive-template:") ? " allow-scripts" : "") +
+          "content-security-policy": "sandbox" + (artifact.html.startsWith("<!doctype html>\n<!-- ivy-trusted-interactive-template:") ? " allow-scripts allow-downloads" : "") +
             "; default-src 'none'; style-src 'unsafe-inline'; " +
             (artifact.html.startsWith("<!doctype html>\n<!-- ivy-trusted-interactive-template:") ? "script-src 'unsafe-inline'" : "script-src 'none'") +
             "; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
