@@ -9,6 +9,30 @@ from src.core.development_memory import DevelopmentMemory
 
 
 class ChatModeTests(unittest.TestCase):
+    def test_todo_crud_request_enters_normal_design_flow(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "todo-project"
+            project.mkdir()
+            partner = ChatPartner(DevelopmentMemory(root / "memory.jsonl"))
+            decision = partner.handle(
+                project,
+                "ToDoアプリ",
+                "todo-project",
+                "スマホとPCで使えるToDo管理Webアプリを作って。"
+                "タスクの追加・編集・削除・完了切り替えができるようにして。"
+                "デザインはシンプルで高級感のあるものにしてほしい。"
+                "設計からコード生成、テスト、プレビューまで進めて。",
+                has_generated=False,
+                preferred_mode="app",
+            )
+            self.assertIn(decision.action, {"ask", "review"})
+            self.assertNotIn("削除・本番・権限・課金", decision.message)
+            self.assertEqual(partner.state(project)["last_understanding"]["needs_confirmation"], False)
+            self.assertEqual(partner.state(project)["last_understanding"]["dangerous"], False)
+            # Requirements still require explicit approval before generating.
+            self.assertNotEqual(decision.action, "build")
+
     def test_explicit_web_mode_is_kept_even_with_generic_make_word(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
