@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Ivy — Mobile Studio",
   "short_name": "Ivy",
-  "description": "スマホから制作依頼を確認するIvyクラウド入口",
+  "description": "スマホでWeb制作依頼、固定Webアプリの生成とプレビューを管理するIvyクラウド入口",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b1320",
