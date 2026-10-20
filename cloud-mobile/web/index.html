@@ -15,13 +15,16 @@
 <section class="card" id="create" aria-labelledby="createTitle">
 <div class="flex"><h2 id="createTitle">新しい制作依頼</h2><span class="pill">保存・受付</span></div>
 <form id="requestForm"><label for="mode">何を作りたい？</label>
-<select id="mode"><option value="web">Webサイト / Webアプリ</option><option value="app">スマホアプリ</option></select>
+<select id="mode"><option value="web">Webサイト / Webアプリ</option><option value="app">スマホアプリ（受付のみ）</option></select>
+<label for="template">すぐ使えるテンプレート</label>
+<select id="template"><option value="auto">依頼内容から自動判定</option><option value="todo">ToDo管理Webアプリ</option><option value="notes">メモ管理Webアプリ</option><option value="landing">紹介ページ（静的HTML）</option></select>
 <label for="prompt">Ivyへの依頼</label>
 <textarea id="prompt" maxlength="1200" required placeholder="例：スマホで予約管理ができるシンプルなWebアプリを作りたい。ログインと一覧画面が必要。"></textarea>
-<button id="submit" class="primary" type="submit" disabled>依頼内容を保存</button>
+<label class="inline-option" for="quickGenerate"><input type="checkbox" id="quickGenerate" checked> 保存後にテンプレートも生成する（Webのみ・要確認）</label>
+<button id="submit" class="primary" type="submit" disabled>制作依頼を保存する</button>
 <p id="message" role="status" aria-live="polite"></p>
 </form>
-<p class="note">Web制作依頼では固定HTMLテンプレートを生成・表示・保存できます。これはAIによるコード生成ではなく、アプリ実装・ビルド・公開は未接続です。スマホアプリ（APK/iOS）は生成しません。</p>
+<p class="note">ToDo・メモWebアプリの既定テンプレートでは実際に操作できます。AIが任意のアプリを開発したわけではなく、APK/iOS・公開も未接続です。テンプレート内のデータは、HTMLダウンロード後に保存・JSONバックアップできます。</p>
 </section>
 <section class="card" id="history" aria-labelledby="historyTitle">
 <div class="flex"><h2 id="historyTitle">依頼履歴</h2><span class="pill">直近30件</span></div>
@@ -29,10 +32,12 @@
 <section class="card" id="previewSection" hidden aria-labelledby="previewTitle">
 <div class="flex"><h2 id="previewTitle">静的HTMLプレビュー</h2><button type="button" id="closePreview" class="quiet">閉じる</button></div>
 <p class="note">固定テンプレートの表示検証用です。AI生成されたアプリや実機ビルドではありません。スクリプト・通信を禁止した隔離フレームで確認します。</p>
-<iframe id="previewFrame" title="Ivy static preview" sandbox="" loading="lazy" referrerpolicy="no-referrer"></iframe>
+<iframe id="previewFrame" title="Ivy isolated preview" sandbox="allow-scripts" loading="lazy" referrerpolicy="no-referrer"></iframe>
 </section>
 <section class="card" id="safety"><h2>安全管理</h2><p class="muted">誤操作やトラブルが起きたら、新しい依頼の受付を停止できます。既存の保存データは削除しません。</p>
-<button type="button" id="stop" class="danger">新規受付を停止する</button><p id="stopResult" role="status"></p></section>
+<button type="button" id="stop" class="danger">新規受付を停止する</button>
+<button type="button" id="resume" class="quiet" hidden>OWNER承認で受付を再開する</button>
+<p id="stopResult" role="status"></p></section>
 <footer>IVY · PC-OFF READY INTAKE + STATIC PREVIEW · FREE-FIRST<br>保存成功とAI生成成功を混同しません</footer>
 </main>
 <nav class="dock" aria-label="画面内メニュー"><a href="#home">ホーム</a><a href="#create">依頼する</a><a href="#history">履歴</a><a href="#safety">安全管理</a></nav>
