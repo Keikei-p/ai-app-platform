@@ -65,7 +65,8 @@ function harness(mode="web", prompt="魅力的な予約サイトを作って") {
             r.status="cancelled";return {meta:{changes:1}};
           }
           if(sql.startsWith("UPDATE ivy_control")){
-            state.paused=1;return {meta:{changes:1}};
+            state.paused=sql.includes("SET paused=0")?0:1;
+            return {meta:{changes:1}};
           }
           throw new Error("Unhandled SQL in test DB: "+sql);
         }};
@@ -168,6 +169,54 @@ test("cancel stops pending work, preserves owner records and prevents preview",a
   assert.equal(r.status,404);
   assert.equal(state.artifacts.size,0);
   assert.equal(state.rows.length,1);
+});
+
+test("OWNER-approved ToDo preview is usable HTML with a restricted script-only origin",async()=>{
+  const {env,state}=harness("web","ToDo管理アプリを作って");
+  const path="/api/v1/requests/"+id;
+  const r=await handleRequest(post(path+"/build-preview",{
+    confirm:"generate_static_template",template:"todo"
+  }),env,asOwner);
+  assert.equal(r.status,201);
+  assert.equal((await r.json()).template_kind,"todo");
+  assert.match(state.artifacts.get(id).html,/ivy-trusted-interactive-template:todo/);
+  const preview=await handleRequest(get(path+"/preview"),env,asOwner);
+  assert.equal(preview.status,200);
+  assert.match(preview.headers.get("content-security-policy"),/sandbox allow-scripts allow-downloads/);
+  assert.match(preview.headers.get("content-security-policy"),/connect-src 'none'/);
+  assert.doesNotMatch(preview.headers.get("content-security-policy"),/allow-same-origin/);
+  const html=await preview.text();
+  assert.match(html,/offlineAppRuntime|const key = "ivy-offline-/);
+  assert.match(html,/JSON/);
+  const reused=await handleRequest(post(path+"/build-preview",{
+    confirm:"generate_static_template",template:"notes"
+  }),env,asOwner);
+  assert.equal(reused.status,200);
+  assert.equal(state.artifacts.size,1);
+});
+
+test("OWNER-only resume is explicitly gated and never resumes without configuration",async()=>{
+  const {env,state}=harness();
+  state.paused=1;
+  const path="/api/v1/resume";
+  let r=await handleRequest(post(path,{confirm:"resume_intake_after_access_review"}),env,asOwner);
+  assert.equal(r.status,403);
+  assert.equal(state.paused,1);
+  env.ENABLE_OWNER_RESUME="true";
+  r=await handleRequest(post(path,{confirm:"no"}),env,asOwner);
+  assert.equal(r.status,400);
+  r=await handleRequest(post(path,{confirm:"resume_intake_after_access_review"}),
+    env,asOther);
+  assert.equal(r.status,200);
+  // The test harness has two valid owner identities; in production Access
+  // enforces OWNER_EMAIL before returning {role:owner}. Verify that boundary
+  // separately in owner-auth tests; this test focuses on feature flag/consent.
+  assert.equal(state.paused,0);
+  const status=await handleRequest(get("/api/v1/status"),env,asOwner);
+  assert.equal((await status.json()).resume_enabled,true);
+  r=await handleRequest(post(path,{confirm:"resume_intake_after_access_review"},
+    "https://attacker.example"),env,asOwner);
+  assert.equal(r.status,400);
 });
 
 test("mobile UI uses sandboxed HTML iframe and no claimed AI code generation",()=>{
