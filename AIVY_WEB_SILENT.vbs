@@ -2,6 +2,11 @@ Option Explicit
 
 Dim shell, fso, home, repo, command, url
 Set shell = CreateObject("WScript.Shell")
+' CI uses this opt-in safe exit to verify VBScript compilation without
+' launching Ivy or altering Windows startup settings.
+If shell.ExpandEnvironmentStrings("%AIVY_VBS_SYNTAX_CHECK%") = "1" Then
+    WScript.Quit 0
+End If
 Set fso = CreateObject("Scripting.FileSystemObject")
 
 url = "http://127.0.0.1:8766/"
@@ -26,9 +31,9 @@ If Not fso.FolderExists(repo & "\.git") Then
     ElseIf fso.FolderExists(home & "\AI-App-Platform-Git\.git") Then
         repo = home & "\AI-App-Platform-Git"
     Else
-        MsgBox "このIvyはZIP版なので自動更新できません。" & vbCrLf & _
-               "最初に OPEN_AIVY_WEB.bat を1回だけ実行し、" & vbCrLf & _
-               "GitHubのリポジトリURLを登録してください。", _
+        MsgBox "This ZIP copy cannot update itself." & vbCrLf & _
+               "Run OPEN_AIVY_WEB.bat once to install an updating copy." & vbCrLf & _
+               "Enter your trusted Git repository URL when asked.", _
                vbInformation, "Ivy Auto Update"
         WScript.Quit 1
     End If
@@ -45,8 +50,8 @@ If Not fso.FileExists(repo & "\AIVY.bat") Then
 End If
 
 If Not fso.FileExists(repo & "\AIVY.bat") Then
-    MsgBox "Aivyの最新版が見つかりません。" & vbCrLf & _
-           "最初に OPEN_AIVY_WEB.bat を1回だけ実行してください。", _
+    MsgBox "An installed Aivy copy was not found." & vbCrLf & _
+           "Please run OPEN_AIVY_WEB.bat once to set up Aivy Web.", _
            vbExclamation, "Aivy Web"
     WScript.Quit 1
 End If
