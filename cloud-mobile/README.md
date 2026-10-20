@@ -20,6 +20,9 @@ The desktop Ivy/Tkinter and its existing local API remain unchanged.
 - Saving a request is not execution. All new requests use status `awaiting_hosted_worker`; OWNER can later trigger `template_ready` for **static web templates only**.
 - PC-local projects, SQLite files, Ollama and credentials do not sync to the cloud.
 - No production deployment or live Cloudflare account test has been performed.
+- A signed Access JWT fallback, staging Wrangler config parser and migration
+  smoke tests are included in CI, but Cloudflare Access routing and real D1
+  behavior still require a separate OWNER-controlled staging rollout.
 
 ## Owner-only staging setup (on mobile browser or GitHub Codespaces)
 1. Create a **new staging** Cloudflare D1 database: `ivy-mobile-intake-staging`.
@@ -47,13 +50,25 @@ PWA (Access OWNER) → D1 saved request → confirm static template preview
                    → same-origin sandbox iframe + HTML attachment download
 ```
 
-The Worker NEVER runs user-supplied HTML/JS as executable code. It escapes the
-prompt for inclusion in a fixed static page, validates output size and basic
-structure, and serves preview with `Content-Security-Policy: sandbox`,
-`script-src 'none'`, `connect-src 'none'` and `form-action 'none'`.
-The iframe also sets `sandbox=""`. The HTML file may be opened locally
-for inspection, but it is not yet a generated, feature-complete app.
-The `app` target currently records requests only.
+The Worker NEVER runs user-supplied HTML/JS as executable code. It
+escapes user input and renders approved templates with bounded output sizes.
+Static and AI-assisted landing pages use `script-src 'none'`.
+The reviewed offline ToDo/Notes templates require inline JavaScript, but
+run only inside a **sandboxed opaque-origin iframe** with
+`allow-scripts allow-downloads`, no `allow-same-origin`, no `connect-src`,
+no form submission and no top-level navigation. Their localStorage is
+therefore often disabled in the preview; download the HTML and use JSON
+backup for durable, portable data. These are fixed templates, not an
+arbitrary AI-generated app. Requests targeting `app` are intake-only.
+
+Cloudflare Worker Static Assets route through an internal router that does
+not forward `ctx.access` to the user Worker. Thus the API also validates the
+signed `Cf-Access-Jwt-Assertion` JWT (issuer, audience, owner email, expiry,
+RS256 signature against Access JWKS), and fails closed if absent or invalid.
+This fallback is tested with an actual locally generated RS256 signature.
+**Protect the whole Worker with Access before deployment**; this includes
+the PWA static HTML/JS and all preview URLs. OWNER policies should use an
+explicit email allowlist, not a broad company domain.
 
 API extensions (all protected by OWNER authentication + verified same-origin
 JSON POST; no API key in browser):
