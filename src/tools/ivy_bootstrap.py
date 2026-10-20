@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
 from typing import Callable
@@ -185,6 +186,19 @@ def install_or_update(
     return dest, "installed"
 
 
+def ivy_web_port_is_running() -> bool:
+    """Do not update installed source files while the web port is occupied.
+
+    This also covers an unknown listener: a separate failure to bind must not
+    cause an opportunistic upgrade of the currently running code.
+    """
+    try:
+        with socket.create_connection(("127.0.0.1", 8766), timeout=0.7):
+            return True
+    except OSError:
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Ivy one-time Git updater setup")
     parser.add_argument("--source-folder", default=str(Path.cwd()))
@@ -195,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
             home=Path.home(),
             source_folder=Path(args.source_folder),
             repository_url=args.repository_url,
+            running=ivy_web_port_is_running(),
         )
     except BootstrapError as exc:
         print(f"Ivy setup: {exc}", file=sys.stderr)
