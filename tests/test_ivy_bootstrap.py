@@ -174,11 +174,28 @@ class IvyAutoUpdateBootstrapTests(unittest.TestCase):
             self.assertEqual((first / "old.txt").read_text(), "keep")
 
     def test_running_web_port_skips_in_place_update_on_cli(self):
-        with patch.object(updater.socket, "create_connection") as connect:
+        from unittest.mock import MagicMock
+        from urllib.error import URLError, HTTPError
+        from io import BytesIO
+
+        http = MagicMock()
+        http.open.return_value.__enter__.return_value.read.return_value = b'{"service":"aivy"}'
+        with patch.object(updater, "build_opener", return_value=http) as opener:
             self.assertTrue(updater.ivy_web_port_is_running())
-            self.assertEqual(connect.call_args.args[0], ("127.0.0.1", 8766))
-        with patch.object(updater.socket, "create_connection", side_effect=OSError):
-            self.assertFalse(updater.ivy_web_port_is_running())
+            self.assertIn("127.0.0.1:8766/healthz", http.open.call_args.args[0])
+            self.assertEqual(http.open.call_args.kwargs["timeout"], 0.7)
+            opener.assert_called_once()
+
+        for issue, expected in [
+            (URLError(ConnectionRefusedError("refused")), False),
+            (URLError(TimeoutError("slow")), True),
+            (HTTPError("http://127.0.0.1:8766", 500, "busy", {}, BytesIO()), True),
+        ]:
+            with self.subTest(issue=str(issue)):
+                http = MagicMock()
+                http.open.side_effect = issue
+                with patch.object(updater, "build_opener", return_value=http):
+                    self.assertEqual(updater.ivy_web_port_is_running(), expected)
 
         with TemporaryDirectory() as base:
             dest = Path(base) / "Aivy-Latest"
