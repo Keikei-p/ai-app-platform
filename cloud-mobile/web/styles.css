@@ -29,3 +29,10 @@ footer{text-align:center;color:#7f9daf;font-size:11px;letter-spacing:.09em;paddi
 :focus-visible{outline:2px solid #b9ecf3;outline-offset:3px}
 @media(min-width:760px){body{padding-bottom:0}.dock{max-width:440px;left:50%;transform:translateX(-50%);bottom:14px;border:1px solid #9bcddd39;border-radius:18px}.circle{width:115px;height:115px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+
+.entry-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+.entry-actions .quiet{font-size:12px;min-height:42px}
+.download-link{display:inline-flex;align-items:center;justify-content:center;min-height:42px;font-size:12px;font-weight:750;padding:9px 13px;background:#b9ecf3;color:#0b2232;border-radius:12px;text-decoration:none}
+#previewSection[hidden]{display:none}
+#previewFrame{display:block;border:1px solid #aed5e366;background:#0d1423;border-radius:16px;width:100%;height:min(68dvh,550px)}
