@@ -125,6 +125,12 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
         ).bind(Math.floor(Date.now()/1000),id,owner.email,owner.email,utcDay()).run();
         if(!reserved.meta?.changes)
           return reply({ok:false,error:"ai_daily_limit_or_paused_or_already_attempted"},429);
+        // Stop requests race with inference reservations. Check again before
+        // entering a potentially billable provider call (in-flight calls
+        // cannot be retroactively canceled by the pause endpoint).
+        const latestControl = await db.prepare("SELECT paused FROM ivy_control WHERE id=1").first();
+        if (!latestControl || latestControl.paused !== 0)
+          return reply({ok:false,error:"stopped_before_ai_call"},423);
         let generated;
         try {
           // AI only generates text in JSON; reviewed source creates HTML.
@@ -152,7 +158,9 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
             "ivy_static_previews.request_id=ivy_requests.id)"
           ).bind(id,owner.email),
           db.prepare(
-            "UPDATE ivy_ai_attempts SET status='succeeded' WHERE request_id=? AND owner_email=?"
+            "UPDATE ivy_ai_attempts SET status='succeeded' WHERE request_id=? AND owner_email=? " +
+            "AND EXISTS(SELECT 1 FROM ivy_requests WHERE ivy_requests.id=ivy_ai_attempts.request_id " +
+            "AND ivy_requests.owner_email=ivy_ai_attempts.owner_email AND ivy_requests.status='template_ready')"
           ).bind(id,owner.email)
         ]);
         if(!marked.meta?.changes)
