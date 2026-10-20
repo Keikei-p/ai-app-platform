@@ -130,11 +130,17 @@ Live SNS publishing, production signing and store publication require the user's
 
 Screenshot-based visual-diff critique is prepared at the report-schema level but is not yet executing screenshots automatically.
 
-## One-click browser setup
+## One-click browser setup (ZIP to auto-updating installation)
 
-For a Windows PC that still has an older Aivy copy, download just `OPEN_AIVY_WEB.bat` from the `develop` branch and double-click it.
+1. Download and extract the **complete** `develop` ZIP once. Do not run from inside a compressed archive.
+2. Double-click `OPEN_AIVY_WEB.bat` from that folder.
+3. If the folder is not already a Git checkout, paste the **trusted HTTPS repository clone URL** once when asked. The URL is recorded by Git as the installation's own `origin`; it is not hardcoded into the distributable product.
+4. Ivy creates `%USERPROFILE%\Aivy-Latest` (or `Aivy-Latest-Git` when needed), starts the installed web UI and leaves the ZIP copy untouched.
+5. **For daily use, double-click `AIVY_WEB_SILENT.vbs` inside the installed folder.** The launcher checks Git before each cold web-server start and uses only a clean-worktree fast-forward merge. A shortcut in the extracted ZIP also redirects to the Git installation once it exists.
 
-It installs the current development copy into `%USERPROFILE%\Aivy-Latest` without modifying the old Aivy folder, safely fast-forwards future updates, and then opens Aivy Web. If local source edits are found, it refuses to overwrite them.
+User databases, workspaces, backups and secrets remain outside the source checkout in `%LOCALAPPDATA%\AI-App-Platform`. Nothing is force-reset or deleted. If local source edits exist, or GitHub cannot be reached, Ivy preserves the installed version rather than overwriting it.
+
+**Important:** If the Ivy web server is already running, reopening the browser does not hot-update that Python process. Stop the server, then relaunch to pick up a newer version. First-time setup may show a console to ask for the upstream URL; routine launch through the VBS is silent. Buyers connect their own trusted repository URL.
 
 ## Browser-first development
 
