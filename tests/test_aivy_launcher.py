@@ -50,15 +50,20 @@ class AivyLauncherSafetyTests(unittest.TestCase):
         self.assertIn("ThreadingHTTPServer", source)
 
     def test_one_click_web_bootstrap_is_safe(self):
-        script = self.read_root("OPEN_AIVY_WEB.bat")
-        lowered = script.lower()
-        self.assertIn('set "channel=develop"', lowered)
-        self.assertIn("git clone --branch", lowered)
-        self.assertIn('git -c "%dest%" status --porcelain --untracked-files=all', lowered)
-        self.assertIn('git -c "%dest%" merge --ff-only "origin/%channel%"', lowered)
-        self.assertIn("call aivy_web.bat", lowered)
-        self.assertNotIn("reset --hard", lowered)
-        self.assertNotIn("clean -fd", lowered)
+        """ZIP setup delegates Git operations to argv-only Python code."""
+        script = self.read_root("OPEN_AIVY_WEB.bat").lower()
+        helper = self.read_root("src/tools/ivy_bootstrap.py")
+        self.assertIn("src.tools.ivy_bootstrap", script)
+        self.assertIn('"%~dp0."', script)
+        self.assertIn("aivy_web_silent.vbs", script)
+        self.assertIn('"--single-branch"', helper)
+        self.assertIn('"clone"', helper)
+        self.assertIn('"--ff-only"', helper)
+        self.assertIn('"--porcelain"', helper)
+        self.assertIn("shell=False", helper)
+        self.assertIn('AIVY_UPSTREAM_REPO', helper)
+        self.assertNotIn("reset --hard", script + helper)
+        self.assertNotIn("clean -fd", script + helper)
 
     def test_installer_never_discards_local_work(self):
         script = self.read_root("INSTALL_OR_UPDATE.bat")
@@ -71,22 +76,31 @@ class AivyLauncherSafetyTests(unittest.TestCase):
         self.assertNotIn("clean -fd", lowered)
 
     def test_one_click_installers_have_reachable_git_and_missing_repo_paths(self):
-        for name in ("INSTALL_OR_UPDATE.bat", "OPEN_AIVY_WEB.bat"):
-            with self.subTest(script=name):
-                script = self.read_root(name).lower()
-                self.assertIn("if errorlevel 1 goto :no_git" if name.startswith("INSTALL") else "if errorlevel 1 goto :git_missing", script)
-                self.assertEqual(script.count("\n:repo_missing\n"), 1)
-                self.assertEqual(script.count("\n:git_missing\n") if name.startswith("OPEN") else script.count("\n:no_git\n"), 1)
-                self.assertIn('if not defined repo if exist "%~dp0.git"', script)
-                self.assertIn('remote get-url origin', script)
-                self.assertIn("git clone --branch", script)
-                self.assertIn("merge --ff-only", script)
-                self.assertNotIn("reset --hard", script)
-                self.assertNotIn("clean -fd", script)
-                # Successful Git detection must reach update/clone logic before any error exit.
-                after_git_probe = script.split("where git >nul 2>nul", 1)[1]
-                first_routine = after_git_probe.split("\n:update\n", 1)[0]
-                self.assertNotIn("\nexit /b 1\n", first_routine)
+        legacy = self.read_root("INSTALL_OR_UPDATE.bat").lower()
+        self.assertIn("if errorlevel 1 goto :no_git", legacy)
+        self.assertEqual(legacy.count("\n:repo_missing\n"), 1)
+        self.assertIn("remote get-url origin", legacy)
+        self.assertIn("git clone --branch", legacy)
+        self.assertIn("merge --ff-only", legacy)
+        self.assertNotIn("reset --hard", legacy)
+        self.assertNotIn("clean -fd", legacy)
+
+        # The browser-first installer uses the Python helper so ZIP checkouts
+        # can capture the owner's upstream once without batch command injection.
+        web = self.read_root("OPEN_AIVY_WEB.bat").lower()
+        helper = self.read_root("src/tools/ivy_bootstrap.py").lower()
+        self.assertIn("where git >nul 2>nul", web)
+        self.assertIn("if errorlevel 1 goto :git_missing", web)
+        self.assertEqual(web.count("\n:git_missing\n"), 1)
+        self.assertIn("src.tools.ivy_bootstrap", web)
+        self.assertIn('def source_from_checkout(', helper)
+        self.assertIn('remote", "get-url", "origin"', helper)
+        self.assertIn("git_executable", helper)
+        self.assertIn("shell=false", helper)
+        self.assertIn('"clone", "--branch", channel', helper)
+        self.assertIn('"merge", "--ff-only"', helper)
+        self.assertNotIn("reset --hard", web + helper)
+        self.assertNotIn("clean -fd", web + helper)
 
     def test_launcher_runtime_state_is_not_committed(self):
         ignored = self.read_root(".gitignore").splitlines()
