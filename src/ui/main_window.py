@@ -25,14 +25,13 @@ from ..core.workspace_catalog import ConversationStore, ProjectCatalog
 from ..core.aivy_identity import AIVY
 from .remote_window import RemoteWindow
 from .workspace_center import WorkspaceCenter
+from .window_geometry import fit_geometry, work_area
 
 class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         init_db()
         self.title(f"{APP_NAME} v{VERSION}")
-        self.geometry("1140x780")
-        self.minsize(920, 660)
         self.platform = PlatformService()
         self.pm = ProjectManager()
         self.maintenance = MaintenanceInspector()
@@ -122,8 +121,9 @@ class MainWindow(tk.Tk):
 
     def _build(self):
         self._configure_styles()
-        self.geometry("1280x820")
-        self.minsize(680, 440)
+        area = work_area(self)
+        self.geometry(fit_geometry(area))
+        self.minsize(min(360, area[2] - 48), min(440, area[3] - 100))
 
         shell = tk.Frame(self, bg="#FBFBFC")
         shell.pack(fill="both", expand=True)
@@ -190,18 +190,20 @@ class MainWindow(tk.Tk):
         self.menu_button = ttk.Button(header, text="☰", style="Secondary.TButton", command=self._toggle_sidebar)
         header_left = tk.Frame(header, bg="#FBFBFC")
         self.header_left = header_left
-        header_left.pack(side="left", fill="y", padx=(26, 8))
+        header_left.pack(side="left", fill="both", expand=True, padx=(26, 8))
         self.project_label = tk.Label(
             header_left, text="新しいチャット", bg="#FBFBFC", fg="#17181A",
             font=(self.ui_font_semibold, 12, "bold")
         )
-        self.project_label.pack(anchor="w", pady=(13, 0))
+        self.project_label.pack(fill="x", pady=(13, 0))
+        self.project_label.configure(anchor="w", width=1)
         self.activity_var = tk.StringVar(value="何を作りたいですか？ そのまま話してください")
         self.activity_label = tk.Label(
             header_left, textvariable=self.activity_var, bg="#FBFBFC", fg="#8E8E8E",
             font=(self.ui_font_family, 9)
         )
-        self.activity_label.pack(anchor="w", pady=(2, 0))
+        self.activity_label.pack(fill="x", pady=(2, 0))
+        self.activity_label.configure(anchor="w", width=1)
 
         self.compact_status_var = tk.StringVar(value="準備完了")
         self.compact_status_label = tk.Label(
@@ -213,7 +215,7 @@ class MainWindow(tk.Tk):
 
         header_right = tk.Frame(header, bg="#FBFBFC")
         self.header_right = header_right
-        header_right.pack(side="right", padx=(8, 18), pady=12)
+        header_right.pack(side="right", padx=(8, 18), pady=12, before=header_left)
         self.preview_button = ttk.Button(
             header_right, text="アプリを確認", style="Secondary.TButton", command=self.preview
         )
@@ -300,7 +302,7 @@ class MainWindow(tk.Tk):
             history_wrap, wrap="word", state="disabled", relief="flat", borderwidth=0,
             highlightthickness=0, background="#FBFBFC", foreground="#17181A",
             insertbackground="#202123", font=(self.ui_font_family, 11), padx=18, pady=18,
-            yscrollcommand=scrollbar.set, spacing3=5
+            yscrollcommand=scrollbar.set, spacing3=5, width=1, height=1
         )
         self.chat_history.pack(side="left", fill="both", expand=True)
         scrollbar.configure(command=self.chat_history.yview)
@@ -335,6 +337,7 @@ class MainWindow(tk.Tk):
         self.welcome_panel = tk.Frame(history_wrap, bg="#FBFBFC")
         hero_mark = tk.Canvas(self.welcome_panel, width=96, height=96, bg="#FBFBFC", highlightthickness=0)
         hero_mark.pack(pady=(0, 18))
+        self.hero_mark = hero_mark
         hero_mark.create_oval(7, 7, 89, 89, fill="#F2EEFF", outline="")
         hero_mark.create_oval(18, 18, 78, 78, fill="#E9F8F5", outline="")
         hero_mark.create_oval(29, 29, 67, 67, fill="#17181A", outline="")
@@ -342,18 +345,20 @@ class MainWindow(tk.Tk):
         hero_mark.create_arc(22, 22, 74, 74, start=205, extent=175, style="arc", outline="#18B99A", width=5)
         hero_mark.create_text(48, 48, text="A", fill="#FFFFFF",
                               font=(self.ui_font_semibold, 14, "bold"))
-        tk.Label(
+        self.welcome_title = tk.Label(
             self.welcome_panel, text="Aivyに、何を作ってほしいですか？",
             bg="#FBFBFC", fg="#151618",
             font=(self.ui_font_semibold, 24, "bold")
-        ).pack()
-        tk.Label(
+        )
+        self.welcome_title.pack()
+        self.welcome_description = tk.Label(
             self.welcome_panel,
             text="思いついたことを、そのまま話してください。\n"
                  "設計・生成・テスト・ダウンロードまで、会話の続きで進められます。",
             bg="#FBFBFC", fg="#73767D", justify="center",
             font=(self.ui_font_family, 10)
-        ).pack(pady=(10, 0))
+        )
+        self.welcome_description.pack(pady=(10, 0))
         self.welcome_panel.place(relx=0.5, rely=0.48, anchor="center")
 
         composer_area = tk.Frame(chat_column, bg="#FBFBFC")
@@ -364,6 +369,12 @@ class MainWindow(tk.Tk):
             font=(self.ui_font_family, 9)
         )
         self.composer_hint.pack(anchor="w", padx=2, pady=(0, 6))
+        self.connection_note = tk.Label(
+            composer_area, text="AI未接続 · 返答は定型案内です。上の「AIを設定」から接続できます。",
+            bg="#EEF4F2", fg="#365D52", anchor="w", justify="left",
+            font=(self.ui_font_family, 9), padx=10, pady=6,
+        )
+        self.connection_note.pack(fill="x", pady=(0, 8), before=self.composer_hint)
         composer = tk.Frame(
             composer_area, bg="#FBFBFC", highlightbackground="#C9CDD4",
             highlightcolor="#111827", highlightthickness=1, bd=0
@@ -460,7 +471,7 @@ class MainWindow(tk.Tk):
     def _set_project_actions_visible(self, visible: bool):
         if not hasattr(self, "preview_button"):
             return
-        if visible:
+        if visible and not self._compact_layout:
             if not self.preview_button.winfo_manager():
                 self.preview_button.pack(side="left", padx=3, before=self.ai_button)
             if not self.details_button.winfo_manager():
@@ -476,13 +487,25 @@ class MainWindow(tk.Tk):
     def _refresh_ai_status(self):
         status = self.chat_engine.status()
         if status.connected:
-            label = "AI: " + ("OpenAI" if status.provider == "openai" else "Gemini")
+            label = "AI設定済み"
+            note = f"{status.provider} / {status.model} · 設定済み（疎通は未確認）"
         else:
-            label = "AI未接続"
+            label = "AIを設定"
+            note = "AI未接続 · 返答は定型案内です。上の「AIを設定」から接続できます。"
+        self._connection_note_text = note
+        self._ai_configured = status.connected
+        self._update_connection_note()
         if hasattr(self, "ai_button"):
             self.ai_button.configure(text=label)
         if hasattr(self, "sidebar_ai_button"):
             self.sidebar_ai_button.configure(text=label + "  /  接続設定")
+
+    def _update_connection_note(self):
+        note = getattr(self, "_connection_note_text", "AI未接続・定型案内のみ")
+        if self.winfo_width() < 500:
+            note = ("AI設定済み・疎通は未確認" if getattr(self, "_ai_configured", False)
+                    else "AI未接続・定型案内のみ")
+        self.connection_note.configure(text=note)
 
     def _open_ai_settings(self):
         cfg = self.chat_engine.settings()
@@ -491,17 +514,27 @@ class MainWindow(tk.Tk):
         win.title("AI接続")
         win.transient(self)
         win.grab_set()
-        win.geometry("520x390")
-        win.minsize(460, 350)
-        body = tk.Frame(win, bg="#FBFBFC")
-        body.pack(fill="both", expand=True, padx=24, pady=22)
+        win.geometry(fit_geometry(work_area(self), (520, 620)))
+        win.minsize(320, 340)
+        # Reserve the actions before the scrollable form, including high DPI.
+        buttons = tk.Frame(win, bg="#FBFBFC")
+        buttons.pack(side="bottom", fill="x", padx=16, pady=10)
+        form = tk.Canvas(win, bg="#FBFBFC", highlightthickness=0)
+        scroll = ttk.Scrollbar(win, orient="vertical", command=form.yview)
+        scroll.pack(side="right", fill="y")
+        form.pack(fill="both", expand=True)
+        form.configure(yscrollcommand=scroll.set)
+        body = tk.Frame(form, bg="#FBFBFC", padx=16, pady=16)
+        body_id = form.create_window(0, 0, window=body, anchor="nw")
+        form.bind("<Configure>", lambda e: form.itemconfigure(body_id, width=e.width))
+        body.bind("<Configure>", lambda e: form.configure(scrollregion=form.bbox("all")))
 
         tk.Label(body, text="AIモデルを接続", bg="#FBFBFC", fg="#111827",
-                 font=(self.ui_font_semibold, 16, "bold")).pack(anchor="w")
+                 font=(self.ui_font_semibold, 16, "bold"), wraplength=260).pack(anchor="w")
         tk.Label(
             body,
-            text="OpenAI または Gemini を接続すると、雑談・相談・要件整理を本物のLLMで行えます。\nAPIキーはWindows上ではDPAPIで暗号化して保存します。",
-            bg="#FBFBFC", fg="#6B7280", justify="left", wraplength=455,
+            text="1. プロバイダーを選択\n2. モデルとAPIキーを入力\n3. 保存してチャットで応答を確認\nAPI利用料金は各サービスで発生します。",
+            bg="#FBFBFC", fg="#6B7280", justify="left", wraplength=260,
             font=(self.ui_font_family, 9)
         ).pack(anchor="w", pady=(6, 16))
 
@@ -525,17 +558,14 @@ class MainWindow(tk.Tk):
         key.pack(fill="x", pady=(5, 4))
         tk.Label(
             body,
-            text=("接続済み。変更しない場合は空欄のままでOK。" if status.connected else
+            text=("設定済み（疎通未確認）。キーを維持する場合は空欄。" if status.connected else
                   "ChatGPT/Geminiの通常契約とは別に、各APIのキーが必要です。"),
-            bg="#FBFBFC", fg="#8A8F98", font=(self.ui_font_family, 8)
+            bg="#FBFBFC", fg="#687078", font=(self.ui_font_family, 8), wraplength=260, justify="left"
         ).pack(anchor="w", pady=(0, 14))
 
         remember_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(body, text="このWindowsユーザーに暗号化して保存",
+        ttk.Checkbutton(body, text="キーを暗号化して保存",
                         variable=remember_var).pack(anchor="w")
-
-        buttons = tk.Frame(body, bg="#FBFBFC")
-        buttons.pack(fill="x", pady=(20, 0))
 
         def save():
             try:
@@ -547,7 +577,7 @@ class MainWindow(tk.Tk):
                 )
                 self._refresh_ai_status()
                 win.destroy()
-                self._set_progress("idle", "AI接続を更新しました", self.chat_engine.status().detail)
+                self._set_progress("idle", "AI設定を保存しました", "チャットを送信して応答を確認してください")
             except Exception as exc:
                 messagebox.showerror("AI接続", str(exc), parent=win)
 
@@ -597,9 +627,10 @@ class MainWindow(tk.Tk):
         status = self.chat_engine.status()
         if not status.connected:
             local = self.chat_partner.opening_response(text) or (
-                "AIモデルがまだ接続されていません。右上の「AI未接続」からOpenAIまたはGeminiを接続すると、"
+                "AIモデルがまだ接続されていません。上の「AIを設定」からOpenAIまたはGeminiを接続すると、"
                 "ここで自然な相談や会話ができます。アプリ制作の要件整理は未接続でも続けられます。"
             )
+            local = "【AI未接続・定型案内】\n" + local
             self._append_chat("assistant", local)
             self._record_chat_message("assistant", local)
             self._set_progress("idle", "AI未接続", "AI接続からOpenAIまたはGeminiを設定できます")
@@ -630,7 +661,13 @@ class MainWindow(tk.Tk):
     def _on_window_resize(self, event):
         if event.widget is not self:
             return
-        self.after_idle(lambda: self._apply_responsive_layout(event.width, event.height))
+        if getattr(self, "_resize_job", None):
+            self.after_cancel(self._resize_job)
+        self._resize_job = self.after_idle(self._resize_current_window)
+
+    def _resize_current_window(self):
+        self._resize_job = None
+        self._apply_responsive_layout(self.winfo_width(), self.winfo_height())
 
     def _apply_responsive_layout(self, width: int, height: int):
         compact = width < 980
@@ -639,12 +676,17 @@ class MainWindow(tk.Tk):
         very_low = height < 520
         self._compact_layout = compact
 
-        if compact and not self._sidebar_manual_open:
-            if self.sidebar.winfo_manager():
-                self.sidebar.pack_forget()
+        if compact:
+            self.sidebar.pack_forget()
+            if self._sidebar_manual_open:
+                self.sidebar.place(x=0, y=62, width=min(250, width - 60), relheight=1, height=-62)
+                self.sidebar.lift()
+            else:
+                self.sidebar.place_forget()
             if not self.menu_button.winfo_manager():
                 self.menu_button.pack(side="left", padx=(12, 0), pady=10, before=self.header_left)
         else:
+            self.sidebar.place_forget()
             if not self.sidebar.winfo_manager():
                 self.sidebar.pack(side="left", fill="y", before=self.main_frame)
             if not compact and self.menu_button.winfo_manager():
@@ -657,27 +699,29 @@ class MainWindow(tk.Tk):
         elif not self.progress_card.winfo_manager():
             self.progress_card.pack(fill="x", padx=24, pady=(12, 0), before=self.workspace)
 
-        if very_compact:
-            if self.header_right.winfo_manager():
-                self.header_right.pack_forget()
-            self.header_left.pack_configure(padx=(10, 6))
-        else:
-            if not self.header_right.winfo_manager():
-                self.header_right.pack(side="right", padx=(8, 18), pady=12)
-            self.header_left.pack_configure(padx=(26, 8))
+        # The connection action must never disappear with the secondary tools.
+        self.header_right.pack_configure(padx=(4, 8), pady=4)
+        self.header_left.pack_configure(padx=(10, 6) if compact else (26, 8))
+        for button in (self.preview_button, self.details_button, self.download_button):
+            if compact:
+                button.pack_forget()
+            elif self.current_slug and not button.winfo_manager():
+                button.pack(side="left", padx=3, before=self.ai_button)
 
         if low_height:
             if self.activity_label.winfo_manager():
                 self.activity_label.pack_forget()
-            if not self.compact_status_label.winfo_manager():
+            if not very_compact and not self.compact_status_label.winfo_manager():
                 self.compact_status_label.pack(side="right", padx=(4, 12), pady=10)
+            elif very_compact:
+                self.compact_status_label.pack_forget()
             self.header.configure(height=48)
             self.project_label.pack_configure(pady=(12, 0))
         else:
             if self.compact_status_label.winfo_manager():
                 self.compact_status_label.pack_forget()
             if not self.activity_label.winfo_manager():
-                self.activity_label.pack(anchor="w", pady=(2, 0))
+                self.activity_label.pack(fill="x", pady=(2, 0))
             self.header.configure(height=62)
             self.project_label.pack_configure(pady=(13, 0))
 
@@ -705,6 +749,20 @@ class MainWindow(tk.Tk):
             self.chat_history.tag_configure("assistant", lmargin1=12, lmargin2=12, rmargin=155)
 
         self._sync_welcome_visibility()
+        content_width = max(200, width - (0 if compact else 250) - 100)
+        self.connection_note.configure(wraplength=content_width)
+        self._update_connection_note()
+        self.welcome_title.configure(wraplength=content_width,
+                                     font=(self.ui_font_semibold, 16 if compact else 24, "bold"))
+        self.welcome_description.configure(wraplength=content_width)
+        if low_height:
+            self.hero_mark.pack_forget()
+            self.welcome_description.pack_forget()
+        else:
+            if not self.hero_mark.winfo_manager():
+                self.hero_mark.pack(pady=(0, 18), before=self.welcome_title)
+            if not self.welcome_description.winfo_manager():
+                self.welcome_description.pack(pady=(10, 0))
 
         # At very small heights, trim labels before reducing the actual input field.
         if very_low:
@@ -712,7 +770,7 @@ class MainWindow(tk.Tk):
                 self.composer_hint.pack_forget()
             if self.composer_help.winfo_manager():
                 self.composer_help.pack_forget()
-            self.instruction.configure(height=3)
+            self.instruction.configure(height=2)
             self.composer_area.grid_configure(pady=(2, 8))
         else:
             if not self.composer_hint.winfo_manager():
@@ -721,17 +779,12 @@ class MainWindow(tk.Tk):
                 self.composer_help.pack(side="left")
             self.instruction.configure(height=4)
 
-        # Grid row 0 is the only row allowed to shrink/grow. Composer row 2 stays requested-size.
+        # Only the history row grows; the composer keeps its requested size.
         self.chat_column.grid_rowconfigure(0, weight=1, minsize=56 if very_low else 80)
         self.update_idletasks()
 
     def _toggle_sidebar(self):
-        if self.sidebar.winfo_manager():
-            self.sidebar.pack_forget()
-            self._sidebar_manual_open = False
-        else:
-            self.sidebar.pack(side="left", fill="y", before=self.main_frame)
-            self._sidebar_manual_open = True
+        self._sidebar_manual_open = not self._sidebar_manual_open
         self.after_idle(lambda: self._apply_responsive_layout(self.winfo_width(), self.winfo_height()))
 
     def _toggle_details(self):

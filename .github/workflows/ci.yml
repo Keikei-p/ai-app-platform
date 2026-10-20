@@ -39,7 +39,14 @@ jobs:
       - name: LAN remote acceptance
         run: python -m src.tools.remote_acceptance_test
       - name: Chat composer GUI acceptance
-        run: python -m src.tools.chat_gui_acceptance_test
+        shell: pwsh
+        run: |
+          foreach ($scale in @('1.333', '2.0', '2.667')) {
+            $env:IVY_TEST_TK_SCALING = $scale
+            Write-Host "Tk font scaling: $scale (simulated, not physical DPI acceptance)"
+            python -m src.tools.chat_gui_acceptance_test
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: SNS automation acceptance
         run: python -m src.tools.social_automation_acceptance
       - name: Platform local API acceptance
