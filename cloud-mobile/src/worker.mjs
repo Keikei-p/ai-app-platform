@@ -1,6 +1,8 @@
 import { authorizeOwner } from "./owner-auth.mjs";
+import { compileStaticPreview, GENERATOR_KIND } from "./static-preview.mjs";
 
 const LIMIT_PER_DAY = 10;
+const REQUEST_ACTION = /^\/api\/v1\/requests\/([a-f0-9-]{36})\/(build-preview|preview|download|cancel)$/i;
 const HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "private, no-store",
@@ -68,6 +70,90 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
   if (!env?.DB) return reply({ ok: false, error: "database_not_configured" }, 503);
   const db = env.DB;
   try {
+    // Only this fixed, escaped HTML template executes in a Worker.
+    // An LLM/sandboxed build runner is NOT present, and is never implied.
+    const action = pathname.match(REQUEST_ACTION);
+    if (action) {
+      const id = action[1];
+      const operation = action[2];
+      const record = await db.prepare(
+        "SELECT id,mode,prompt,status FROM ivy_requests WHERE id=? AND owner_email=?"
+      ).bind(id, owner.email).first();
+      if (!record) return reply({ok:false,error:"not_found"},404);
+      if (request.method === "GET" && ["preview","download"].includes(operation)) {
+        const artifact = await db.prepare(
+          "SELECT generator,html,checks_json FROM ivy_static_previews " +
+          "WHERE request_id=? AND owner_email=?"
+        ).bind(id, owner.email).first();
+        if (!artifact || record.status !== "template_ready")
+          return reply({ok:false,error:"preview_not_ready"},404);
+        const headers = new Headers({
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "private, no-store",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "content-security-policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; " +
+            "script-src 'none'; connect-src 'none'; form-action 'none'; " +
+            "base-uri 'none'; frame-ancestors 'self'",
+        });
+        if (operation === "download")
+          headers.set("content-disposition", 'attachment; filename="ivy-static-preview.html"');
+        return new Response(artifact.html, {status:200,headers});
+      }
+      if (request.method === "POST" && operation === "cancel") {
+        sameOriginJson(request);
+        const body = await readBody(request);
+        if (body?.confirm !== "cancel_pending") return reply({ok:false,error:"confirmation_required"},400);
+        const result = await db.prepare(
+          "UPDATE ivy_requests SET status='cancelled' " +
+          "WHERE id=? AND owner_email=? AND status='awaiting_hosted_worker'"
+        ).bind(id,owner.email).run();
+        if (!result.meta?.changes)
+          return reply({ok:false,error:"cannot_cancel_finished_or_changed_request"},409);
+        return reply({ok:true,request_id:id,status:"cancelled"});
+      }
+      if (request.method === "POST" && operation === "build-preview") {
+        sameOriginJson(request);
+        const body = await readBody(request);
+        if (body?.confirm !== "generate_static_template")
+          return reply({ok:false,error:"explicit_approval_required"},400);
+        if (record.mode !== "web") return reply({ok:false,error:"web_template_only"},409);
+        if (record.status === "template_ready")
+          return reply({ok:true,reused:true,request_id:id,status:"template_ready",generator:GENERATOR_KIND});
+        if (record.status !== "awaiting_hosted_worker")
+          return reply({ok:false,error:"request_not_pending"},409);
+        const {html,checks,generator} = compileStaticPreview(record);
+        // One atomic D1 batch: preview + status transition. The SQL WHERE
+        // clauses gate cancelled requests, another worker, and emergency pause.
+        const [created,marked] = await db.batch([
+          db.prepare(
+            "INSERT OR IGNORE INTO ivy_static_previews " +
+            "(request_id,owner_email,generator,html,checks_json,created_at) " +
+            "SELECT id,owner_email,?,?,?,? FROM ivy_requests " +
+            "WHERE id=? AND owner_email=? AND status='awaiting_hosted_worker' AND mode='web' " +
+            "AND EXISTS(SELECT 1 FROM ivy_control WHERE id=1 AND paused=0)"
+          ).bind(generator,html,JSON.stringify(checks),Math.floor(Date.now()/1000),id,owner.email),
+          db.prepare(
+            "UPDATE ivy_requests SET status='template_ready' " +
+            "WHERE id=? AND owner_email=? AND status='awaiting_hosted_worker' " +
+            "AND EXISTS(SELECT 1 FROM ivy_static_previews " +
+            "WHERE ivy_static_previews.request_id=ivy_requests.id " +
+            "AND ivy_static_previews.owner_email=ivy_requests.owner_email)"
+          ).bind(id,owner.email)
+        ]);
+        if (!marked.meta?.changes) {
+          const latest = await db.prepare(
+            "SELECT status FROM ivy_requests WHERE id=? AND owner_email=?"
+          ).bind(id,owner.email).first();
+          if (latest?.status === "template_ready")
+            return reply({ok:true,reused:true,request_id:id,status:"template_ready",generator});
+          return reply({ok:false,error:"paused_or_request_changed"},409);
+        }
+        return reply({ok:true,reused:false,request_id:id,status:"template_ready",
+          generator,checks,ai_generated:false,tests:"template_integrity_only"},201);
+      }
+      return reply({ok:false,error:"method_not_allowed"},405);
+    }
     if (request.method === "GET" && pathname === "/api/v1/status") {
       const [control, totals] = await Promise.all([
         db.prepare("SELECT paused FROM ivy_control WHERE id=1").first(),
@@ -75,11 +161,12 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
           .bind(owner.email, utcDay()).first(),
       ]);
       return reply({
-        ok: true, mode: "cloud_intake_only", hosted_worker_connected: false,
-        generation_enabled: false, publishing_enabled: false,
+        ok: true, mode: "cloud_intake_with_static_preview", hosted_worker_connected: false,
+        generation_enabled: false, ai_generation_enabled: false,
+        static_preview_enabled: true, publishing_enabled: false,
         paused: control?.paused !== 0, requests_today: Number(totals?.today || 0),
         daily_limit: LIMIT_PER_DAY,
-        note: "依頼の保存・確認のみ。コード生成と自動公開は未接続です。",
+        note: "Web依頼の固定HTMLテンプレート生成・プレビューに対応。AIコード生成、ビルド、公開は未接続です。",
       });
     }
     if (request.method === "GET" && pathname === "/api/v1/requests") {
@@ -126,7 +213,8 @@ export async function handleRequest(request, env, ownerAuth = authorizeOwner, ct
   } catch (error) {
     if (error instanceof SyntaxError || [
       "invalid_origin","invalid_body","invalid_prompt","invalid_mode",
-      "invalid_key","request_too_large"
+      "invalid_key","request_too_large","unsupported_preview_request",
+      "preview_validation_failed"
     ].includes(error?.message)) return reply({ ok: false, error: "invalid_request" }, 400);
     if (error?.message && /UNIQUE constraint failed/.test(error.message))
       return reply({ ok:false, error:"duplicate_submission_retry_with_same_id" }, 409);
