@@ -1,6 +1,6 @@
 "use strict";
 const $ = id => document.getElementById(id);
-const state = { loading:false, sending:false, accepting:false, pendingKey:null, resumeAllowed:false };
+const state = { loading:false, sending:false, accepting:false, pendingKey:null, resumeAllowed:false, aiLandingEnabled:false };
 function text(id, value) { $(id).textContent = value; }
 async function api(path, options = {}) {
   const response = await fetch(path, { credentials:"same-origin", cache:"no-store", ...options });
@@ -51,6 +51,25 @@ function showRequests(items) {
           finally{generate.disabled=false;}
         };
         actions.append(generate);
+      }
+      if(state.aiLandingEnabled && item.mode==="web"){
+        const assisted=document.createElement("button");assisted.type="button";
+        assisted.className="quiet";assisted.textContent="AIで紹介ページ案を作る（1回）";
+        assisted.onclick=async()=>{
+          if(!confirm("この制作依頼の内容をCloudflare Workers AIへ送信します。アカウントの利用状況次第で料金がかかる可能性があります。1日1回の上限で実行しますか？"))return;
+          assisted.disabled=true;
+          try{
+            const output=await api("/api/v1/requests/"+encodeURIComponent(item.id)+"/ai-landing",{
+              method:"POST",headers:{"content-type":"application/json"},
+              body:JSON.stringify({confirm:"use_cloudflare_ai_once"})
+            });
+            text("message",output.ai_assisted?"AI補助の紹介ページ案を作りました。プレビューで文章を確認してください。":"結果を確認できません。");
+            await refresh();
+          }catch(e){
+            text("message","AI補助の生成は完了できませんでした: "+e.message+"。自動再実行はしません。");
+          }finally{assisted.disabled=false;}
+        };
+        actions.append(assisted);
       }
       const cancel = document.createElement("button");
       cancel.type="button";cancel.className="quiet";cancel.textContent="依頼を中止";
@@ -109,6 +128,7 @@ async function refresh() {
     ]);
     state.accepting = !status.paused;
     state.resumeAllowed = !!status.resume_enabled;
+    state.aiLandingEnabled = !!status.ai_landing_enabled;
     $("resume").hidden = !status.resume_enabled || !status.paused;
     text("connection","クラウドに接続しました");
     text("workerState", status.hosted_worker_connected ? "接続済み" : "未接続");
@@ -118,6 +138,7 @@ async function refresh() {
   } catch(e) {
     state.accepting=false;
     $("resume").hidden=true;
+    state.aiLandingEnabled=false;
     text("connection", e.message==="owner_login_required" ?
       "OWNER認証が必要です。Cloudflare Accessのログインを確認してください。" :
       "接続または設定に問題があります。");
