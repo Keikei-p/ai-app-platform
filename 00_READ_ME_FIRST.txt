@@ -1,6 +1,20 @@
 Aivy 0.8.0 - Windows 10/11 quick start
 =======================================
 
+[ZIP users: enable AUTO UPDATES only once]
+    Double-click OPEN_AIVY_WEB.bat from the extracted ZIP folder.
+    At the first prompt paste the HTTPS Git repository URL supplied by
+    your distributor (for example https://github.com/account/repository.git).
+    This creates %USERPROFILE%\Aivy-Latest (or Aivy-Latest-Git),
+    keeping the old ZIP and AppData project database untouched.
+
+    From then on double-click AIVY_WEB_SILENT.vbs in the installed folder.
+    GitHub is checked automatically at each *cold server start*.
+    If Ivy is already running, the shortcut opens that server instead;
+    source updates are deferred until Ivy is stopped and relaunched.
+    Offline or local changes: preserve the current installed version.
+    The Git remote belongs to each buyer/owner, not the Ivy product.
+
 [Most convenient] Double-click AIVY_DESKTOP_SILENT.vbs
     Opens the normal desktop GUI without flashing a BAT/PowerShell window.
     Safely updates source code from the Git branch when possible; no hard reset.
