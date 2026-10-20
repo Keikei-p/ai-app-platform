@@ -19,9 +19,9 @@
 <label for="template">すぐ使えるテンプレート</label>
 <select id="template"><option value="auto">依頼内容から自動判定</option><option value="todo">ToDo管理Webアプリ</option><option value="notes">メモ管理Webアプリ</option><option value="landing">紹介ページ（静的HTML）</option></select>
 <label for="prompt">Ivyへの依頼</label>
-<textarea id="prompt" maxlength="1200" required placeholder="例：スマホで予約管理ができるシンプルなWebアプリを作りたい。ログインと一覧画面が必要。"></textarea>
+<textarea id="prompt" maxlength="1200" required placeholder="例：スマホでも使いやすいToDo管理Webアプリを作って。期限と優先度も使いたい。"></textarea>
 <label class="inline-option" for="quickGenerate"><input type="checkbox" id="quickGenerate" checked> 保存後にテンプレートも生成する（Webのみ・要確認）</label>
-<button id="submit" class="primary" type="submit" disabled>制作依頼を保存する</button>
+<button id="submit" class="primary" type="submit" disabled>制作依頼を送信する</button>
 <p id="message" role="status" aria-live="polite"></p>
 </form>
 <p class="note">ToDo・メモWebアプリの既定テンプレートでは実際に操作できます。AIが任意のアプリを開発したわけではなく、APK/iOS・公開も未接続です。テンプレート内のデータは、HTMLダウンロード後に保存・JSONバックアップできます。</p>
@@ -30,8 +30,8 @@
 <div class="flex"><h2 id="historyTitle">依頼履歴</h2><span class="pill">直近30件</span></div>
 <div id="requests" aria-live="polite">読み込み中…</div></section>
 <section class="card" id="previewSection" hidden aria-labelledby="previewTitle">
-<div class="flex"><h2 id="previewTitle">静的HTMLプレビュー</h2><button type="button" id="closePreview" class="quiet">閉じる</button></div>
-<p class="note">固定テンプレートの表示検証用です。AI生成されたアプリや実機ビルドではありません。スクリプト・通信を禁止した隔離フレームで確認します。</p>
+<div class="flex"><h2 id="previewTitle">Webアプリ・HTMLプレビュー</h2><button type="button" id="closePreview" class="quiet">閉じる</button></div>
+<p class="note">固定テンプレートの表示検証用です。AI生成されたアプリや実機ビルドではありません。安全確認済みのToDo・メモ用スクリプトのみ隔離環境で動作します。外部通信とデータ共有は遮断され、プレビュー内の保存は利用できない場合があります。</p>
 <iframe id="previewFrame" title="Ivy isolated preview" sandbox="allow-scripts allow-downloads" loading="lazy" referrerpolicy="no-referrer"></iframe>
 </section>
 <section class="card" id="safety"><h2>安全管理</h2><p class="muted">誤操作やトラブルが起きたら、新しい依頼の受付を停止できます。既存の保存データは削除しません。</p>
