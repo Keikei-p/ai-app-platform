@@ -107,6 +107,27 @@ class LanguageUnderstandingEngine:
         "mainに直接", "強制push", "force push", "公開して", "本番公開",
     )
 
+    # '削除' often names a CRUD feature rather than a command to erase data.
+    # Exempt only explicit application-feature specifications. Executable
+    # deletion requests and all other high-risk terms retain their gates.
+    _FEATURE_DELETE = re.compile(
+        r"削除(?:機能|ボタン|操作|画面|ができる|できる|可能)"
+        r"|(?:追加|登録|作成|編集|更新)[・/／、,\\sと]+"
+        r"(?:編集[・/／、,\\sと]+)?削除(?=[・/／、,\\sと]|できる|可能|機能|$)"
+    )
+    _DIRECT_DELETE = re.compile(
+        r"削除(?:して|しろ|してください|してから|した後|を実行|を開始|しといて)"
+    )
+    _FEATURE_CONTEXT = (
+        "アプリ", "web", "ウェブ", "サイト", "システム", "ツール",
+        "フォーム", "ui", "画面", "機能", "todo", "to-do",
+    )
+    _DESIGN_CONTEXT = (
+        "作って", "作りたい", "作成して", "実装して", "実装したい",
+        "開発して", "開発したい", "設計して", "機能", "できるように",
+        "備えた", "対応した", "使える", "追加して",
+    )
+
     REFERENCE_TERMS: tuple[str, ...] = (
         "あれ", "それ", "これ", "さっきの", "前の", "昨日の",
         "あの画面", "あのボタン", "そこ", "こっち",
@@ -127,7 +148,20 @@ class LanguageUnderstandingEngine:
             term for term in self.REFERENCE_TERMS if term in interpreted.lower()
         )
         mode = self._detect_mode(interpreted, context or {})
-        dangerous = any(term in interpreted.lower() for term in self.RISK_TERMS)
+        lowered = interpreted.lower()
+        # A request such as "ToDoアプリを作って。タスクの追加・編集・削除
+        # ができるようにして" describes *future app behavior*. It must not
+        # be treated as an instruction to delete Ivy data right now.
+        is_feature_spec = (
+            any(word in lowered for word in self._FEATURE_CONTEXT)
+            and any(word in lowered for word in self._DESIGN_CONTEXT)
+            and self._FEATURE_DELETE.search(lowered) is not None
+            and self._DIRECT_DELETE.search(lowered) is None
+        )
+        dangerous = any(
+            term in lowered and not (term == "削除" and is_feature_spec)
+            for term in self.RISK_TERMS
+        )
 
         confidence = 0.94
         if fuzzy:
