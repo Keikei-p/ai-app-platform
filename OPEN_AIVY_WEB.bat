@@ -25,7 +25,7 @@ if not errorlevel 1 set "PY=py -3"
 if not defined PY goto :python_missing
 
 :install
-%PY% -m src.tools.ivy_bootstrap --source-folder "%~dp0"
+%PY% -m src.tools.ivy_bootstrap --source-folder "%~dp0."
 if errorlevel 1 goto :failed
 
 set "DEST=%USERPROFILE%\Aivy-Latest"
