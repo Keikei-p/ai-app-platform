@@ -17,7 +17,7 @@ function readExampleConfig() {
 test("Wrangler example parses and preserves the mandatory D1 binding",()=>{
   const c=readExampleConfig();
   assert.equal(c.name,"ivy-mobile-intake-staging");
-  assert.equal(c.workers_dev,true);
+  assert.equal(c.workers_dev,false);
   assert.equal(c.assets.directory,"./web");
   assert.equal(c.assets.binding,"ASSETS");
   assert.equal(c.assets.run_worker_first,true);
