@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101827"><meta name="description" content="Ivy — スマホからアプリ制作を管理">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="stylesheet" href="/styles.css"><title>Ivy — Mobile Studio</title>
+</head><body>
+<main>
+<header><div><p class="eyebrow">IVY · MOBILE STUDIO</p><h1>つくりたいものを、<br>ここから。</h1><p class="muted">スマホから制作依頼を保存し、進捗を確認するためのクラウド入口です。</p></div><span class="circle" aria-hidden="true">✦</span></header>
+<section class="card" id="home" aria-labelledby="statusTitle">
+<div class="flex"><h2 id="statusTitle">接続と実行状態</h2><button type="button" class="quiet" id="reload">更新</button></div>
+<p id="connection" role="status">接続を確認中…</p><p id="modeMessage" class="note">クラウド生成機能の接続状態を取得しています。</p>
+<div class="metrics"><div><small>本日の依頼</small><strong id="dailyCount">—</strong></div><div><small>生成エンジン</small><strong id="workerState">未確認</strong></div></div>
+</section>
+<section class="card" id="create" aria-labelledby="createTitle">
+<div class="flex"><h2 id="createTitle">新しい制作依頼</h2><span class="pill">保存・受付</span></div>
+<form id="requestForm"><label for="mode">何を作りたい？</label>
+<select id="mode"><option value="web">Webサイト / Webアプリ</option><option value="app">スマホアプリ</option></select>
+<label for="prompt">Ivyへの依頼</label>
+<textarea id="prompt" maxlength="1200" required placeholder="例：スマホで予約管理ができるシンプルなWebアプリを作りたい。ログインと一覧画面が必要。"></textarea>
+<button id="submit" class="primary" type="submit" disabled>依頼内容を保存</button>
+<p id="message" role="status" aria-live="polite"></p>
+</form>
+<p class="note">現在は依頼の保存・閲覧のみ。アプリ生成や公開は、クラウド実行エンジンを接続するまでは実行しません。</p>
+</section>
+<section class="card" id="history" aria-labelledby="historyTitle">
+<div class="flex"><h2 id="historyTitle">依頼履歴</h2><span class="pill">直近30件</span></div>
+<div id="requests" aria-live="polite">読み込み中…</div></section>
+<section class="card" id="safety"><h2>安全管理</h2><p class="muted">誤操作やトラブルが起きたら、新しい依頼の受付を停止できます。既存の保存データは削除しません。</p>
+<button type="button" id="stop" class="danger">新規受付を停止する</button><p id="stopResult" role="status"></p></section>
+<footer>IVY · PC-OFF READY INTAKE · FREE-FIRST<br>保存成功とAI生成成功を混同しません</footer>
+</main>
+<nav class="dock" aria-label="画面内メニュー"><a href="#home">ホーム</a><a href="#create">依頼する</a><a href="#history">履歴</a><a href="#safety">安全管理</a></nav>
+<script type="module" src="/app.mjs"></script>
+</body></html>
