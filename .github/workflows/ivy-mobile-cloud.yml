@@ -1,0 +1,29 @@
+name: Ivy Mobile Cloud checks
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'cloud-mobile/**'
+      - '.github/workflows/ivy-mobile-cloud.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'cloud-mobile/**'
+      - '.github/workflows/ivy-mobile-cloud.yml'
+permissions:
+  contents: read
+jobs:
+  cloud-mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax checks
+        run: npm --prefix cloud-mobile run check
+      - name: Cloud API and PWA security tests
+        run: npm --prefix cloud-mobile test
+      - name: D1 migration schema and data-safety smoke
+        run: python3 cloud-mobile/tests/db_migration_smoke.py

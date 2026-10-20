@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "Ivy — Mobile Studio",
+  "short_name": "Ivy",
+  "description": "スマホでWeb制作依頼、固定Webアプリの生成とプレビューを管理するIvyクラウド入口",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1320",
+  "theme_color": "#101827",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

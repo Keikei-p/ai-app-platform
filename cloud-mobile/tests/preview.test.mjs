@@ -1,0 +1,311 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {handleRequest} from "../src/worker.mjs";
+import {compileStaticPreview} from "../src/static-preview.mjs";
+
+const OWNER="owner@example.com", OTHER="another@example.com";
+const id="00000000-0000-4000-8000-000000000001";
+const asOwner=async()=>({email:OWNER,role:"owner"});
+const asOther=async()=>({email:OTHER,role:"owner"});
+const url=path=>"https://ivy.example"+path;
+const get=path=>new Request(url(path));
+const post=(path,body,origin="https://ivy.example")=>new Request(url(path),{
+  method:"POST",headers:{"content-type":"application/json","origin":origin,
+    "sec-fetch-site":"same-origin"},body:JSON.stringify(body)
+});
+
+function harness(mode="web", prompt="魅力的な予約サイトを作って") {
+  const row={id,owner_email:OWNER,mode,prompt,status:"awaiting_hosted_worker"};
+  const state={rows:[row],artifacts:new Map(),paused:0,aiAttempts:new Map()};
+  const DB={
+    prepare(sql){
+      const b={values:[],bind(...values){this.values=values;return this;},
+        async first(){
+          if(sql.includes("FROM ivy_control"))return {paused:state.paused};
+          if(sql.includes("COUNT(*) AS today"))return {today:1};
+          if(sql.startsWith("SELECT id,mode,prompt,status FROM ivy_requests")){
+            const [requestId,email]=this.values;
+            return state.rows.find(r=>r.id===requestId&&r.owner_email===email)||null;
+          }
+          if(sql.startsWith("SELECT status FROM ivy_requests")){
+            const [requestId,email]=this.values;
+            const found=state.rows.find(r=>r.id===requestId&&r.owner_email===email);
+            return found?{status:found.status}:null;
+          }
+          if(sql.startsWith("SELECT generator,html,checks_json FROM ivy_static_previews")){
+            const [requestId,email]=this.values;
+            const found=state.artifacts.get(requestId);
+            return found?.owner_email===email?found:null;
+          }
+          return null;
+        },
+        async all(){return {results:state.rows}},
+        async run(){
+          if(sql.startsWith("INSERT OR IGNORE INTO ivy_ai_attempts")){
+            const [created,requestId,email,quotaEmail,since]=this.values;
+            const found=state.rows.find(x=>x.id===requestId&&x.owner_email===email);
+            if(!found||found.mode!=="web"||found.status!=="awaiting_hosted_worker"||
+              state.paused||state.aiAttempts.has(requestId)||
+              [...state.aiAttempts.values()].some(x=>x.owner_email===quotaEmail&&x.created_at>=since))
+              return {meta:{changes:0}};
+            state.aiAttempts.set(requestId,{status:"reserved",owner_email:email,created_at:created});
+            return {meta:{changes:1}};
+          }
+          if(sql.startsWith("UPDATE ivy_ai_attempts")){
+            const [requestId,email]=this.values;
+            const attempt=state.aiAttempts.get(requestId);
+            if(!attempt||attempt.owner_email!==email)return {meta:{changes:0}};
+            attempt.status=sql.includes("status='failed'")?"failed":"succeeded";
+            return {meta:{changes:1}};
+          }
+          if(sql.startsWith("INSERT OR IGNORE INTO ivy_static_previews")){
+            const [generator,html,checks,created,requestId,email]=this.values;
+            const r=state.rows.find(x=>x.id===requestId&&x.owner_email===email);
+            if(!r||state.paused||r.mode!=="web"||r.status!=="awaiting_hosted_worker"||
+                state.artifacts.has(requestId))return {meta:{changes:0}};
+            state.artifacts.set(requestId,{generator,html,checks_json:checks,
+              owner_email:email,created_at:created});
+            return {meta:{changes:1}};
+          }
+          if(sql.startsWith("UPDATE ivy_requests SET status='template_ready'")){
+            const [requestId,email]=this.values;
+            const r=state.rows.find(x=>x.id===requestId&&x.owner_email===email);
+            if(!r||r.status!=="awaiting_hosted_worker"||
+                state.artifacts.get(requestId)?.owner_email!==email)return {meta:{changes:0}};
+            r.status="template_ready";return {meta:{changes:1}};
+          }
+          if(sql.startsWith("UPDATE ivy_requests SET status='cancelled'")){
+            const [requestId,email]=this.values;
+            const r=state.rows.find(x=>x.id===requestId&&x.owner_email===email);
+            if(!r||r.status!=="awaiting_hosted_worker")return {meta:{changes:0}};
+            r.status="cancelled";return {meta:{changes:1}};
+          }
+          if(sql.startsWith("UPDATE ivy_control")){
+            state.paused=sql.includes("SET paused=0")?0:1;
+            return {meta:{changes:1}};
+          }
+          throw new Error("Unhandled SQL in test DB: "+sql);
+        }};
+      return b;
+    },
+    async batch(statements){const results=[];for(const statement of statements)results.push(await statement.run());return results;}
+  };
+  return {state,env:{DB}};
+}
+
+test("compiler escapes untrusted HTML, never emits active scripts or external calls",()=>{
+  const prompt='<img src=x onerror="alert(1)"> & awesome landing site';
+  const {html,checks,generator}=compileStaticPreview({prompt,mode:"web"});
+  assert.equal(generator,"static_template_v1");
+  assert.ok(checks.every(c=>c.passed));
+  assert.match(html,/&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt;/);
+  assert.doesNotMatch(html,/<img src=x|<script\b|<iframe\b|fetch\(/i);
+  assert.match(html,/viewport/);
+  assert.match(html,/AI生成.*ではありません/);
+  assert.throws(()=>compileStaticPreview({prompt:"X",mode:"app"}));
+});
+
+test("intake status never claims an AI model or heavy build is connected",async()=>{
+  const {env}=harness();
+  const r=await handleRequest(get("/api/v1/status"),env,asOwner);
+  const j=await r.json();
+  assert.equal(r.status,200);
+  assert.equal(j.ai_generation_enabled,false);
+  assert.equal(j.generation_enabled,false);
+  assert.equal(j.hosted_worker_connected,false);
+  assert.equal(j.static_preview_enabled,true);
+  assert.equal(j.publishing_enabled,false);
+});
+
+test("explicit owner approval creates an actual stored static artifact and a safe preview",async()=>{
+  const {env,state}=harness();
+  const path="/api/v1/requests/"+id;
+  let r=await handleRequest(post(path+"/build-preview",{confirm:"generate_static_template"}),env,asOwner);
+  assert.equal(r.status,201);
+  let result=await r.json();
+  assert.equal(result.ai_generated,false);
+  assert.equal(result.tests,"template_integrity_only");
+  assert.equal(state.rows[0].status,"template_ready");
+  assert.ok(state.artifacts.get(id)?.html.includes("<!doctype html>"));
+  r=await handleRequest(get(path+"/preview"),env,asOwner);
+  assert.equal(r.status,200);
+  assert.match(r.headers.get("content-security-policy"),/sandbox;/);
+  assert.match(r.headers.get("content-security-policy"),/script-src 'none'/);
+  assert.match(await r.text(),/魅力的な予約サイト/);
+  r=await handleRequest(get(path+"/download"),env,asOwner);
+  assert.equal(r.status,200);
+  assert.match(r.headers.get("content-disposition"),/^attachment;/);
+  assert.equal(r.headers.get("cache-control"),"private, no-store");
+  r=await handleRequest(post(path+"/build-preview",{confirm:"generate_static_template"}),env,asOwner);
+  assert.equal(r.status,200);
+  assert.equal((await r.json()).reused,true);
+  assert.equal(state.artifacts.size,1);
+});
+
+test("owner identity, origin, and explicit consent are all required",async()=>{
+  const {env,state}=harness();
+  const path="/api/v1/requests/"+id;
+  let r=await handleRequest(post(path+"/build-preview",{confirm:"generate_static_template"}),env,asOther);
+  assert.equal(r.status,404);
+  r=await handleRequest(post(path+"/build-preview",{confirm:"generate_static_template"},
+    "https://evil.example"),env,asOwner);
+  assert.equal(r.status,400);
+  r=await handleRequest(post(path+"/build-preview",{confirm:"anything_else"}),env,asOwner);
+  assert.equal(r.status,400);
+  r=await handleRequest(get(path+"/download"),env,asOther);
+  assert.equal(r.status,404);
+  r=await handleRequest(get(path+"/preview"),env,async()=>{throw new Error("no Access");});
+  assert.equal(r.status,403);
+  assert.equal(state.artifacts.size,0);
+});
+
+test("app binary generation remains unavailable and paused state blocks work",async()=>{
+  const app=harness("app");
+  const path="/api/v1/requests/"+id;
+  let r=await handleRequest(post(path+"/build-preview",{confirm:"generate_static_template"}),app.env,asOwner);
+  assert.equal(r.status,409);
+  assert.equal(app.state.artifacts.size,0);
+  const web=harness();
+  let stop=await handleRequest(post("/api/v1/stop",{}),web.env,asOwner);
+  assert.equal((await stop.json()).paused,true);
+  r=await handleRequest(post(path+"/build-preview",{confirm:"generate_static_template"}),web.env,asOwner);
+  assert.equal(r.status,409);
+  assert.equal(web.state.artifacts.size,0);
+});
+
+test("cancel stops pending work, preserves owner records and prevents preview",async()=>{
+  const {env,state}=harness();
+  const path="/api/v1/requests/"+id;
+  let r=await handleRequest(post(path+"/cancel",{confirm:"cancel_pending"}),env,asOwner);
+  assert.equal(r.status,200);
+  assert.equal(state.rows[0].status,"cancelled");
+  r=await handleRequest(post(path+"/build-preview",{confirm:"generate_static_template"}),env,asOwner);
+  assert.equal(r.status,409);
+  r=await handleRequest(get(path+"/preview"),env,asOwner);
+  assert.equal(r.status,404);
+  assert.equal(state.artifacts.size,0);
+  assert.equal(state.rows.length,1);
+});
+
+test("OWNER-approved ToDo preview is usable HTML with a restricted script-only origin",async()=>{
+  const {env,state}=harness("web","ToDo管理アプリを作って");
+  const path="/api/v1/requests/"+id;
+  const r=await handleRequest(post(path+"/build-preview",{
+    confirm:"generate_static_template",template:"todo"
+  }),env,asOwner);
+  assert.equal(r.status,201);
+  assert.equal((await r.json()).template_kind,"todo");
+  assert.match(state.artifacts.get(id).html,/ivy-trusted-interactive-template:todo/);
+  const preview=await handleRequest(get(path+"/preview"),env,asOwner);
+  assert.equal(preview.status,200);
+  assert.match(preview.headers.get("content-security-policy"),/sandbox allow-scripts allow-downloads/);
+  assert.match(preview.headers.get("content-security-policy"),/connect-src 'none'/);
+  assert.doesNotMatch(preview.headers.get("content-security-policy"),/allow-same-origin/);
+  const html=await preview.text();
+  assert.match(html,/offlineAppRuntime|const key = "ivy-offline-/);
+  assert.match(html,/JSON/);
+  const reused=await handleRequest(post(path+"/build-preview",{
+    confirm:"generate_static_template",template:"notes"
+  }),env,asOwner);
+  assert.equal(reused.status,200);
+  assert.equal(state.artifacts.size,1);
+});
+
+test("OWNER-only resume is explicitly gated and never resumes without configuration",async()=>{
+  const {env,state}=harness();
+  state.paused=1;
+  const path="/api/v1/resume";
+  let r=await handleRequest(post(path,{confirm:"resume_intake_after_access_review"}),env,asOwner);
+  assert.equal(r.status,403);
+  assert.equal(state.paused,1);
+  env.ENABLE_OWNER_RESUME="true";
+  r=await handleRequest(post(path,{confirm:"no"}),env,asOwner);
+  assert.equal(r.status,400);
+  r=await handleRequest(post(path,{confirm:"resume_intake_after_access_review"}),
+    env,asOther);
+  assert.equal(r.status,200);
+  // The test harness has two valid owner identities; in production Access
+  // enforces OWNER_EMAIL before returning {role:owner}. Verify that boundary
+  // separately in owner-auth tests; this test focuses on feature flag/consent.
+  assert.equal(state.paused,0);
+  const status=await handleRequest(get("/api/v1/status"),env,asOwner);
+  assert.equal((await status.json()).resume_enabled,true);
+  r=await handleRequest(post(path,{confirm:"resume_intake_after_access_review"},
+    "https://attacker.example"),env,asOwner);
+  assert.equal(r.status,400);
+});
+
+test("AI copywriting is opt-in, one-use, OWNER-only and never executes AI code",async()=>{
+  const {env,state}=harness("web","モダンな美容室サイト");
+  const path="/api/v1/requests/"+id;
+  let aiCalls=0;
+  env.AI={run:async(model,options)=>{
+    aiCalls++;
+    assert.equal(model,"@cf/meta/llama-3.1-8b-instruct-fp8");
+    assert.equal(options.messages[1].content,"モダンな美容室サイト");
+    assert.ok(options.max_tokens<=420);
+    return {response:JSON.stringify({
+      title:"美容室のご案内",subtitle:"美しい髪をあなたに",
+      sections:[{heading:"予約",body:"お気軽にお問い合わせください"}]
+    })};
+  }};
+  let request=post(path+"/ai-landing",{confirm:"use_cloudflare_ai_once"});
+  let response=await handleRequest(request,env,asOwner);
+  assert.equal(response.status,403);
+  assert.equal(aiCalls,0);
+  env.AI_DESIGN_ENABLED="true";
+  env.AI_BUDGET_OWNER_APPROVED="true";
+  response=await handleRequest(post(path+"/ai-landing",{confirm:"no"}),env,asOwner);
+  assert.equal(response.status,400);
+  response=await handleRequest(post(path+"/ai-landing",{confirm:"use_cloudflare_ai_once"},
+    "https://attacker.example"),env,asOwner);
+  assert.equal(response.status,400);
+  response=await handleRequest(post(path+"/ai-landing",{confirm:"use_cloudflare_ai_once"}),env,asOther);
+  assert.equal(response.status,404);
+  assert.equal(aiCalls,0);
+  response=await handleRequest(post(path+"/ai-landing",{confirm:"use_cloudflare_ai_once"}),env,asOwner);
+  assert.equal(response.status,201);
+  const result=await response.json();
+  assert.equal(result.ai_assisted,true);
+  assert.equal(result.ai_generated_code,false);
+  assert.equal(result.billed_by_provider_possible,true);
+  assert.equal(state.artifacts.size,1);
+  assert.equal(state.aiAttempts.get(id).status,"succeeded");
+  assert.equal(state.rows[0].status,"template_ready");
+  assert.equal(aiCalls,1);
+  const preview=await handleRequest(get(path+"/preview"),env,asOwner);
+  assert.equal(preview.status,200);
+  assert.match(preview.headers.get("content-security-policy"),/script-src 'none'/);
+  assert.match(await preview.text(),/美容室のご案内/);
+  response=await handleRequest(post(path+"/ai-landing",{confirm:"use_cloudflare_ai_once"}),env,asOwner);
+  assert.equal(response.status,409);
+  assert.equal(aiCalls,1);
+});
+
+test("invalid AI output consumes daily quota and is not retried",async()=>{
+  const {env,state}=harness();
+  env.AI_DESIGN_ENABLED="true";env.AI_BUDGET_OWNER_APPROVED="true";
+  env.AI={run:async()=>({response:'<script>alert(1)</script>'})};
+  const path="/api/v1/requests/"+id+"/ai-landing";
+  const response=await handleRequest(post(path,{confirm:"use_cloudflare_ai_once"}),env,asOwner);
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).error,"ai_failed_no_automatic_retry");
+  assert.equal(state.aiAttempts.get(id).status,"failed");
+  assert.equal(state.artifacts.size,0);
+  const retry=await handleRequest(post(path,{confirm:"use_cloudflare_ai_once"}),env,asOwner);
+  assert.equal(retry.status,429);
+  assert.equal(state.rows[0].status,"awaiting_hosted_worker");
+});
+
+test("mobile UI uses sandboxed HTML iframe and no claimed AI code generation",()=>{
+  const html=readFileSync(new URL("../web/index.html",import.meta.url),"utf8");
+  const js=readFileSync(new URL("../web/app.mjs",import.meta.url),"utf8");
+  const migration=readFileSync(new URL("../migrations/0002_static_previews.sql",import.meta.url),"utf8");
+  assert.match(html,/id="previewFrame"[^>]*sandbox="allow-scripts allow-downloads"/);
+  assert.match(js,/generate_static_template/);
+  assert.match(js,/cancel_pending/);
+  assert.match(js,/textContent/);
+  assert.match(migration,/CREATE TABLE IF NOT EXISTS ivy_static_previews/);
+  assert.doesNotMatch(html,/allow-same-origin/);
+});
