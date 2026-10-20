@@ -7,18 +7,22 @@ Dim shell, fso, installDir, launcher, startupDir, linkPath
 Dim wscriptExe, linkArgs, link
 
 Set shell = CreateObject("WScript.Shell")
+' A safe syntax check must never create or remove startup shortcuts.
+If shell.ExpandEnvironmentStrings("%AIVY_VBS_SYNTAX_CHECK%") = "1" Then
+    WScript.Quit 0
+End If
 Set fso = CreateObject("Scripting.FileSystemObject")
 installDir = fso.GetParentFolderName(WScript.ScriptFullName)
 launcher = installDir & "\AIVY_WEB_SILENT.vbs"
 
 If Not fso.FileExists(launcher) Or Not fso.FileExists(installDir & "\AIVY.bat") Then
-    MsgBox "Ivyの起動ファイルが見つかりません。インストール先で実行してください。", vbExclamation, "Ivy 自動起動"
+    MsgBox "Ivy launcher missing. Run from the installed folder.", vbExclamation, "Ivy Autostart"
     WScript.Quit 1
 End If
 
 startupDir = shell.ExpandEnvironmentStrings("%APPDATA%") & "\Microsoft\Windows\Start Menu\Programs\Startup"
 If Not fso.FolderExists(startupDir) Then
-    MsgBox "WindowsのStartupフォルダーを確認できません。", vbExclamation, "Ivy 自動起動"
+    MsgBox "The Windows Startup folder is not available.", vbExclamation, "Ivy Autostart"
     WScript.Quit 1
 End If
 
@@ -30,10 +34,10 @@ If fso.FileExists(linkPath) Then
     Set link = shell.CreateShortcut(linkPath)
     If StrComp(link.TargetPath, wscriptExe, vbTextCompare) = 0 And _
        StrComp(link.Arguments, linkArgs, vbTextCompare) = 0 Then
-        MsgBox "Ivyのログイン時自動起動は設定済みです。", vbInformation, "Ivy 自動起動"
+        MsgBox "Ivy autostart is already enabled.", vbInformation, "Ivy Autostart"
         WScript.Quit 0
     End If
-    MsgBox "同じ名前の既存ショートカットがあるため上書きしません。", vbExclamation, "Ivy 自動起動"
+    MsgBox "A shortcut with this name exists. It was not overwritten.", vbExclamation, "Ivy Autostart"
     WScript.Quit 1
 End If
 
@@ -44,5 +48,5 @@ link.WorkingDirectory = installDir
 link.Description = "Start Ivy Web after the current user signs in"
 link.Save
 
-MsgBox "設定しました。次回Windowsへのサインイン時にIvy Webを起動します。" & vbCrLf & _
-       "PCがスリープ中・サインイン前は起動しません。", vbInformation, "Ivy 自動起動"
+MsgBox "Ivy Web will start at the next Windows sign-in." & vbCrLf & _
+       "It does not run while the PC is sleeping or signed out.", vbInformation, "Ivy Autostart"
