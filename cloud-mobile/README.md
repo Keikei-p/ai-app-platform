@@ -12,21 +12,21 @@ The desktop Ivy/Tkinter and its existing local API remain unchanged.
 
 ## What does NOT work yet
 - No hosted AI inference, code creation, testing, preview, APK generation, or publishing.
-- Saving a request is not execution. All new requests use status \`awaiting_hosted_worker\`.
+- Saving a request is not execution. All new requests use status `awaiting_hosted_worker`.
 - PC-local projects, SQLite files, Ollama and credentials do not sync to the cloud.
 - No production deployment or live Cloudflare account test has been performed.
 
 ## Owner-only staging setup (on mobile browser or GitHub Codespaces)
-1. Create a **new staging** Cloudflare D1 database: \`ivy-mobile-intake-staging\`.
-2. In \`cloud-mobile/\`, copy \`wrangler.example.jsonc\` to \`wrangler.jsonc\` (ignored if configured).
+1. Create a **new staging** Cloudflare D1 database: `ivy-mobile-intake-staging`.
+2. In `cloud-mobile/`, copy `wrangler.example.jsonc` to `wrangler.jsonc` (ignored if configured).
 3. Replace D1 database_id with the newly created staging DB ID.
 4. Configure Cloudflare Access app policy for only OWNER email and protect **the whole Worker** (including assets), not just API paths.
-5. Set \`TEAM_DOMAIN\` (your \`https://team.cloudflareaccess.com\` URL), \`ACCESS_AUD\` (Access application AUD), and \`OWNER_EMAIL\`; these must match exactly.
-6. Run \`npm run check && npm test\`.
-7. Run \`npx wrangler d1 migrations apply ivy-mobile-intake-staging --remote --config wrangler.jsonc\` after reviewing the SQL. This is staging only.
-8. Deploy to **a new staging Worker name**, never overwrite Ivy or AI Company production: \`npx wrangler deploy --config wrangler.jsonc\`.
+5. Set `TEAM_DOMAIN` (your `https://team.cloudflareaccess.com` URL), `ACCESS_AUD` (Access application AUD), and `OWNER_EMAIL`; these must match exactly.
+6. Run `npm run check && npm test`.
+7. Run `npx wrangler d1 migrations apply ivy-mobile-intake-staging --remote --config wrangler.jsonc` after reviewing the SQL. This is staging only.
+8. Deploy to **a new staging Worker name**, never overwrite Ivy or AI Company production: `npx wrangler deploy --config wrangler.jsonc`.
 9. Confirm Access denies unsigned/API requests; log in as OWNER; verify status, save, duplicate retry, history and stop on smartphone.
-10. Initial D1 state is \`paused=1\` (fail closed). To enable intake **after testing Access**, deliberately update the staging control row to \`paused=0\`. Do not enable inference; none is implemented.
+10. Initial D1 state is `paused=1` (fail closed). To enable intake **after testing Access**, deliberately update the staging control row to `paused=0`. Do not enable inference; none is implemented.
 
 Never commit a real owner email, audience, tokens, secrets, raw runtime database, or private prompts. No Cloudflare tokens are needed inside app source; use platform-protected deployment credentials. Respect Cloudflare/GitHub free-tier limits.
 
