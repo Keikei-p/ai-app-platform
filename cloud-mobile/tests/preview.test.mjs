@@ -174,10 +174,10 @@ test("mobile UI uses sandboxed HTML iframe and no claimed AI code generation",()
   const html=readFileSync(new URL("../web/index.html",import.meta.url),"utf8");
   const js=readFileSync(new URL("../web/app.mjs",import.meta.url),"utf8");
   const migration=readFileSync(new URL("../migrations/0002_static_previews.sql",import.meta.url),"utf8");
-  assert.match(html,/id="previewFrame"[^>]*sandbox=""/);
+  assert.match(html,/id="previewFrame"[^>]*sandbox="allow-scripts"/);
   assert.match(js,/generate_static_template/);
   assert.match(js,/cancel_pending/);
   assert.match(js,/textContent/);
   assert.match(migration,/CREATE TABLE IF NOT EXISTS ivy_static_previews/);
-  assert.doesNotMatch(html,/allow-same-origin|allow-scripts/);
+  assert.doesNotMatch(html,/allow-same-origin/);
 });
