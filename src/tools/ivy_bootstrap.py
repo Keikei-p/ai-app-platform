@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import ipaddress
+import json
 import os
 from pathlib import Path
 import re
@@ -20,7 +21,7 @@ import sys
 from typing import Callable
 from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
-from urllib.request import ProxyHandler, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, build_opener
 
 
 CHANNEL = "develop"
@@ -207,11 +208,43 @@ def ivy_web_port_is_running() -> bool:
         return True  # Unknown problem: fail closed instead of changing live code.
 
 
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def ivy_web_server_is_healthy() -> bool:
+    """Trust only Ivy's actual localhost health response, not an occupied port.
+
+    The first-time BAT installer can open a running Ivy even if an older Git
+    checkout predates AIVY_WEB_SILENT.vbs. This probe never mutates state.
+    """
+    try:
+        opener = build_opener(ProxyHandler({}), _NoRedirect())
+        with opener.open("http://127.0.0.1:8766/healthz", timeout=1.5) as response:
+            if response.status != 200:
+                return False
+            body = response.read(1025)
+        if len(body) > 1024:
+            return False
+        payload = json.loads(body.decode("utf-8"))
+        return (
+            isinstance(payload, dict)
+            and payload.get("service") == "aivy"
+            and payload.get("status") == "ok"
+        )
+    except (HTTPError, URLError, OSError, ValueError, UnicodeError):
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Ivy one-time Git updater setup")
     parser.add_argument("--source-folder", default=str(Path.cwd()))
     parser.add_argument("--repository-url", default="")
+    parser.add_argument("--probe-web", action="store_true")
     args = parser.parse_args(argv)
+    if args.probe_web:
+        return 0 if ivy_web_server_is_healthy() else 1
     try:
         dest, outcome = install_or_update(
             home=Path.home(),
@@ -224,7 +257,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(f"Ivy install directory: {dest}")
     print(f"Update status: {outcome}")
-    print("From now on, use AIVY_WEB_SILENT.vbs in that Git installation.")
+    if outcome == "already_running":
+        print("Ivy is running, so the installed files were NOT updated.")
+        print("To update, stop the Ivy web server and run OPEN_AIVY_WEB.bat again.")
+    elif (dest / "AIVY_WEB_SILENT.vbs").is_file():
+        print("For future launches, use AIVY_WEB_SILENT.vbs in that Git installation.")
+    else:
+        print("The installed version has no silent launcher yet.")
+        print("Run the installer again after Ivy Web has stopped to fetch it.")
     return 0
 
 
